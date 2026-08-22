@@ -25,7 +25,7 @@ from slb_glossary.live.topics import fetch_topics
 from slb_glossary.live.urls import build_pager_query, build_search_url
 from slb_glossary.retries import retry
 from slb_glossary.types import RelatedTerm, SearchResult
-from slb_glossary.utils import as_async_iterator, get_topic_match, log_timed_yields
+from slb_glossary.utils import as_async_iterator, get_topic_match, log_timed_yields, split_exclude
 
 logger = logging.getLogger(__name__)
 
@@ -169,8 +169,16 @@ async def get_terms_urls(
     :param limit: Maximum number of URLs to yield. Yields every matching
         URL if `None`. An excluded URL (see `exclude`) doesn't count
         against this: `limit` is a count of what's actually yielded.
-    :param exclude: URLs to skip over instead of yielding, e.g. ones
-        already stored locally, so a sync doesn't pay to re-fetch them.
+    :param exclude: URLs and/or term names to skip over instead of
+        yielding, e.g. ones already stored locally, so a sync doesn't pay
+        to re-fetch them. An entry is treated as a URL if it starts with
+        `"http://"`/`"https://"`, and as a term name otherwise - see
+        `slb_glossary.utils.split_exclude`. Note that a term name in
+        `exclude` has no effect *here*: this only ever sees each term's
+        URL, not its name (that's only known once the detail page itself
+        is fetched), so a term-name exclusion only takes effect once
+        this URL stream is fed into `get_results_from_url`/
+        `get_results_from_urls`, which do know each page's term name.
         Membership is checked once per URL seen, so pass a `set`/`frozenset`
         for that to stay cheap; some other `AbstractSet` works too, just
         possibly slower depending on what it is. `None` (the default)
@@ -191,9 +199,9 @@ async def get_terms_urls(
 
     started_at = time.monotonic()
     topic_match = get_topic_match(session.topics, topic=topic) if topic else None
-    excluded = frozenset(exclude) if exclude else None
+    excluded, _ = split_exclude(exclude)
     logger.debug(
-        "Iterating term URLs: query=%r topic=%r start_letter=%r limit=%r exclude=%d url(s)",
+        "Iterating term URLs: query=%r topic=%r start_letter=%r limit=%r exclude=%d entr(ies)",
         query,
         topic,
         start_letter,
@@ -332,10 +340,17 @@ async def get_results_from_url(
         several calls) and is left open when this generator finishes. When
         omitted, a page is checked out from `session` for this call alone
         and closed before returning.
-    :param exclude: If `url` is in this set, return immediately without
-        navigating anywhere, e.g. a term already stored locally that a
-        sync doesn't need to re-fetch. Pass a `set`/`frozenset` to keep
-        the check cheap. `None` (the default) excludes nothing.
+    :param exclude: URLs and/or term names to skip. If `url` itself
+        matches an excluded URL, this returns immediately without
+        navigating anywhere at all, e.g. a term already stored locally
+        that a sync doesn't need to re-fetch. A term-name exclusion can
+        only be checked once the page's term name is actually known,
+        so it's checked right after that, before any `SearchResult` is
+        yielded. The page load itself still happens in that case, since
+        there's no way to know the term name without fetching it. See
+        `slb_glossary.utils.split_exclude` for how an entry is told apart
+        as a URL vs. a term name. Pass a `set`/`frozenset` to keep the URL
+        check cheap. `None` (the default) excludes nothing.
     :yield: One `SearchResult` per definition found on the page. Each
         result's `image`/`image_caption` reflect *that definition's own*
         section, independently of any other section on the page, and is `None`
@@ -343,8 +358,8 @@ async def get_results_from_url(
         if a sibling section does. `related` is empty when that section
         has no related-term links.
     """
-    excluded = frozenset(exclude) if exclude else None
-    if excluded and url in excluded:
+    excluded_urls, excluded_names = split_exclude(exclude)
+    if excluded_urls and url in excluded_urls:
         logger.debug("Skipping excluded url %r", url)
         return
 
@@ -363,6 +378,10 @@ async def get_results_from_url(
         detail_sections = await get_term_detail_blocks(current_page)
         if not term_name or not detail_sections:
             logger.debug("No definitions found at %s (%.3fs)", url, time.monotonic() - started_at)
+            return
+
+        if excluded_names and " ".join(term_name.strip().lower().split()) in excluded_names:
+            logger.debug("Skipping excluded term %r at %s", term_name, url)
             return
 
         # One illustrative image per definition section. A term with
@@ -458,12 +477,16 @@ async def get_results_from_urls(
         `1` (the default) fetches sequentially on a single page.
     :param first_only: If `True`, yield only the first definition found on
         each page rather than every definition on it.
-    :param exclude: URLs to skip fetching entirely, e.g. ones already
-        stored locally, so a sync doesn't pay to re-fetch them. Checked
-        once per URL in `urls`, before it's ever queued for a worker, so
-        pass a `set`/`frozenset` to keep that cheap. `None` (the default)
-        excludes nothing.
-    :yield: `SearchResult`s as they're fetched, `exclude`d URLs skipped.
+    :param exclude: URLs and/or term names to skip. A URL match is
+        checked once per URL in `urls`, before it's ever queued for a
+        worker, so pass a `set`/`frozenset` to keep that cheap. A
+        term-name match can only be checked once each page's term name
+        is known, so it's applied inside `get_results_from_url` itself
+        for each URL that does get fetched. See that function's own
+        `exclude` parameter, and `slb_glossary.utils.split_exclude` for
+        how an entry is told apart as a URL vs. a term name. `None` (the
+        default) excludes nothing.
+    :yield: `SearchResult`s as they're fetched, `exclude`d URLs/terms skipped.
     :raises ValueError: If `concurrency` is less than 1.
     """
     if not session.initialized:
@@ -474,7 +497,7 @@ async def get_results_from_urls(
     if concurrency < 1:
         raise ValueError("`concurrency` must be at least 1")
 
-    excluded = frozenset(exclude) if exclude else None
+    excluded_urls, _ = split_exclude(exclude)
     started_at = time.monotonic()
     yielded = 0
     skipped = 0
@@ -482,7 +505,7 @@ async def get_results_from_urls(
     async def _filtered_urls() -> typing.AsyncIterator[str]:
         nonlocal skipped
         async for url in as_async_iterator(urls):
-            if excluded and url in excluded:
+            if excluded_urls and url in excluded_urls:
                 skipped += 1
                 continue
             yield url
@@ -493,7 +516,9 @@ async def get_results_from_urls(
         page = await session.new_page()
         try:
             async for url in url_iter:
-                async for result in get_results_from_url(session, url, topic=topic, page=page):
+                async for result in get_results_from_url(
+                    session, url, topic=topic, page=page, exclude=exclude
+                ):
                     yielded += 1
                     yield result
                     if first_only:
@@ -533,7 +558,7 @@ async def get_results_from_urls(
 
             try:
                 async for result in get_results_from_url(
-                    session, url, topic=topic, page=worker_page
+                    session, url, topic=topic, page=worker_page, exclude=exclude
                 ):
                     await result_queue.put(result)
                     if first_only:
@@ -605,9 +630,9 @@ async def search(
         See `get_results_from_urls`. Defaults to `1` (sequential).
     :param first_only: If `True`, yield only the first definition found on
         each page rather than every definition on it.
-    :param exclude: Term URLs to skip over, e.g. ones already stored
-        locally. See `get_terms_urls`/`get_results_from_urls`. `None`
-        (the default) excludes nothing.
+    :param exclude: Term URLs and/or term names to skip over, e.g. ones
+        already stored locally. See `get_terms_urls`/`get_results_from_urls`.
+        `None` (the default) excludes nothing.
     :yield: `SearchResult`s for the matched terms. In sequential order
         (`concurrency=1`) these are most-relevant-first; with higher
         concurrency, results may arrive out of relevance order.
@@ -671,9 +696,9 @@ async def get_terms_on(
         See `get_results_from_urls`. Defaults to `1` (sequential).
     :param first_only: If `True`, yield only the first definition found on
         each page rather than every definition on it.
-    :param exclude: Term URLs to skip over, e.g. ones already stored
-        locally. See `get_terms_urls`/`get_results_from_urls`. `None`
-        (the default) excludes nothing.
+    :param exclude: Term URLs and/or term names to skip over, e.g. ones
+        already stored locally. See `get_terms_urls`/`get_results_from_urls`.
+        `None` (the default) excludes nothing.
     :yield: One `SearchResult` per term filed under `topic`.
     """
     logger.info(

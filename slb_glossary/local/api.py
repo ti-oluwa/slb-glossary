@@ -15,7 +15,7 @@ from slb_glossary.local.types import Database
 from slb_glossary.natural_language import clean_query
 from slb_glossary.relevance import CONTENT_MATCH_SCORE_CAP, EXACT_MATCH_SCORE, PREFIX_MATCH_SCORE
 from slb_glossary.types import RelatedTerm, SearchResult
-from slb_glossary.utils import as_async_iterator
+from slb_glossary.utils import as_async_iterator, split_exclude
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +328,43 @@ def _normalize(text: str) -> str:
     return " ".join(text.strip().lower().split())
 
 
+def _apply_exclude(
+    sql: str,
+    params: list[typing.Any],
+    exclude: Collection[str] | None,
+    *,
+    url_column: str = "url",
+    term_column: str = "term",
+) -> str:
+    """
+    Append `AND <url_column> NOT IN (...)`/`AND LOWER(TRIM(<term_column>)) NOT IN (...)` for `exclude`.
+
+    `exclude` can hold URLs, term names, or a mix of both (see
+    `slb_glossary.utils.split_exclude`); this appends whichever clauses
+    are actually needed and extends `params` in place with their values.
+
+    :param sql: The SQL built so far, ending right after its last `WHERE`/
+        `AND` condition (no trailing whitespace required).
+    :param params: The parameter list built so far. Extended in place.
+    :param exclude: URLs/term names to exclude, or `None`.
+    :param url_column: The (optionally table-qualified) column holding a
+        row's URL, e.g. `"url"` or `"terms.url"`.
+    :param term_column: The (optionally table-qualified) column holding a
+        row's term name, e.g. `"term"` or `"terms.term"`.
+    :return: `sql`, with any exclude clauses appended.
+    """
+    excluded_urls, excluded_names = split_exclude(exclude)
+    if excluded_urls:
+        placeholders = ", ".join("?" for _ in excluded_urls)
+        sql += f" AND {url_column} NOT IN ({placeholders})"
+        params.extend(excluded_urls)
+    if excluded_names:
+        placeholders = ", ".join("?" for _ in excluded_names)
+        sql += f" AND LOWER(TRIM({term_column})) NOT IN ({placeholders})"
+        params.extend(excluded_names)
+    return sql
+
+
 def fuzzy_match_topics(
     topics: typing.Mapping[str, typing.Any] | typing.Iterable[str],
     topic: str,
@@ -476,19 +513,22 @@ async def scored_search(
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
         Has no effect if `topic` is falsy.
-    :param exclude: URLs to leave out of the results entirely, e.g. ones
-        already handled elsewhere in the same run. Filtered in SQL before
-        `limit` is applied, so an excluded match doesn't use up part of
-        `limit`'s budget the way a plain post-filter would. Note that a very
-        large `exclude` (thousands of URLs) does cost one SQL parameter
-        each, so keep it to a reasonable, bounded size. `None` (the
-        default) excludes nothing.
+    :param exclude: URLs and/or term names to leave out of the results
+        entirely, e.g. ones already handled elsewhere in the same run. An
+        entry is treated as a URL if it starts with `"http://"`/`"https://"`,
+        and as a term name (matched case/whitespace-insensitively)
+        otherwise - see `slb_glossary.utils.split_exclude`. Filtered in
+        SQL before `limit` is applied, so an excluded match doesn't use up
+        part of `limit`'s budget the way a plain post-filter would. Note
+        that a very large `exclude` (thousands of entries) does cost one
+        SQL parameter each, so keep it to a reasonable, bounded size.
+        `None` (the default) excludes nothing.
     :return: `(result, score)` pairs, best match first. `score` is in `[0.0, 1.0]`.
     """
     normalized_query = clean_query(query)
     logger.debug(
         "Local `search` (scored): query=%r (normalized=%r) topic=%r start_letter=%r "
-        "language=%r limit=%r fuzzy=%r exclude=%d url(s)",
+        "language=%r limit=%r fuzzy=%r exclude=%d entr(ies)",
         query,
         normalized_query,
         topic,
@@ -533,10 +573,7 @@ async def scored_search(
         sql += " AND terms.language = ?"
         params.append(language)
 
-    if exclude:
-        placeholders = ", ".join("?" for _ in exclude)
-        sql += f" AND terms.url NOT IN ({placeholders})"
-        params.extend(exclude)
+    sql = _apply_exclude(sql, params, exclude, url_column="terms.url", term_column="terms.term")
 
     sql += " ORDER BY is_exact DESC, is_prefix DESC, bm25_score ASC"
     if limit:
@@ -667,7 +704,9 @@ def search(
         Has no effect if `topic` is falsy.
     :param scored: If `True`, yield `(result, score)` pairs instead of
         bare results. See `scored_search`.
-    :param exclude: URLs to leave out of the results entirely.
+    :param exclude: URLs and/or term names to leave out of the results
+        entirely. See `slb_glossary.utils.split_exclude` for how an entry
+        is told apart as a URL vs. a term name.
     :yield: Matching `SearchResult`s, or `(SearchResult, float)` pairs if
         `scored=True`, best match first either way.
     """
@@ -715,13 +754,15 @@ async def get_terms_on(
     :param limit: Maximum number of results. `None` for unlimited.
     :param fuzzy: If `True`, resolve `topic` against locally stored topic
         names first, instead of requiring an exact (case-insensitive) match.
-    :param exclude: URLs to leave out of the results entirely, filtered in
-        SQL before `limit` is applied.
+    :param exclude: URLs and/or term names to leave out of the results
+        entirely, filtered in SQL before `limit` is applied. See
+        `slb_glossary.utils.split_exclude` for how an entry is told apart
+        as a URL vs. a term name.
     :yield: `SearchResult`s filed under `topic`, ordered by term name.
     """
     logger.debug(
         "Local `get_terms_on`: topic=%r start_letter=%r language=%r limit=%r fuzzy=%r "
-        "exclude=%d url(s)",
+        "exclude=%d entr(ies)",
         topic,
         start_letter,
         language,
@@ -748,10 +789,7 @@ async def get_terms_on(
     if language:
         sql += " AND language = ?"
         params.append(language)
-    if exclude:
-        exclude_placeholders = ", ".join("?" for _ in exclude)
-        sql += f" AND url NOT IN ({exclude_placeholders})"
-        params.extend(exclude)
+    sql = _apply_exclude(sql, params, exclude)
 
     sql += " ORDER BY term"
     if limit:
@@ -885,14 +923,16 @@ async def get_random_term(
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
         Has no effect if `topic` is falsy.
-    :param exclude: URLs to leave out of the pick entirely, e.g. terms
-        already seen this run.
+    :param exclude: URLs and/or term names to leave out of the pick
+        entirely, e.g. terms already seen this run. See
+        `slb_glossary.utils.split_exclude` for how an entry is told apart
+        as a URL vs. a term name.
     :return: A random `SearchResult`, or `None` if the local database (or
         the given topic/language within it, once `exclude` is taken into
         account) has no terms left to pick from.
     """
     logger.debug(
-        "Local `get_random_term`: topic=%r language=%r fuzzy=%r exclude=%d url(s)",
+        "Local `get_random_term`: topic=%r language=%r fuzzy=%r exclude=%d entr(ies)",
         topic,
         language,
         fuzzy,
@@ -912,10 +952,16 @@ async def get_random_term(
     if language:
         conditions.append("language = ?")
         params.append(language)
-    if exclude:
-        exclude_placeholders = ", ".join("?" for _ in exclude)
-        conditions.append(f"url NOT IN ({exclude_placeholders})")
-        params.extend(exclude)
+
+    excluded_urls, excluded_names = split_exclude(exclude)
+    if excluded_urls:
+        placeholders = ", ".join("?" for _ in excluded_urls)
+        conditions.append(f"url NOT IN ({placeholders})")
+        params.extend(excluded_urls)
+    if excluded_names:
+        placeholders = ", ".join("?" for _ in excluded_names)
+        conditions.append(f"LOWER(TRIM(term)) NOT IN ({placeholders})")
+        params.extend(excluded_names)
 
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)
@@ -955,13 +1001,15 @@ async def get_terms_urls(
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
         Has no effect if `topic` is falsy.
-    :param exclude: URLs to leave out of the results entirely, filtered
-        before `limit` is applied.
+    :param exclude: URLs and/or term names to leave out of the results
+        entirely, filtered before `limit` is applied. See
+        `slb_glossary.utils.split_exclude` for how an entry is told apart
+        as a URL vs. a term name.
     :yield: Matching term URLs.
     """
     logger.debug(
         "Local `get_terms_urls`: query=%r topic=%r start_letter=%r language=%r limit=%r "
-        "exclude=%d url(s)",
+        "exclude=%d entr(ies)",
         query,
         topic,
         start_letter,
@@ -1013,10 +1061,7 @@ async def get_terms_urls(
         sql += " AND language = ?"
         params.append(language)
 
-    if exclude:
-        exclude_placeholders = ", ".join("?" for _ in exclude)
-        sql += f" AND url NOT IN ({exclude_placeholders})"
-        params.extend(exclude)
+    sql = _apply_exclude(sql, params, exclude)
 
     sql += " ORDER BY term"
     if limit:

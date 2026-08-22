@@ -26,6 +26,7 @@ __all__ = [
     "env",
     "EnvVarError",
     "Lookup",
+    "split_exclude",
 ]
 
 logger = logging.getLogger(__name__)
@@ -265,6 +266,42 @@ async def log_timed_yields(
         )
         previous = now
         yield item
+
+
+def split_exclude(
+    exclude: typing.Iterable[str] | None,
+) -> tuple[frozenset[str], frozenset[str]]:
+    """
+    Split a mixed `exclude` collection into `(excluded_urls, excluded_term_names)`.
+
+    Both the local database API and the live glossary API accept a single
+    `exclude` collection that can hold URLs, term names, or a mix of both.
+
+    An entry is treated as a URL if it looks like one (starts with
+    `"http://"`/`"https://"`); everything else is treated as a
+    term name, matched case-insensitively/whitespace-insensitively via
+    `_normalize`-style folding, so `"Porosity"` and `" porosity "` both
+    exclude the same term.
+
+    :param exclude: URLs and/or term names to exclude, or `None`.
+    :return: `(excluded_urls, excluded_term_names)`, each a `frozenset`.
+        `excluded_term_names` entries are lowercased and whitespace-
+        collapsed, ready to compare against a similarly normalized term
+        name. Both sets are empty if `exclude` is `None`/empty.
+    """
+    if not exclude:
+        return frozenset(), frozenset()
+
+    urls: set[str] = set()
+    names: set[str] = set()
+    for item in exclude:
+        if not item:
+            continue
+        if item.startswith(("http://", "https://")):
+            urls.add(item)
+        else:
+            names.add(" ".join(item.strip().lower().split()))
+    return frozenset(urls), frozenset(names)
 
 
 def as_async_iterator(

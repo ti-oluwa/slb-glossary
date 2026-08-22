@@ -227,6 +227,16 @@ class Constants:
     )
     """Default `concurrency` for `slb_glossary.query.compare`: term lookups happen sequentially unless raised."""
 
+    import_batch_size = Constant(
+        500,
+        env_var="SLB_GLOSSARY_IMPORT_BATCH_SIZE",
+        validate=lambda v: v >= 1,
+    )
+    """
+    Default number of rows `slb_glossary.local.loaders.load_file` buffers
+    before writing an incremental upsert batch to the local database.
+    """
+
 
 constants = Constants()
 """

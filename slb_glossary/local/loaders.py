@@ -2,26 +2,58 @@
 
 import csv
 import json
+import logging
 import pathlib
 import typing
 
+from slb_glossary.constants import constants
 from slb_glossary.errors import DatabaseError
 from slb_glossary.local.api import upsert_results
 from slb_glossary.local.types import Database
 from slb_glossary.local.vectors import upsert_vector
 from slb_glossary.types import SearchResult
 
+logger = logging.getLogger(__name__)
+
 __all__ = ["load_file"]
 
 
-def read_csv_rows(path: pathlib.Path) -> list[dict[str, typing.Any]]:
-    """Read `path` as CSV into a list of `{column: value}` rows."""
+def read_csv_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
+    """
+    Lazily read `path` as CSV, yielding one `{column: value}` row at a time.
+
+    The file is opened lazily too, on this generator's first row rather
+    than at call time, and stays open only for as long as it's actually
+    being iterated, so `load_file` can consume (and upsert) rows in
+    batches as they're read, instead of holding the whole file's rows in
+    memory at once.
+
+    :param path: CSV file to read.
+    :yield: One `{column: value}` dict per row.
+    """
     with path.open("r", encoding="utf-8-sig", newline="") as fh:
-        return list(csv.DictReader(fh))
+        yield from csv.DictReader(fh)
 
 
-def read_json_rows(path: pathlib.Path) -> list[dict[str, typing.Any]]:
-    """Read `path` as a JSON array of records (or an object containing one)."""
+def read_json_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
+    """
+    Lazily yield each record from `path`'s JSON array (or an object containing one).
+
+    JSON has no line-oriented record boundary the way CSV/XLSX do, so this
+    still has to parse the whole file into memory to find the record
+    array - there's no way around that without an external streaming-JSON
+    dependency this package doesn't otherwise need. What this *does* still
+    get right is not holding a second, growing copy of the data around:
+    once the array is found, it's yielded from directly, so `load_file`
+    can still upsert (and let go of) records in batches rather than
+    building a second full-size list of `SearchResult`s alongside the
+    parsed JSON one.
+
+    :param path: JSON file to read.
+    :yield: One record dict at a time, from the array found.
+    :raises DatabaseError: If `path` doesn't contain a JSON array of
+        records (or an object with one as one of its values).
+    """
     data = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(data, dict):
         for value in data.values():
@@ -33,11 +65,25 @@ def read_json_rows(path: pathlib.Path) -> list[dict[str, typing.Any]]:
         raise DatabaseError(
             f"{path}: expected a JSON array of records (or an object containing one)."
         )
-    return data
+    yield from data
 
 
-def read_xlsx_rows(path: pathlib.Path) -> list[dict[str, typing.Any]]:
-    """Read `path`'s first worksheet into a list of `{header: value}` rows."""
+def read_xlsx_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
+    """
+    Lazily read `path`'s first worksheet, yielding one `{header: value}` row at a time.
+
+    Opens the workbook in `openpyxl`'s `read_only` mode, which itself
+    streams rows from the underlying XML rather than loading the whole
+    sheet into memory, and this generator passes that streaming straight
+    through rather than collecting it into a list first. The workbook is
+    closed once this generator is exhausted (or closed/garbage-collected
+    early, e.g. if a caller stops consuming partway through).
+
+    :param path: XLSX/XLSM file to read.
+    :yield: One `{header: value}` dict per data row (the first row is
+        treated as the header and isn't yielded itself).
+    :raises DatabaseError: If the optional `openpyxl` dependency isn't installed.
+    """
     try:
         import openpyxl  # noqa: F401
     except ImportError as exc:
@@ -53,16 +99,14 @@ def read_xlsx_rows(path: pathlib.Path) -> list[dict[str, typing.Any]]:
         try:
             header = [str(cell) if cell is not None else "" for cell in next(rows_iter)]
         except StopIteration:
-            return []
-        return [
-            {header[i]: value for i, value in enumerate(row) if i < len(header)}
-            for row in rows_iter
-        ]
+            return
+        for row in rows_iter:
+            yield {header[i]: value for i, value in enumerate(row) if i < len(header)}
     finally:
         workbook.close()
 
 
-READERS: dict[str, typing.Callable[[pathlib.Path], list[dict[str, typing.Any]]]] = {
+READERS: dict[str, typing.Callable[[pathlib.Path], typing.Iterator[dict[str, typing.Any]]]] = {
     "csv": read_csv_rows,
     "json": read_json_rows,
     "xlsx": read_xlsx_rows,
@@ -166,12 +210,16 @@ async def load_file(
     embedding_field: str | None = None,
     embedding_model: str = "custom",
     source: str = "user",
+    batch_size: int | None = None,
 ) -> int:
     """
     Import term data from a CSV, JSON, or XLSX file into the local database.
 
     Each row/record needs at least `term_field`; every other field is
     optional and can be set to `None` to skip it entirely.
+
+    Rows are read lazily from `path` and upserted into  `db` in batches
+    of `batch_size` rows.
 
     :param db: The local database to write to.
     :param path: Path to the source file.
@@ -203,11 +251,23 @@ async def load_file(
     :param source: Provenance tag stored on every imported row (see
         `slb_glossary.local.api.upsert_results`). Defaults to `"user"`
         so imported data can be told apart from live `"glossary"` rows.
+    :param batch_size: Number of rows to buffer before writing an
+        incremental upsert batch to `db`. Smaller values save progress
+        more often at the cost of more (smaller) database writes; larger
+        values write less often but risk losing more unwritten rows if
+        something interrupts the import before the next flush. `None`
+        (the default) uses `slb_glossary.constants.constants.import_batch_size`,
+        resolved fresh on this call.
     :return: Number of rows imported.
     :raises DatabaseError: If `format` (or `path`'s extension) is
         unsupported, `path` isn't a well-formed file of that format, or
         `.xlsx` support isn't installed.
+    :raises ValueError: If `batch_size` is given and is less than 1.
     """
+    resolved_batch_size = batch_size if batch_size is not None else constants.import_batch_size
+    if resolved_batch_size < 1:
+        raise ValueError("`batch_size` must be at least 1")
+
     resolved_path = pathlib.Path(path)
     resolved_format = (format or resolved_path.suffix.lstrip(".")).lower()
     reader = READERS.get(resolved_format)
@@ -217,40 +277,77 @@ async def load_file(
             f"Supported formats: {', '.join(sorted(set(READERS)))}."
         )
 
-    try:
-        rows = reader(resolved_path)
-    except DatabaseError:
-        raise
-    except Exception as exc:
-        raise DatabaseError(
-            f"Could not read {resolved_path!s} as {resolved_format}: {exc}"
-        ) from exc
+    total_written = 0
+    batches_written = 0
+    buffer: list[SearchResult] = []
 
-    results: list[SearchResult] = []
-    embeddings: dict[str, list[float]] = {}
-    for row in rows:
-        result = _record_to_result(
-            row,
-            term_field=term_field,
-            definition_field=definition_field,
-            topic_field=topic_field,
-            url_field=url_field,
-            grammatical_label_field=grammatical_label_field,
-            language_field=language_field,
-            default_language=default_language,
+    async def _flush() -> None:
+        nonlocal buffer, total_written, batches_written
+        if not buffer:
+            return
+        pending, buffer = buffer, []
+        # `language=None`: store each result's own `.language` field (set
+        # per row in `_record_to_result`) rather than forcing one
+        # language on the whole batch.
+        written = await upsert_results(db, pending, language=None, source=source)
+        total_written += written
+        batches_written += 1
+        logger.debug(
+            "Imported batch #%d: %d row(s) (%d total so far) from %s",
+            batches_written,
+            written,
+            total_written,
+            resolved_path,
         )
-        if result is None or not result.url:
-            continue
-        results.append(result)
 
-        if embedding_field:
-            parsed_embedding = _parse_embedding(_get_field(row, embedding_field))
-            if parsed_embedding:
-                embeddings[result.url] = parsed_embedding
+    row_iter = reader(resolved_path)
+    try:
+        while True:
+            # Isolate errors actually raised while *reading* the next row
+            # (a malformed CSV line, a JSON decode error, a missing
+            # `openpyxl`) from errors raised while *processing* one
+            # already read (e.g. a database error from `upsert_vector`),
+            # so only the former gets rewrapped as a `DatabaseError` about
+            # the source file.
+            try:
+                row = next(row_iter)
+            except StopIteration:
+                break
+            except DatabaseError:
+                raise
+            except Exception as exc:
+                raise DatabaseError(
+                    f"Could not read {resolved_path!s} as {resolved_format}: {exc}"
+                ) from exc
 
-    # `language=None`: store each result's own `.language` field (set
-    # above, per row) rather than forcing one language on the whole batch.
-    written = await upsert_results(db, results, language=None, source=source)
-    for url, embedding in embeddings.items():
-        await upsert_vector(db, url, embedding, model=embedding_model)
-    return written
+            result = _record_to_result(
+                row,
+                term_field=term_field,
+                definition_field=definition_field,
+                topic_field=topic_field,
+                url_field=url_field,
+                grammatical_label_field=grammatical_label_field,
+                language_field=language_field,
+                default_language=default_language,
+            )
+            if result is None or not result.url:
+                continue
+            buffer.append(result)
+
+            if embedding_field:
+                parsed_embedding = _parse_embedding(_get_field(row, embedding_field))
+                if parsed_embedding:
+                    await upsert_vector(db, result.url, parsed_embedding, model=embedding_model)
+
+            if len(buffer) >= resolved_batch_size:
+                await _flush()
+    finally:
+        await _flush()
+
+    logger.info(
+        "Imported %d row(s) from %s across %d batch(es)",
+        total_written,
+        resolved_path,
+        batches_written,
+    )
+    return total_written

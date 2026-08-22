@@ -61,6 +61,7 @@ import random
 import string
 import time
 import typing
+from collections.abc import Collection
 
 from slb_glossary import live
 from slb_glossary.constants import constants
@@ -308,6 +309,7 @@ async def search(
     persist_on_error: bool = True,
     fuzzy: bool = False,
     relevance_threshold: float | None = None,
+    exclude: Collection[str] | None = None,
 ) -> typing.AsyncIterator[LookupResult[SearchResult]]:
     """
     Search for `query`, reading from `db`/`session` according to `source`.
@@ -370,6 +372,13 @@ async def search(
         with live results more often. `None` (the default) uses
         `slb_glossary.constants.constants.relevance_threshold`, resolved
         fresh on this call.
+    :param exclude: URLs and/or term names to leave out of the results
+        entirely, e.g. ones already handled elsewhere in the same run.
+        Passed straight through to whichever of `slb_glossary.local.search`/
+        `slb_glossary.live.search` actually runs (and both, for
+        `Source.AUTO`'s live-then-local merge). See
+        `slb_glossary.utils.split_exclude` for how an entry is told apart
+        as a URL vs. a term name. `None` (the default) excludes nothing.
     :yield: `LookupResult[SearchResult]`s, best match first.
     :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
@@ -394,6 +403,7 @@ async def search(
             limit=limit,
             fuzzy=fuzzy,
             scored=True,
+            exclude=exclude,
         ):
             count += 1
             yield LookupResult(value=result, source=Source.LOCAL, persisted=False, score=score)
@@ -415,6 +425,7 @@ async def search(
             start_letter=start_letter,
             limit=limit,
             concurrency=concurrency,
+            exclude=exclude,
         )
         async for result in persist_incrementally(
             db,
@@ -446,6 +457,7 @@ async def search(
         language=language,
         limit=limit,
         fuzzy=fuzzy,
+        exclude=exclude,
     )
     results = [result for result, _ in scored]
     best_score = scored[0][1] if scored else 0.0
@@ -493,6 +505,7 @@ async def search(
         start_letter=start_letter,
         limit=limit,
         concurrency=concurrency,
+        exclude=exclude,
     )
     async for result in persist_incrementally(
         db,
@@ -561,6 +574,7 @@ async def get_terms_on(
     persist_batch_size: int | None = None,
     persist_on_error: bool = True,
     fuzzy: bool = False,
+    exclude: Collection[str] | None = None,
 ) -> typing.AsyncIterator[SearchResult]:
     """
     Yield every term filed under `topic`, reading from `db`/`session` according to `source`.
@@ -600,6 +614,12 @@ async def get_terms_on(
     :param fuzzy: If `True`, any local-database read tolerates minor
         misspellings/partial names in `topic`. Live reads already
         fuzzy-match topics unconditionally, so this has no effect on them.
+    :param exclude: URLs and/or term names to leave out of the results
+        entirely. Passed straight through to whichever of
+        `slb_glossary.local.get_terms_on`/`slb_glossary.live.get_terms_on` actually
+        runs. See `slb_glossary.utils.split_exclude` for how an entry is
+        told apart as a URL vs. a term name. `None` (the default)
+        excludes nothing.
     :yield: `SearchResult`s filed under `topic`.
     :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
@@ -618,6 +638,7 @@ async def get_terms_on(
             language=language,
             limit=limit,
             fuzzy=fuzzy,
+            exclude=exclude,
         ):
             count += 1
             yield result
@@ -638,6 +659,7 @@ async def get_terms_on(
             start_letter=start_letter,
             limit=limit,
             concurrency=concurrency,
+            exclude=exclude,
         )
         count = 0
         async for result in persist_incrementally(
@@ -669,6 +691,7 @@ async def get_terms_on(
             language=language,
             limit=limit,
             fuzzy=fuzzy,
+            exclude=exclude,
         )
     ]
     if results:
@@ -694,6 +717,7 @@ async def get_terms_on(
         start_letter=start_letter,
         limit=limit,
         concurrency=concurrency,
+        exclude=exclude,
     )
     live_count = 0
     async for result in persist_incrementally(
@@ -725,7 +749,7 @@ async def get_terms_urls(
     language: str | None = None,
     limit: int | None = None,
     fuzzy: bool = False,
-    exclude: typing.AbstractSet[str] | None = None,
+    exclude: Collection[str] | None = None,
 ) -> typing.AsyncIterator[str]:
     """
     Yield term detail-page URLs matching the given filters, reading from
@@ -753,12 +777,13 @@ async def get_terms_urls(
     :param fuzzy: If `True`, any local-database read tolerates minor
         misspellings/partial names in `topic`. Live reads already
         fuzzy-match topics unconditionally, so this has no effect on them.
-    :param exclude: URLs to skip over instead of yielding, e.g. ones
-        already stored locally. Only meaningful for a live read - a local
+    :param exclude: URLs and/or term names to skip over instead of
+        yielding, e.g. ones already stored locally. Honored by both a
+        local and a live read (see `slb_glossary.utils.split_exclude` for
+        how an entry is told apart as a URL vs. a term name); a local
         read's own filters already narrow to what's stored, so excluding
         from that same set besides is rarely useful, but it's still
-        honored there too for consistency. Pass a `set`/`frozenset` to
-        keep the check cheap. `None` (the default) excludes nothing.
+        honored there too for consistency. `None` (the default) excludes nothing.
     :yield: Matching term detail-page URLs.
     :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
@@ -776,9 +801,8 @@ async def get_terms_urls(
             language=language,
             limit=limit,
             fuzzy=fuzzy,
+            exclude=exclude,
         ):
-            if exclude and url in exclude:
-                continue
             yield url
         return
 
@@ -807,8 +831,8 @@ async def get_terms_urls(
             language=language,
             limit=limit,
             fuzzy=fuzzy,
+            exclude=exclude,
         )
-        if not (exclude and url in exclude)
     ]
     if urls:
         logger.debug("Serving `get_terms_urls(...)` from the local database")
@@ -848,7 +872,7 @@ async def get_topics(
 
     Unlike `search`/`get_terms_on`, a live read here never touches the
     network by itself: `session.topics` is already loaded when the session
-    was opened, so this just returns it directly.
+    was initialized, so this just returns it directly.
 
     :param db: An open local `Database`. Its topic counts only reflect
         terms that have actually been cached locally, which may be a
