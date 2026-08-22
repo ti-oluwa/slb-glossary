@@ -52,20 +52,12 @@ __all__ = [
     "SinkFilter",
     "SinkSpec",
     "SinksSpec",
-    "DEFAULT_LOG_FORMAT",
     "import_sink",
     "resolve_sink",
     "resolve_sinks",
     "configure_logging",
+    "set_log_level",
 ]
-
-
-DEFAULT_LOG_FORMAT = constants.log_format
-"""
-Default format string used for every sink. Sourced from
-`slb_glossary.constants.constants.log_format` - override it by setting
-`SLB_GLOSSARY_LOG_FORMAT`, rather than editing this value directly.
-"""
 
 
 @typing.runtime_checkable
@@ -195,10 +187,20 @@ class SinkHandler(RichHandler):
     and forwards them to one or more `LogSink`s.
 
     `sinks` can be a single `LogSink`, several, or a `{filter: sink(s)}`
-    mapping - see the module docstring for an example. With a mapping,
-    each record only goes to the sink(s) whose filter matches it, so
-    different parts of the log stream (e.g. everything from the query
-    API vs. everything else) can be routed to different places.
+    mapping. With a mapping, each record only goes to the sink(s) whose
+    filter matches it, so different parts of the log stream (e.g. everything
+    from the query API vs. everything else) can be routed to different places.
+
+    ```python
+    from slb_glossary.logging import FileSink, StderrSink, configure_logging
+
+    # Everything from the query API (and its live/local sub-loggers) goes to
+    # a dedicated file; everything else still prints to stderr as usual.
+    configure_logging(sinks={
+        "slb_glossary.query*": FileSink("query.log"),
+        "*": StderrSink(),
+    })
+    ```
     """
 
     def __init__(
@@ -276,6 +278,7 @@ def import_sink(dotted_path: str) -> typing.Any:
             f"{dotted_path!r} is not a valid sink import path. Use 'module:ClassName' "
             f"or 'package.module.ClassName'."
         )
+
     module = importlib.import_module(module_path)
     try:
         return getattr(module, attr)
@@ -379,6 +382,19 @@ def resolve_sinks(
     return [resolve_sink(item, default=default) for item in spec]  # type: ignore
 
 
+def set_log_level(level: int | str, *, logger_name: str = "slb_glossary") -> None:
+    """
+    Set `logger_name`'s logger to `level`, without touching its handlers/sinks.
+
+    :param level: Logging level, by name (`"DEBUG"`, case-insensitive) or
+        as a numeric `logging` level.
+    :param logger_name: Name of the logger to set the level on. Defaults
+        to `"slb_glossary"`, the package's root logger.
+    """
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(level.upper() if isinstance(level, str) else level)
+
+
 def configure_logging(
     *,
     sinks: SinksSpec = None,
@@ -409,8 +425,7 @@ def configure_logging(
     :param fmt: `logging.Formatter` format string used for every sink.
         `None` (the default) uses `slb_glossary.constants.constants.log_format`,
         resolved fresh on this call (so `SLB_GLOSSARY_LOG_FORMAT` set after
-        import still takes effect) rather than `DEFAULT_LOG_FORMAT`'s
-        import-time snapshot of it.
+        import still takes effect).
     :param propagate: Whether `logger_name`'s logger should still propagate
         records to its own ancestor loggers (e.g. the root logger) after
         also sending them to `sinks`. Defaults to `False` to avoid

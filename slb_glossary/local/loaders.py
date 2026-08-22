@@ -22,7 +22,7 @@ def read_csv_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
     """
     Lazily read `path` as CSV, yielding one `{column: value}` row at a time.
 
-    The file is opened lazily too, on this generator's first row rather
+    The file is opened lazily, on the generator's first row rather
     than at call time, and stays open only for as long as it's actually
     being iterated, so `load_file` can consume (and upsert) rows in
     batches as they're read, instead of holding the whole file's rows in
@@ -40,14 +40,7 @@ def read_json_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]
     Lazily yield each record from `path`'s JSON array (or an object containing one).
 
     JSON has no line-oriented record boundary the way CSV/XLSX do, so this
-    still has to parse the whole file into memory to find the record
-    array - there's no way around that without an external streaming-JSON
-    dependency this package doesn't otherwise need. What this *does* still
-    get right is not holding a second, growing copy of the data around:
-    once the array is found, it's yielded from directly, so `load_file`
-    can still upsert (and let go of) records in batches rather than
-    building a second full-size list of `SearchResult`s alongside the
-    parsed JSON one.
+    still has to parse the whole file into memory to find the record array.
 
     :param path: JSON file to read.
     :yield: One record dict at a time, from the array found.

@@ -63,7 +63,8 @@ from .utils import get_topic_match, print_async_records, print_records
 from .writers import WRITERS, Writer, records_to_dicts, save, supported_formats, writer
 
 py_logging.basicConfig(
-    format="%(levelname)s  %(asctime)s: [%(name)s] - %(message)s", level=py_logging.INFO
+    format="%(levelname)s  %(asctime)s  [%(name)s.%(funcName)s:%(lineno)d]:  %(message)s",
+    level=py_logging.INFO,
 )
 
 __version__ = "0.1.0"
