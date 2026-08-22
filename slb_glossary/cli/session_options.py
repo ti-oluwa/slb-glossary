@@ -7,6 +7,7 @@ import click
 
 from slb_glossary.config import Config
 from slb_glossary.live.browser import BrowserType, ResourceType
+from slb_glossary.logging import set_log_level
 from slb_glossary.retries import BackoffType
 from slb_glossary.types import Language
 
@@ -17,6 +18,7 @@ __all__ = [
     "config_option",
     "load_named_config",
     "resolve_session_kwargs",
+    "log_level_option",
 ]
 
 DEFAULT_CONFIG_SENTINEL = "default"
@@ -98,6 +100,61 @@ def _parse_proxy(
     return proxy
 
 
+def _apply_log_level(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
+    """
+    Eager `--log-level` callback: apply the override immediately if given.
+
+    Runs as this command's own options are processed - after the root
+    `slb-glossary --log-level` group option has already set its default
+    (`WARNING` unless overridden there), so a per-command `--log-level`
+    reliably wins for the duration of this command. Leaves the level
+    untouched (falls through to whatever the root option set) when this
+    command's own `--log-level` wasn't given.
+
+    :param value: The parsed `--log-level` choice, or `None` if not given.
+    :return: `value`, unchanged - so it's still available as a keyword
+        argument to the command callback, the same as any other option.
+    """
+    if value is not None:
+        set_log_level(value)
+    return value
+
+
+def log_level_option(func: F) -> F:
+    """
+    Attach a per-command `--log-level` override to a click command.
+
+    The root `slb-glossary --log-level` group option only applies for the
+    process as a whole; there's no way to ask for more (or less) verbosity
+    for just one subcommand's own run without it. This adds that: given
+    alongside the root option (or on its own, since the root option
+    already defaults to `WARNING`), whichever `--log-level` was actually
+    typed *last* on the command line wins, since both ultimately just call
+    `slb_glossary.logging.set_log_level`.
+
+    Stack this directly above a command's `def`, alongside
+    `@click.command()`. Included automatically by `session_options`, so
+    most commands that need it don't have to attach it separately.
+
+    :param func: The click command callback to attach the option to.
+    :return: `func`, with `--log-level` attached.
+    """
+    return click.option(
+        "--log-level",
+        "log_level",
+        type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False),
+        default=None,
+        is_eager=True,
+        expose_value=True,
+        callback=_apply_log_level,
+        help=(
+            "Verbosity of the package's own logging output, for this "
+            "command only. Overrides the root --log-level (or its "
+            "default) for the duration of this run."
+        ),
+    )(func)
+
+
 def session_options(func: F) -> F:
     """
     Attach every glossary-session configuring option to a click command.
@@ -108,6 +165,9 @@ def session_options(func: F) -> F:
     `settle_timeout`); pass the command's `**kwargs` to
     `resolve_session_kwargs` to turn them into arguments for
     `slb_glossary.browser.open_session`/`session`.
+
+    Also attaches `log_level_option` (`--log-level`), so every command
+    using this doesn't need to attach it separately.
 
     :param func: The click command callback to attach options to.
     :return: `func`, with session-configuration options attached.
@@ -304,7 +364,7 @@ def session_options(func: F) -> F:
     ]
     for option in reversed(options):
         func = option(func)
-    return func
+    return log_level_option(func)
 
 
 def config_option(func: F) -> F:

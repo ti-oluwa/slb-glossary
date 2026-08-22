@@ -11,7 +11,7 @@ from slb_glossary.cli.commands.update import update as update_command
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
 from slb_glossary.cli.runtime import run_async
-from slb_glossary.cli.session_options import config_option
+from slb_glossary.cli.session_options import config_option, log_level_option
 from slb_glossary.cli.source_options import database_option, get_loaded_config, resolve_db_path
 from slb_glossary.local.types import Metadata
 
@@ -34,6 +34,7 @@ def local() -> None:
 @local.command("path")
 @database_option
 @config_option
+@log_level_option
 @cli_command
 def show_path(**params: typing.Any) -> None:
     """
@@ -74,6 +75,7 @@ def show_path(**params: typing.Any) -> None:
     is_flag=True,
     help="Print stats as JSON instead of a human-readable summary.",
 )
+@log_level_option
 @cli_command
 def stats(**params: typing.Any) -> None:
     """
@@ -149,6 +151,7 @@ def stats(**params: typing.Any) -> None:
 @database_option
 @config_option
 @output_options
+@log_level_option
 @cli_command
 def local_search(query: str, **params: typing.Any) -> None:
     """
@@ -194,6 +197,7 @@ def local_search(query: str, **params: typing.Any) -> None:
 @database_option
 @config_option
 @output_options
+@log_level_option
 @cli_command
 def local_get(term_or_url: str, **params: typing.Any) -> None:
     """
@@ -235,6 +239,7 @@ def local_get(term_or_url: str, **params: typing.Any) -> None:
 @database_option
 @config_option
 @click.option("--yes", "-y", "assume_yes", is_flag=True, help="Don't ask for confirmation.")
+@log_level_option
 @cli_command
 def flush(**params: typing.Any) -> None:
     """
@@ -261,6 +266,7 @@ def flush(**params: typing.Any) -> None:
 @database_option
 @config_option
 @click.option("--yes", "-y", "assume_yes", is_flag=True, help="Don't ask for confirmation.")
+@log_level_option
 @cli_command
 def reset(**params: typing.Any) -> None:
     """

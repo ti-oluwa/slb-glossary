@@ -1,6 +1,5 @@
 """Root `slb-glossary` click group: logging setup, command wiring, and `--tui`."""
 
-import logging
 import typing
 
 import click
@@ -23,13 +22,9 @@ from slb_glossary.cli.commands import (
     urls,
 )
 from slb_glossary.cli.tui import TuiUnavailableError, launch_tui
+from slb_glossary.logging import set_log_level
 
 __all__ = ["cli", "main"]
-
-
-def _configure_logging(level_name: str) -> None:
-    """Set the root `slb_glossary` logger to `level_name`, leaving the format from `__init__.py` intact."""
-    logging.getLogger("slb_glossary").setLevel(getattr(logging, level_name.upper()))
 
 
 class BannerGroup(click.Group):
@@ -84,7 +79,7 @@ def cli(ctx: click.Context, log_level: str, use_tui: bool) -> None:
     --tui (here, or after a subcommand) to fill them in interactively
     instead of memorizing flags.
     """
-    _configure_logging(log_level)
+    set_log_level(log_level)
     if use_tui and ctx.invoked_subcommand is None:
         try:
             launch_tui(ctx)
