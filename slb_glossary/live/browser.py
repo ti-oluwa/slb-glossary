@@ -250,7 +250,7 @@ async def open_session(
     timeout: float = 60_000,
     terms_per_tab: int = 12,
     max_pages: int = 6,
-    retry: RetryPolicy = DEFAULT_RETRY_POLICY,
+    retry: RetryPolicy | None = None,
     settle_timeout: float = 8000,
     poll_interval: float = 300,
     executable_path: str | None = None,
@@ -348,7 +348,7 @@ async def open_session(
     language = Language(language)
 
     session_started_at = time.monotonic()
-    logger.info("Opening a %r glossary search session over %s", language.value, browser_type)
+    logger.info("Creating a %r glossary search session using %s", language.value, browser_type)
     playwright = await async_playwright().start()
     try:
         browser = await _launch_browser(
@@ -392,7 +392,7 @@ async def open_session(
             terms_per_tab=terms_per_tab,
             max_pages=max_pages,
             blocked_resources=blocked_resources,
-            retry=retry,
+            retry=retry if retry is not None else DEFAULT_RETRY_POLICY,
             timeout=timeout,
             settle_timeout=settle_timeout,
             poll_interval=poll_interval,
@@ -460,9 +460,9 @@ async def session(
     timeout: float = 60_000,
     terms_per_tab: int = 12,
     max_pages: int = 6,
-    retry: RetryPolicy = DEFAULT_RETRY_POLICY,
-    settle_timeout: float = 8.0,
-    poll_interval: float = 0.3,
+    retry: RetryPolicy | None = None,
+    settle_timeout: float = 8000,
+    poll_interval: float = 300,
     executable_path: str | None = None,
     proxy: dict[str, str] | None = None,
     viewport: dict[str, int] | None = None,

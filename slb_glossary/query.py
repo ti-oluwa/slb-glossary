@@ -64,7 +64,7 @@ from slb_glossary import live
 from slb_glossary.constants import constants
 from slb_glossary.errors import QueryError
 from slb_glossary.live.browser import Session
-from slb_glossary.local import api as local_api
+from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
 from slb_glossary.natural_language import clean_query
 from slb_glossary.relevance import EXACT_MATCH_SCORE, score_result
@@ -225,7 +225,7 @@ async def _maybe_persist(
     if not persist or db is None or not results:
         return False
     started_at = time.monotonic()
-    written = await local_api.upsert_results(db, results, language=language)
+    written = await local.upsert_results(db, results, language=language)
     if written:
         logger.info(
             "Cached %d result(s) fetched live into the local database in %.3fs",
@@ -277,7 +277,7 @@ def persist_incrementally(
     if not persist or db is None:
         return results
 
-    return local_api.upsert_results_incrementally(
+    return local.upsert_results_incrementally(
         db,
         results,
         language=language,
@@ -397,7 +397,7 @@ async def search(
     count = 0
     if resolved is Source.LOCAL:
         assert db is not None
-        async for result, score in local_api.search(
+        async for result, score in local.search(
             db,
             normalized_query,
             topic=topic,
@@ -453,7 +453,7 @@ async def search(
 
     # source is `Source.AUTO`, resolved started as `LOCAL`: score it, then decide.
     assert db is not None
-    scored = await local_api.scored_search(
+    scored = await local.scored_search(
         db,
         normalized_query,
         topic=topic,
@@ -642,7 +642,7 @@ async def get_terms_on(
     if resolved is Source.LOCAL:
         assert db is not None
         count = 0
-        async for result in local_api.get_terms_on(
+        async for result in local.get_terms_on(
             db,
             topic,
             start_letter=start_letter,
@@ -696,7 +696,7 @@ async def get_terms_on(
     assert db is not None
     results = [
         result
-        async for result in local_api.get_terms_on(
+        async for result in local.get_terms_on(
             db,
             topic,
             start_letter=start_letter,
@@ -812,7 +812,7 @@ async def get_terms_urls(
     resolved = resolve_source(db, session, source)
     if resolved is Source.LOCAL:
         assert db is not None
-        async for url in local_api.get_terms_urls(
+        async for url in local.get_terms_urls(
             db,
             query=query,
             topic=topic,
@@ -843,7 +843,7 @@ async def get_terms_urls(
     assert db is not None
     urls = [
         url
-        async for url in local_api.get_terms_urls(
+        async for url in local.get_terms_urls(
             db,
             query=query,
             topic=topic,
@@ -925,7 +925,7 @@ async def get_topics(
     resolved = resolve_source(db, session, source)
     if resolved is Source.LOCAL:
         assert db is not None
-        return await local_api.get_topics(db, language=language)
+        return await local.get_topics(db, language=language)
 
     if resolved is Source.LIVE or source is not Source.AUTO:
         assert session is not None
@@ -933,7 +933,7 @@ async def get_topics(
         return dict(session.topics)
 
     assert db is not None
-    topics = await local_api.get_topics(db, language=language)
+    topics = await local.get_topics(db, language=language)
     if topics:
         return topics
 
@@ -1116,11 +1116,11 @@ async def _lookup_local_term(
     way `search` itself scores local results.
     """
     if not with_similar:
-        result = await local_api.get_term(db, term_or_url, language=language)
+        result = await local.get_term(db, term_or_url, language=language)
         score = EXACT_MATCH_SCORE if result is not None else None
         return LookupResult(value=result, source=Source.LOCAL, persisted=False, score=score)
 
-    result, similar_pairs = await local_api.get_term(
+    result, similar_pairs = await local.get_term(
         db,
         term_or_url,
         language=language,
@@ -1407,7 +1407,7 @@ async def get_random_term(
     resolved = resolve_source(db, session, source)
     if resolved is Source.LOCAL:
         assert db is not None
-        result = await local_api.get_random_term(db, topic=topic, fuzzy=fuzzy)
+        result = await local.get_random_term(db, topic=topic, fuzzy=fuzzy)
         return LookupResult(value=result, source=Source.LOCAL, persisted=False)
 
     if resolved is Source.LIVE or source is not Source.AUTO:
@@ -1424,7 +1424,7 @@ async def get_random_term(
     # AUTO: prefer a local pick when the local database actually has
     # something to pick from; only go live when it doesn't.
     assert db is not None
-    result = await local_api.get_random_term(db, topic=topic, fuzzy=fuzzy)
+    result = await local.get_random_term(db, topic=topic, fuzzy=fuzzy)
     if result is not None:
         return LookupResult(value=result, source=Source.LOCAL, persisted=False)
 

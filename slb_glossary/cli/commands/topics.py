@@ -4,7 +4,7 @@ import typing
 
 import click
 
-from slb_glossary import query as query_api
+from slb_glossary import query
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
 from slb_glossary.cli.runtime import run_async
@@ -95,12 +95,12 @@ def list_topics(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
     config = get_loaded_config(params)
 
     async def _local_records(db: typing.Any) -> typing.AsyncIterator[TopicRecord]:
-        topics = await query_api.get_topics(db=db, source=Source.LOCAL)
+        topics = await query.get_topics(db=db, source=Source.LOCAL)
         async for record in iter_topic_records(topics):
             yield record
 
     async def _live_records(session: typing.Any) -> typing.AsyncIterator[TopicRecord]:
-        topics = await query_api.get_topics(session=session, source=Source.LIVE)
+        topics = await query.get_topics(session=session, source=Source.LIVE)
         async for record in iter_topic_records(topics):
             yield record
 

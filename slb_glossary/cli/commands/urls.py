@@ -4,7 +4,7 @@ import typing
 
 import click
 
-from slb_glossary import query as query_api
+from slb_glossary import query
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
 from slb_glossary.cli.runtime import run_async
@@ -137,7 +137,7 @@ def list_urls(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
                 params,
                 db,
                 source=source,
-                local_call=lambda db: query_api.get_terms_urls(
+                local_call=lambda db: query.get_terms_urls(
                     db=db,
                     source=Source.LOCAL,
                     query=params["query"],
@@ -146,7 +146,7 @@ def list_urls(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
                     limit=limit,
                     fuzzy=params["fuzzy"],
                 ),
-                live_call=lambda session: query_api.get_terms_urls(
+                live_call=lambda session: query.get_terms_urls(
                     db=db,
                     session=session,
                     source=Source.LIVE,

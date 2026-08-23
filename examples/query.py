@@ -4,14 +4,19 @@ import slb_glossary as slb
 
 
 async def main() -> None:
-    async with slb.local.database() as db, slb.live.session() as session:
+    async with (
+        slb.local.database() as db,
+        slb.live.session(
+            initialize=False, headless=False, use_stealth=False, block=False
+        ) as session,
+    ):
         # Local first; only opens a live page if the local DB has nothing.
         # `persist=True` writes whatever came back live into `db`.
-        async for result in slb.search("logging", db=db, session=session, persist=True):
+        async for result in slb.search("clathrate", db=db, session=session, persist=True):
             print(result.value.term, "-", result.value.definition)
 
         # A repeat call for the same query is now served from `db` alone.
-        async for result in slb.search("logging", db=db):
+        async for result in slb.search("clathrate", db=db):
             print("(cached)", result.value.term)
 
 

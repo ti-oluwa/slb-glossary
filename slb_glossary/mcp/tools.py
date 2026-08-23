@@ -5,8 +5,8 @@ import time
 import typing
 from collections.abc import Awaitable, Callable
 
-from slb_glossary import query as query_api
-from slb_glossary.local import sync as sync_api
+from slb_glossary import query
+from slb_glossary.local import sync
 from slb_glossary.mcp.config import MCPConfig, Streaming, Tool
 from slb_glossary.mcp.errors import MCPError
 from slb_glossary.mcp.runtime import Runtime
@@ -355,7 +355,7 @@ async def _handle_search(
     async with runtime.acquire(source) as (db, session):
         results: list[dict[str, typing.Any]] = []
         count = 0
-        async for lookup in query_api.search(
+        async for lookup in query.search(
             args.query,
             db=db,
             session=session,
@@ -392,7 +392,7 @@ async def _handle_get_term(
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
     async with runtime.acquire(source) as (db, session):
-        lookup = await query_api.get_term(
+        lookup = await query.get_term(
             args.term_or_url,
             db=db,
             session=session,
@@ -415,7 +415,7 @@ async def _handle_terms_on(
     async with runtime.acquire(source) as (db, session):
         results: list[dict[str, typing.Any]] = []
         count = 0
-        async for result in query_api.get_terms_on(
+        async for result in query.get_terms_on(
             args.topic,
             db=db,
             session=session,
@@ -448,7 +448,7 @@ async def _handle_terms_urls(
     async with runtime.acquire(source) as (db, session):
         urls = [
             url
-            async for url in query_api.get_terms_urls(
+            async for url in query.get_terms_urls(
                 db=db,
                 session=session,
                 source=source,
@@ -471,7 +471,7 @@ async def _handle_topics(
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
     async with runtime.acquire(source) as (db, session):
-        topics = await query_api.get_topics(db=db, session=session, source=source)
+        topics = await query.get_topics(db=db, session=session, source=source)
     return {"topics": topics, "count": len(topics), "source": source.value}
 
 
@@ -484,7 +484,7 @@ async def _handle_related_terms(
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
     async with runtime.acquire(source) as (db, session):
-        lookup = await query_api.related_terms(
+        lookup = await query.related_terms(
             args.term_or_url,
             db=db,
             session=session,
@@ -503,7 +503,7 @@ async def _handle_random_term(
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
     async with runtime.acquire(source) as (db, session):
-        lookup = await query_api.get_random_term(
+        lookup = await query.get_random_term(
             db=db,
             session=session,
             source=source,
@@ -523,7 +523,7 @@ async def _handle_compare(
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
     async with runtime.acquire(source) as (db, session):
-        lookups = await query_api.compare(
+        lookups = await query.compare(
             args.terms,
             db=db,
             session=session,
@@ -555,22 +555,22 @@ async def _handle_sync(
         )
         if args.mode == "query":
             assert args.value is not None
-            summary = await sync_api.sync_query(
+            summary = await sync.sync_query(
                 db, session, args.value, limit=args.limit, concurrency=args.concurrency
             )
         elif args.mode == "topic":
             assert args.value is not None
-            summary = await sync_api.sync_topic(
+            summary = await sync.sync_topic(
                 db, session, args.value, limit=args.limit, concurrency=args.concurrency
             )
         elif args.mode == "letter":
             assert args.value is not None
-            summary = await sync_api.sync_letter(
+            summary = await sync.sync_letter(
                 db, session, args.value, limit=args.limit, concurrency=args.concurrency
             )
         else:
             assert args.mode == "all", f"Unexpected `SyncArgs.mode` {args.mode!r}."
-            summary = await sync_api.sync_all(db, session, concurrency=args.concurrency)
+            summary = await sync.sync_all(db, session, concurrency=args.concurrency)
 
     return dataclasses.asdict(summary)
 
