@@ -111,6 +111,7 @@ class Updatable:
         timeout: float = 30.0
         retries: int = 3
 
+
     opts = Options()
     opts2 = opts.update(timeout=60.0)  # instead of dataclasses.replace(opts, timeout=60.0)
     ```

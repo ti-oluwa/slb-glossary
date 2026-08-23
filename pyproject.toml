@@ -75,3 +75,4 @@ known-first-party = ["slb_glossary"]
 
 [tool.ruff.format]
 quote-style = "double"
+docstring-code-format = true

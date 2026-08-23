@@ -58,7 +58,9 @@ class Constant(typing.Generic[T]):
             env_var="SLB_GLOSSARY_RELEVANCE_THRESHOLD",
             validate=lambda v: 0.0 <= v <= 1.0,
         )
-        log_format = Constant("%(levelname)s  %(message)s")  # no env_var: fixed, but still typed/validated
+        log_format = Constant(
+            "%(levelname)s  %(message)s"
+        )  # no env_var: fixed, but still typed/validated
     ```
 
     With `env_var` given, every access re-reads that environment variable

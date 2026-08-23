@@ -9,9 +9,7 @@ import slb_glossary as slb
 async with slb.local.database() as db, slb.live.session() as session:
     # Local first; only opens a live page if the local DB has nothing.
     # Whatever came back live is written to `db` so the next call is local-only.
-    async for lookup in slb.query.search(
-        "water saturation", db=db, session=session, persist=True
-    ):
+    async for lookup in slb.query.search("water saturation", db=db, session=session, persist=True):
         print(lookup.source.value, lookup.score, lookup.value.term)
 ```
 

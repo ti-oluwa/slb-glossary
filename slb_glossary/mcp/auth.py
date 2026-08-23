@@ -14,10 +14,12 @@ See `slb_glossary.mcp.config.Auth` for how the two combine, and
 ```python
 from slb_glossary.mcp.auth import Principal, StaticTokenAuth
 
-auth = StaticTokenAuth({
-    "sk-alice-...": Principal(id="alice", scopes=frozenset({"read", "write"})),
-    "sk-bot-...": "readonly-bot",  # bare string is shorthand for Principal(id=...)
-})
+auth = StaticTokenAuth(
+    {
+        "sk-alice-...": Principal(id="alice", scopes=frozenset({"read", "write"})),
+        "sk-bot-...": "readonly-bot",  # bare string is shorthand for Principal(id=...)
+    }
+)
 ```
 """
 

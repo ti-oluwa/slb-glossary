@@ -22,10 +22,12 @@ from slb_glossary.logging import FileSink, StderrSink, configure_logging
 
 # Everything from the query API (and its live/local sub-loggers) goes to
 # a dedicated file; everything else still prints to stderr as usual.
-configure_logging(sinks={
-    "slb_glossary.query*": FileSink("query.log"),
-    "*": StderrSink(),
-})
+configure_logging(
+    sinks={
+        "slb_glossary.query*": FileSink("query.log"),
+        "*": StderrSink(),
+    }
+)
 ```
 """
 
@@ -196,10 +198,12 @@ class SinkHandler(RichHandler):
 
     # Everything from the query API (and its live/local sub-loggers) goes to
     # a dedicated file; everything else still prints to stderr as usual.
-    configure_logging(sinks={
-        "slb_glossary.query*": FileSink("query.log"),
-        "*": StderrSink(),
-    })
+    configure_logging(
+        sinks={
+            "slb_glossary.query*": FileSink("query.log"),
+            "*": StderrSink(),
+        }
+    )
     ```
     """
 
