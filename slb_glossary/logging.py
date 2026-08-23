@@ -423,7 +423,7 @@ def configure_logging(
         Defaults to `"slb_glossary"`, the package's root logger, so every
         module's `logging.getLogger(__name__)` call propagates up to it.
     :param fmt: `logging.Formatter` format string used for every sink.
-        `None` (the default) uses `slb_glossary.constants.constants.log_format`,
+        `None` (the default) uses `constants.log_format`,
         resolved fresh on this call (so `SLB_GLOSSARY_LOG_FORMAT` set after
         import still takes effect).
     :param propagate: Whether `logger_name`'s logger should still propagate

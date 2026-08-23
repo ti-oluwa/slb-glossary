@@ -358,7 +358,7 @@ def _field_or_empty(ctx: click.Context, param: click.Parameter, value: str | Non
         "first. Lower values save progress more often; higher values "
         "write less often but risk losing more unwritten rows if the "
         "import is interrupted before the next flush. Defaults to "
-        "slb_glossary.constants.constants.import_batch_size (500 unless "
+        "constants.import_batch_size (500 unless "
         "SLB_GLOSSARY_IMPORT_BATCH_SIZE overrides it)."
     ),
 )

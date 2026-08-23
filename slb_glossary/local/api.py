@@ -225,7 +225,7 @@ async def upsert_results_incrementally(
         cost of more (smaller) database writes; larger values write less
         often but risk losing more unsaved results if something goes wrong
         before the next flush. `None` (the default) uses
-        `slb_glossary.constants.constants.persist_batch_size`, resolved
+        `constants.persist_batch_size`, resolved
         fresh on this call.
     :param persist_on_error: If `True` (the default), flush whatever's
         currently buffered when `results` raises, before letting the
@@ -861,11 +861,11 @@ async def get_term(
     :param similar_pool_size: Candidates `scored_search` pulls before
         alternatives are drawn from them. Only used when `with_similar=True`.
         `None` (the default) uses
-        `slb_glossary.constants.constants.similar_terms_pool_size`,
+        `constants.similar_terms_pool_size`,
         resolved fresh on this call.
     :param max_similar_terms: Max alternatives returned. Only used when
         `with_similar=True`. `None` (the default) uses
-        `slb_glossary.constants.constants.max_similar_terms`, resolved
+        `constants.max_similar_terms`, resolved
         fresh on this call.
     :return: The stored `SearchResult`, or `None` if not found locally.
         With `with_similar=True`, a `(result, similar)` pair instead,

@@ -1,8 +1,7 @@
 """
 Source-aware query API containing a set of functions that can read the local
-database, the live glossary, or both, without the caller having to
-hand-roll the "check local, fall back live, maybe cache what came back"
-dance every time.
+database, the live glossary, or both, without the caller having to specify what
+source to use, and what order to use them every time.
 
 ```python
 import slb_glossary as slb
@@ -48,7 +47,7 @@ docstring for why, and `persist_batch_size`/`persist_on_error` for how to
 tune it.
 
 Every function here returns or yields `LookupResult`s, not bare values,
-so a caller always knows which source actually answered a query (and,
+so a caller can always knows which source actually answered a query (and,
 where relevant, how confident the match was) without threading that
 information through separately. Unwrap with `.value`.
 """
@@ -201,13 +200,9 @@ def validate_language(session: Session | None, language: str | None) -> None:
 
     A `Session` is bound to one glossary language edition for its whole
     lifetime, set when it was opened. So a live fetch can't honor a
-    different `language` on a per-call basis the way a local read can;
-    there's no "search this session in Spanish just this once". Raising
-    here, instead of silently searching in the session's own language
-    while ignoring what was actually asked for, keeps a caller from
-    getting a same-looking-but-wrong-language result set without
-    realizing why. To search a different language live, open a second
-    `Session` with that language instead.
+    different `language` on a per-call basis the way a local read can.
+    To search a different language live, open a second `Session` with
+    that language instead.
 
     :param session: The live session about to be used, or `None` if this
         call has none (e.g. a local-only read).
@@ -220,8 +215,8 @@ def validate_language(session: Session | None, language: str | None) -> None:
     if language != session.language.value:
         raise QueryError(
             f"Requested language {language!r} does not match this session's own "
-            f"language {session.language.value!r}. Open a new Session with "
-            f"language={language!r} to search that edition live instead."
+            f"language {session.language.value!r}. Open a new `Session` with "
+            f"`language={language!r}` to search that edition live instead."
         )
 
 
@@ -271,7 +266,7 @@ def persist_incrementally(
         often but risk losing more unsaved results if something goes wrong
         before the next flush. `None` (the default) passes through
         unchanged to `slb_glossary.local.upsert_results_incrementally`,
-        which resolves it from `slb_glossary.constants.constants.persist_batch_size`.
+        which resolves it from `constants.persist_batch_size`.
     :param persist_on_error: If `True` (the default), flush whatever's
         currently buffered when `results` raises, before letting the
         exception propagate, so an interrupted fetch still saves the
@@ -310,6 +305,7 @@ async def search(
     fuzzy: bool = False,
     relevance_threshold: float | None = None,
     exclude: Collection[str] | None = None,
+    auto_initialize: bool = True,
 ) -> typing.AsyncIterator[LookupResult[SearchResult]]:
     """
     Search for `query`, reading from `db`/`session` according to `source`.
@@ -334,7 +330,7 @@ async def search(
         used as the primary source (and/or cache target) for `Source.AUTO`.
     :param session: An open live `Session`. Required for `Source.LIVE`,
         and used as the fallback (and/or live source) for `Source.AUTO`.
-    :param source: Which source(s) to read from. See the module docstring.
+    :param source: Which source(s) to read from.
     :param topic: Restrict results to this topic, or several comma-separated topics.
     :param start_letter: Restrict results to terms starting with this letter.
     :param language: Restrict results to this glossary language edition
@@ -356,7 +352,7 @@ async def search(
         incremental write to `db`. Only relevant when `persist=True` and a
         live fetch actually happens. `None` (the default) passes through
         unchanged to `slb_glossary.local.upsert_results_incrementally`,
-        which resolves it from `slb_glossary.constants.constants.persist_batch_size`.
+        which resolves it from `constants.persist_batch_size`.
     :param persist_on_error: If `True` (the default), and `persist=True`,
         save whatever's buffered so far if the live fetch raises partway
         through, instead of losing it.
@@ -370,7 +366,7 @@ async def search(
         without also querying the live glossary. Lower it to trust local
         results more readily (fewer live fetches); raise it to augment
         with live results more often. `None` (the default) uses
-        `slb_glossary.constants.constants.relevance_threshold`, resolved
+        `constants.relevance_threshold`, resolved
         fresh on this call.
     :param exclude: URLs and/or term names to leave out of the results
         entirely, e.g. ones already handled elsewhere in the same run.
@@ -380,9 +376,18 @@ async def search(
         `slb_glossary.utils.split_exclude` for how an entry is told apart
         as a URL vs. a term name. `None` (the default) excludes nothing.
     :yield: `LookupResult[SearchResult]`s, best match first.
+    :param auto_initialize: If a live fetch happens and `session` isn't
+        initialized yet, initialize it automatically (the default) or
+        raise. See `slb_glossary.live.ensure_initialized`. Only ever
+        matters when a live fetch actually happens - for `Source.AUTO`,
+        that's never guaranteed, so passing `auto_initialize=False` with
+        an uninitialized `session` doesn't raise unless local results
+        turn out to be needed.
     :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
+    :raises SessionNotInitializedError: If a live fetch happens, `session`
+        isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
     normalized_query = clean_query(query)
@@ -426,6 +431,7 @@ async def search(
             limit=limit,
             concurrency=concurrency,
             exclude=exclude,
+            auto_initialize=auto_initialize,
         )
         async for result in persist_incrementally(
             db,
@@ -506,6 +512,7 @@ async def search(
         limit=limit,
         concurrency=concurrency,
         exclude=exclude,
+        auto_initialize=auto_initialize,
     )
     async for result in persist_incrementally(
         db,
@@ -575,6 +582,7 @@ async def get_terms_on(
     persist_on_error: bool = True,
     fuzzy: bool = False,
     exclude: Collection[str] | None = None,
+    auto_initialize: bool = True,
 ) -> typing.AsyncIterator[SearchResult]:
     """
     Yield every term filed under `topic`, reading from `db`/`session` according to `source`.
@@ -589,7 +597,7 @@ async def get_terms_on(
         local read.
     :param db: An open local `Database`.
     :param session: An open live `Session`.
-    :param source: Which source(s) to read from. See the module docstring.
+    :param source: Which source(s) to read from.
     :param start_letter: Restrict results to terms starting with this letter.
     :param language: Restrict results to this glossary language edition
         (e.g. `"en"`/`"es"`). For a local read, this filters by each
@@ -607,7 +615,7 @@ async def get_terms_on(
         incremental write to `db`. Only relevant when `persist=True` and a
         live fetch actually happens. `None` (the default) passes through
         unchanged to `slb_glossary.local.upsert_results_incrementally`,
-        which resolves it from `slb_glossary.constants.constants.persist_batch_size`.
+        which resolves it from `constants.persist_batch_size`.
     :param persist_on_error: If `True` (the default), and `persist=True`,
         save whatever's buffered so far if the live fetch raises partway
         through, instead of losing it.
@@ -621,9 +629,14 @@ async def get_terms_on(
         told apart as a URL vs. a term name. `None` (the default)
         excludes nothing.
     :yield: `SearchResult`s filed under `topic`.
+    :param auto_initialize: If a live fetch happens and `session` isn't
+        initialized yet, initialize it automatically (the default) or
+        raise. See `slb_glossary.live.ensure_initialized`.
     :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
+    :raises SessionNotInitializedError: If a live fetch happens, `session`
+        isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
     started_at = time.monotonic()
@@ -660,6 +673,7 @@ async def get_terms_on(
             limit=limit,
             concurrency=concurrency,
             exclude=exclude,
+            auto_initialize=auto_initialize,
         )
         count = 0
         async for result in persist_incrementally(
@@ -718,6 +732,7 @@ async def get_terms_on(
         limit=limit,
         concurrency=concurrency,
         exclude=exclude,
+        auto_initialize=auto_initialize,
     )
     live_count = 0
     async for result in persist_incrementally(
@@ -750,19 +765,20 @@ async def get_terms_urls(
     limit: int | None = None,
     fuzzy: bool = False,
     exclude: Collection[str] | None = None,
+    auto_initialize: bool = True,
 ) -> typing.AsyncIterator[str]:
     """
     Yield term detail-page URLs matching the given filters, reading from
     `db`/`session` according to `source`.
 
     Lighter-weight than `search`/`get_terms_on`: only the URLs themselves
-    are returned, no definitions are fetched or parsed - so there's
+    are returned, no definitions are fetched or parsed so there's
     nothing here to persist. Same local-first, live-fallback behavior as
     `search` for `Source.AUTO`.
 
     :param db: An open local `Database`.
     :param session: An open live `Session`.
-    :param source: Which source(s) to read from. See the module docstring.
+    :param source: Which source(s) to read from.
     :param query: Restrict to a free-text query match.
     :param topic: Restrict to this topic, or several comma-separated
         topics. Topic names themselves are language-specific; see `language`.
@@ -785,9 +801,14 @@ async def get_terms_urls(
         from that same set besides is rarely useful, but it's still
         honored there too for consistency. `None` (the default) excludes nothing.
     :yield: Matching term detail-page URLs.
+    :param auto_initialize: If a live fetch happens and `session` isn't
+        initialized yet, initialize it automatically (the default) or
+        raise. See `slb_glossary.live.ensure_initialized`.
     :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
+    :raises SessionNotInitializedError: If a live fetch happens, `session`
+        isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
     resolved = resolve_source(db, session, source)
@@ -815,6 +836,7 @@ async def get_terms_urls(
             start_letter=start_letter,
             limit=limit,
             exclude=exclude,
+            auto_initialize=auto_initialize,
         ):
             yield url
         return
@@ -856,6 +878,7 @@ async def get_terms_urls(
         start_letter=start_letter,
         limit=limit,
         exclude=exclude,
+        auto_initialize=auto_initialize,
     ):
         yield url
 
@@ -866,13 +889,14 @@ async def get_topics(
     session: Session | None = None,
     source: Source = Source.AUTO,
     language: str | None = None,
+    auto_initialize: bool = True,
 ) -> dict[str, int]:
     """
     Return `{topic: term_count}`, reading from `db`/`session` according to `source`.
 
     Unlike `search`/`get_terms_on`, a live read here never touches the
-    network by itself: `session.topics` is already loaded when the session
-    was initialized, so this just returns it directly.
+    network by itself once `session` is initialized: `session.topics` is
+    already loaded at that point, so this just returns it directly.
 
     :param db: An open local `Database`. Its topic counts only reflect
         terms that have actually been cached locally, which may be a
@@ -880,7 +904,7 @@ async def get_topics(
     :param session: An open live `Session`.
     :param source: Which source(s) to read from. `Source.AUTO`
         prefers the local database when it has at least one topic, falling
-        back to `session.topics` otherwise. See the module docstring.
+        back to `session.topics` otherwise.
     :param language: Restrict to this glossary language edition (e.g.
         `"en"`/`"es"`). Only meaningful for a local read: topic names are
         language-specific (the glossary's Spanish edition uses different
@@ -889,10 +913,15 @@ async def get_topics(
         different names. For a live read, `session.topics` is already
         specific to `session`'s own language; `language` is only
         validated against it, not applied as a filter.
+    :param auto_initialize: If a live read happens and `session` isn't
+        initialized yet, initialize it automatically (the default) or
+        raise. See `slb_glossary.live.ensure_initialized`.
     :return: Topic name to term count.
     :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
+    :raises SessionNotInitializedError: If a live read happens, `session`
+        isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
     resolved = resolve_source(db, session, source)
@@ -902,6 +931,7 @@ async def get_topics(
 
     if resolved is Source.LIVE or source is not Source.AUTO:
         assert session is not None
+        await live.ensure_initialized(session, auto_initialize)
         return dict(session.topics)
 
     assert db is not None
@@ -911,6 +941,7 @@ async def get_topics(
 
     if session is None:
         return {}
+    await live.ensure_initialized(session, auto_initialize)
     return dict(session.topics)
 
 
@@ -926,6 +957,7 @@ async def get_term(
     with_similar: typing.Literal[False] = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
+    auto_initialize: bool = True,
 ) -> LookupResult[SearchResult | None]: ...
 
 
@@ -941,6 +973,7 @@ async def get_term(
     with_similar: typing.Literal[True],
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
+    auto_initialize: bool = True,
 ) -> LookupResult[SimilarResult]: ...
 
 
@@ -955,6 +988,7 @@ async def get_term(
     with_similar: bool = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
+    auto_initialize: bool = True,
 ) -> LookupResult:
     """
     Look up a single term by exact name or detail-page URL.
@@ -963,7 +997,7 @@ async def get_term(
         glossary term detail-page URL.
     :param db: An open local `Database`.
     :param session: An open live `Session`.
-    :param source: Which source(s) to read from. See the module docstring.
+    :param source: Which source(s) to read from.
     :param persist: If `True`, and a live fetch happens, cache its result(s)
         into `db`. This is a single-value lookup, so there's normally only
         one result to write. Batching doesn't apply here the way it does
@@ -985,20 +1019,25 @@ async def get_term(
     :param similar_pool_size: Candidates pulled while looking for the
         exact match, and, with `with_similar=True`, to draw alternatives
         from. `None` (the default) uses
-        `slb_glossary.constants.constants.similar_terms_pool_size`,
+        `constants.similar_terms_pool_size`,
         resolved fresh on this call.
     :param max_similar_terms: Max alternatives returned in
         `SimilarResult.similar`. Ignored unless `with_similar=True`.
         `None` (the default) uses
-        `slb_glossary.constants.constants.max_similar_terms`, resolved
+        `constants.max_similar_terms`, resolved
         fresh on this call.
     :return: A `LookupResult` wrapping the found `SearchResult` (or `None` if
         not found by the resolved source(s)), scored `EXACT_MATCH_SCORE` if
         found. Or, with `with_similar=True`, a `SimilarResult`, where each
         of `.exact`/`.similar` carries its own score.
+    :param auto_initialize: If a live fetch happens and `session` isn't
+        initialized yet, initialize it automatically (the default) or
+        raise. See `slb_glossary.live.ensure_initialized`.
     :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
+    :raises SessionNotInitializedError: If a live fetch happens, `session`
+        isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
     resolved = resolve_source(db, session, source)
@@ -1021,6 +1060,7 @@ async def get_term(
             with_similar=with_similar,
             similar_pool_size=similar_pool_size,
             max_similar_terms=max_similar_terms,
+            auto_initialize=auto_initialize,
         )
         return await _finalize_live_term_lookup(
             db, session, fetched, with_similar=with_similar, persist=persist
@@ -1052,6 +1092,7 @@ async def get_term(
         with_similar=with_similar,
         similar_pool_size=similar_pool_size,
         max_similar_terms=max_similar_terms,
+        auto_initialize=auto_initialize,
     )
     return await _finalize_live_term_lookup(
         db, session, fetched, with_similar=with_similar, persist=persist
@@ -1157,6 +1198,7 @@ async def _lookup_live_term(
     with_similar: typing.Literal[False] = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
+    auto_initialize: bool = True,
 ) -> LookupResult[SearchResult] | None: ...
 
 
@@ -1168,6 +1210,7 @@ async def _lookup_live_term(
     with_similar: typing.Literal[True],
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
+    auto_initialize: bool = True,
 ) -> SimilarResult: ...
 
 
@@ -1178,6 +1221,7 @@ async def _lookup_live_term(
     with_similar: bool = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
+    auto_initialize: bool = True,
 ) -> LookupResult[SearchResult] | None | SimilarResult:
     """
     Resolve `term_or_url` against the live glossary: a URL fetches directly, else it's searched.
@@ -1193,18 +1237,17 @@ async def _lookup_live_term(
     :param similar_pool_size: Live results to pull while looking for the
         exact match, and, with `with_similar=True`, to draw
         `SimilarResult.similar` alternatives from. `None` (the default)
-        uses `slb_glossary.constants.constants.similar_terms_pool_size`,
-        resolved fresh on this call.
+        uses `constants.similar_terms_pool_size`, resolved fresh on this call.
     :param max_similar_terms: Max alternatives returned in
         `SimilarResult.similar`. Ignored unless `with_similar=True`.
-        `None` (the default) uses
-        `slb_glossary.constants.constants.max_similar_terms`, resolved
+        `None` (the default) uses `constants.max_similar_terms`, resolved
         fresh on this call.
     :return: A `LookupResult` wrapping the exact `SearchResult` match (or
         `None`), or with `with_similar=True`, a `SimilarResult` wrapping
         the exact match (if any) and its alternatives, each already
         wrapped in its own `LookupResult`.
     """
+    await live.ensure_initialized(session, auto_initialize)
     resolved_pool_size = (
         similar_pool_size if similar_pool_size is not None else constants.similar_terms_pool_size
     )
@@ -1285,6 +1328,7 @@ async def related_terms(
     source: Source = Source.AUTO,
     persist: bool = False,
     language: str | None = None,
+    auto_initialize: bool = True,
 ) -> LookupResult[tuple[RelatedTerm, ...]]:
     """
     Look up the related terms linked from a single term's definition.
@@ -1296,19 +1340,30 @@ async def related_terms(
         glossary term detail-page URL.
     :param db: An open local `Database`.
     :param session: An open live `Session`.
-    :param source: Which source(s) to read from. See the module docstring.
+    :param source: Which source(s) to read from.
     :param persist: If `True`, and a live fetch happens, cache the looked-up
         term's own result into `db`.
     :param language: Restrict the lookup to this glossary language
         edition. See `get_term`'s parameter of the same name.
+    :param auto_initialize: If a live fetch happens and `session` isn't
+        initialized yet, initialize it automatically (the default) or
+        raise. See `slb_glossary.live.ensure_initialized`.
     :return: A `LookupResult` wrapping the related terms found (empty if
         `term_or_url` wasn't found, or was found but links to nothing).
     :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
+    :raises SessionNotInitializedError: If a live fetch happens, `session`
+        isn't initialized, and `auto_initialize` is `False`.
     """
     lookup = await get_term(
-        term_or_url, db=db, session=session, source=source, persist=persist, language=language
+        term_or_url,
+        db=db,
+        session=session,
+        source=source,
+        persist=persist,
+        language=language,
+        auto_initialize=auto_initialize,
     )
     related = lookup.value.related if lookup.value is not None else None
     return LookupResult(value=related or (), source=lookup.source, persisted=lookup.persisted)
@@ -1333,7 +1388,7 @@ async def get_random_term(
 
     :param db: An open local `Database`.
     :param session: An open live `Session`.
-    :param source: Which source(s) to read from. See the module docstring.
+    :param source: Which source(s) to read from.
         `Source.AUTO` here means "pick locally if the local database
         has anything (matching `topic`, if given), otherwise pick form the live site,
         not "try local, then live" the way the streaming functions do,
@@ -1477,7 +1532,7 @@ async def compare(
         actually finish in.
     :param db: An open local `Database`.
     :param session: An open live `Session`.
-    :param source: Which source(s) to read from. See the module docstring.
+    :param source: Which source(s) to read from.
     :param persist: If `True`, cache any live fetches into `db`. Each term
         is looked up (and, on a live fetch, persisted) individually via
         `get_term`, so an error partway through this call still leaves
@@ -1485,7 +1540,7 @@ async def compare(
     :param language: Restrict every lookup to this glossary language
         edition. See `get_term`'s parameter of the same name.
     :param concurrency: Number of terms to look up in parallel. `None`
-        (the default) uses `slb_glossary.constants.constants.compare_concurrency`,
+        (the default) uses `constants.compare_concurrency`,
         resolved fresh on this call.
     :param with_similar: If `True`, each entry is a `LookupResult[SimilarResult]`
         instead of `LookupResult[SearchResult | None]`, the same as `get_term`'s.

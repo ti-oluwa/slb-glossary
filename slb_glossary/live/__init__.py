@@ -1,4 +1,11 @@
-from .api import get_results_from_url, get_results_from_urls, get_terms_on, get_terms_urls, search
+from .api import (
+    ensure_initialized,
+    get_results_from_url,
+    get_results_from_urls,
+    get_terms_on,
+    get_terms_urls,
+    search,
+)
 from .browser import (
     browser_session,
     close_session,
@@ -11,6 +18,7 @@ from .topics import refresh_topics
 from .types import BrowserType, PageHandle, Pages, ResourceType, Session
 
 __all__ = [
+    "ensure_initialized",
     "get_terms_on",
     "get_results_from_url",
     "get_results_from_urls",

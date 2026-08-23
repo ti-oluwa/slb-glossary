@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
+    "ensure_initialized",
     "get_terms_on",
     "get_results_from_url",
     "get_results_from_urls",
@@ -40,6 +41,41 @@ __all__ = [
 
 
 RELATED_KEYWORDS = ("related term", "see related", "synonyms", "alternate form")
+
+
+async def ensure_initialized(session: Session, auto_initialize: bool = True) -> None:
+    """
+    Initialize `session` if it isn't already, or raise if it can't be.
+
+    Every function here that actually touches the live site (as opposed
+    to just reading something already loaded, like `session.language`)
+    calls this first, so a session opened lazily via `open_session(..., initialize=False)`
+    only pays to load `topics`/`size` at the point something genuinely
+    needs them, not up front.
+
+    :param session: The session to ensure is initialized.
+    :param auto_initialize: If `True` (the default) and `session` isn't
+        initialized yet, initialize it now (`session.initialize()`)
+        before returning. If `False`, an uninitialized `session` raises
+        instead of being initialized automatically. Use this where
+        silently opening a page and fetching topics on the caller's
+        behalf would be surprising, and you'd rather the caller call
+        `session.initialize()` explicitly first.
+    :raises SessionNotInitializedError: If `session` isn't initialized
+        and `auto_initialize` is `False`.
+    :raises NetworkError: If `auto_initialize` is `True` and the glossary
+        site could not be reached while initializing.
+    """
+    if session.initialized:
+        return
+    if not auto_initialize:
+        raise SessionNotInitializedError(
+            "Session is not initialized and `auto_initialize=False`. Call "
+            "`session.initialize()` first, open it with "
+            "`open_session(..., initialize=True)`, or pass `auto_initialize=True` "
+            "to let this call initialize it lazily instead."
+        )
+    await session.initialize()
 
 
 async def goto(
@@ -152,6 +188,7 @@ async def get_terms_urls(
     start_letter: str | None = None,
     limit: int | None = None,
     exclude: Collection[str] | None = None,
+    auto_initialize: bool = True,
 ) -> typing.AsyncIterator[str]:
     """
     Yield term detail page URLs matching the given filters.
@@ -185,13 +222,13 @@ async def get_terms_urls(
         excludes nothing.
     :yield: Term detail page URLs, in the order the glossary site returns
         them, `exclude`d ones skipped.
+    :param auto_initialize: If `session` isn't initialized yet, initialize
+        it automatically (the default) or raise. See `ensure_initialized`.
     :raises ValueError: If `limit` is given and is less than 1.
+    :raises SessionNotInitializedError: If `session` isn't initialized and
+        `auto_initialize` is `False`.
     """
-    if not session.initialized:
-        raise SessionNotInitializedError(
-            "Session is not initialized; call `session.initialize()` first "
-            "or open it with `open_session(..., initialize=True)`."
-        )
+    await ensure_initialized(session, auto_initialize)
     if limit is not None and limit < 1:
         raise ValueError("`limit` must be greater than 0")
     if not topic and not (query or start_letter):
@@ -322,6 +359,7 @@ async def get_results_from_url(
     topic: str | None = None,
     page: Page | None = None,
     exclude: Collection[str] | None = None,
+    auto_initialize: bool = True,
 ) -> typing.AsyncIterator[SearchResult]:
     """
     Load a term detail page and lazily yield each definition found on it.
@@ -357,17 +395,17 @@ async def get_results_from_url(
         only when that particular section has no illustrative image, even
         if a sibling section does. `related` is empty when that section
         has no related-term links.
+    :param auto_initialize: If `session` isn't initialized yet, initialize
+        it automatically (the default) or raise. See `ensure_initialized`.
+    :raises SessionNotInitializedError: If `session` isn't initialized and
+        `auto_initialize` is `False`.
     """
     excluded_urls, excluded_names = split_exclude(exclude)
     if excluded_urls and url in excluded_urls:
         logger.debug("Skipping excluded url %r", url)
         return
 
-    if not session.initialized:
-        raise SessionNotInitializedError(
-            "Session is not initialized; call `session.initialize()` first "
-            "or open it with `open_session(..., initialize=True)`."
-        )
+    await ensure_initialized(session, auto_initialize)
     resolved_topic = get_topic_match(session.topics, topic) if topic else None
 
     started_at = time.monotonic()
@@ -452,6 +490,7 @@ async def get_results_from_urls(
     concurrency: int = 1,
     first_only: bool = False,
     exclude: Collection[str] | None = None,
+    auto_initialize: bool = True,
 ) -> typing.AsyncIterator[SearchResult]:
     """
     Fetch term detail pages for `urls` and yield their definitions.
@@ -487,13 +526,13 @@ async def get_results_from_urls(
         how an entry is told apart as a URL vs. a term name. `None` (the
         default) excludes nothing.
     :yield: `SearchResult`s as they're fetched, `exclude`d URLs/terms skipped.
+    :param auto_initialize: If `session` isn't initialized yet, initialize
+        it automatically (the default) or raise. See `ensure_initialized`.
     :raises ValueError: If `concurrency` is less than 1.
+    :raises SessionNotInitializedError: If `session` isn't initialized and
+        `auto_initialize` is `False`.
     """
-    if not session.initialized:
-        raise SessionNotInitializedError(
-            "Session is not initialized; call `session.initialize()` first "
-            "or open it with `open_session(..., initialize=True)`."
-        )
+    await ensure_initialized(session, auto_initialize)
     if concurrency < 1:
         raise ValueError("`concurrency` must be at least 1")
 
@@ -611,6 +650,7 @@ async def search(
     concurrency: int = 1,
     first_only: bool = False,
     exclude: Collection[str] | None = None,
+    auto_initialize: bool = True,
 ) -> typing.AsyncIterator[SearchResult]:
     """
     Search the glossary for `query` and yield matching definitions.
@@ -633,10 +673,15 @@ async def search(
     :param exclude: Term URLs and/or term names to skip over, e.g. ones
         already stored locally. See `get_terms_urls`/`get_results_from_urls`.
         `None` (the default) excludes nothing.
+    :param auto_initialize: If `session` isn't initialized yet, initialize
+        it automatically (the default) or raise. See `ensure_initialized`.
     :yield: `SearchResult`s for the matched terms. In sequential order
         (`concurrency=1`) these are most-relevant-first; with higher
         concurrency, results may arrive out of relevance order.
+    :raises SessionNotInitializedError: If `session` isn't initialized and
+        `auto_initialize` is `False`.
     """
+    await ensure_initialized(session, auto_initialize)
     logger.info("Searching glossary for %r (limit=%r, concurrency=%r)", query, limit, concurrency)
     started_at = time.monotonic()
     urls = get_terms_urls(
@@ -682,6 +727,7 @@ async def get_terms_on(
     concurrency: int = 1,
     first_only: bool = False,
     exclude: Collection[str] | None = None,
+    auto_initialize: bool = True,
 ) -> typing.AsyncIterator[SearchResult]:
     """
     Yield the definition of every term filed under `topic`.
@@ -699,8 +745,13 @@ async def get_terms_on(
     :param exclude: Term URLs and/or term names to skip over, e.g. ones
         already stored locally. See `get_terms_urls`/`get_results_from_urls`.
         `None` (the default) excludes nothing.
+    :param auto_initialize: If `session` isn't initialized yet, initialize
+        it automatically (the default) or raise. See `ensure_initialized`.
     :yield: One `SearchResult` per term filed under `topic`.
+    :raises SessionNotInitializedError: If `session` isn't initialized and
+        `auto_initialize` is `False`.
     """
+    await ensure_initialized(session, auto_initialize)
     logger.info(
         "Fetching terms under topic %r (start_letter=%r, limit=%r, concurrency=%r)",
         topic,

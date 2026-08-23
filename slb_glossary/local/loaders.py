@@ -249,7 +249,7 @@ async def load_file(
         more often at the cost of more (smaller) database writes; larger
         values write less often but risk losing more unwritten rows if
         something interrupts the import before the next flush. `None`
-        (the default) uses `slb_glossary.constants.constants.import_batch_size`,
+        (the default) uses `constants.import_batch_size`,
         resolved fresh on this call.
     :return: Number of rows imported.
     :raises DatabaseError: If `format` (or `path`'s extension) is
