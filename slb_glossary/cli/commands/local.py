@@ -1,6 +1,7 @@
 """`slb-glossary local` - inspect, search, and maintain the local search database directly."""
 
 import json
+import pathlib
 import typing
 
 import click
@@ -27,7 +28,9 @@ def local() -> None:
     regardless of any --local/--live/--auto flag elsewhere.
     `local sync`/`local update` are the exception (and the only ones here
     that go live): they're the same commands as top-level `sync`/`update`,
-    grouped here too for discoverability.
+    grouped here too for discoverability. `local import` is the other way
+    to fill the database: from your own CSV/JSON/XLSX file instead of the
+    live glossary.
     """
 
 
@@ -233,6 +236,186 @@ def local_get(term_or_url: str, **params: typing.Any) -> None:
     count = run_async(run())
     if not params["quiet"] and count == 0:
         click.echo(f"{term_or_url!r} was not found locally.", err=True)
+
+
+def _field_or_empty(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
+    """
+    Treat an explicitly empty `--*-field` value as "leave this field unset".
+
+    Every optional `load_file` field defaults to its usual column/key name
+    (e.g. `--definition-field` defaults to `"definition"`), so there needs
+    to be some way to say "skip this field entirely" instead - passing an
+    empty string (`--definition-field ""`) does that, converted to `None`
+    here for `load_file` itself.
+    """
+    return value or None
+
+
+@local.command("import")
+@click.argument(
+    "path", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path)
+)
+@click.option(
+    "--format",
+    "-f",
+    "import_format",
+    type=click.Choice(["csv", "json", "xlsx", "xlsm"], case_sensitive=False),
+    default=None,
+    help="File format to read PATH as. Inferred from its extension if not given.",
+)
+@click.option(
+    "--term-field",
+    default="term",
+    show_default=True,
+    help="Column/key holding each row's term name. A row missing this is skipped.",
+)
+@click.option(
+    "--definition-field",
+    default="definition",
+    show_default=True,
+    callback=_field_or_empty,
+    help="Column/key holding each row's definition. Pass '' to leave it unset on every imported row.",
+)
+@click.option(
+    "--topic-field",
+    default="topic",
+    show_default=True,
+    callback=_field_or_empty,
+    help="Column/key holding each row's topic. Pass '' to leave it unset on every imported row.",
+)
+@click.option(
+    "--url-field",
+    default="url",
+    show_default=True,
+    callback=_field_or_empty,
+    help=(
+        "Column/key holding each row's source URL. Pass '' to always "
+        "synthesize a 'local://imported/<slugified-term>' URL instead - "
+        "needed since url is the local database's primary key."
+    ),
+)
+@click.option(
+    "--grammatical-label-field",
+    default="grammatical_label",
+    show_default=True,
+    callback=_field_or_empty,
+    help="Column/key holding each row's grammatical label (e.g. 'Noun'). Pass '' to leave it unset.",
+)
+@click.option(
+    "--language-field",
+    default="language",
+    show_default=True,
+    callback=_field_or_empty,
+    help=(
+        "Column/key holding each row's language edition (e.g. 'en'/'es'). "
+        "Pass '' to always use --default-language instead, even for a row "
+        "that has this column."
+    ),
+)
+@click.option(
+    "--default-language",
+    default="en",
+    show_default=True,
+    help="Language stored for a row with no usable --language-field value.",
+)
+@click.option(
+    "--embedding-field",
+    default=None,
+    callback=_field_or_empty,
+    help=(
+        "Column/key holding a precomputed embedding vector for each row - "
+        "either a JSON array, or a comma/semicolon/whitespace-separated "
+        "string of numbers. If given, a vector is stored (see "
+        "`slb-glossary local` vector search) for every row that has one. "
+        "Omitted by default: no vectors are imported."
+    ),
+)
+@click.option(
+    "--embedding-model",
+    default="custom",
+    show_default=True,
+    help="Model label to store --embedding-field vectors under. Only meaningful with --embedding-field.",
+)
+@click.option(
+    "--source-tag",
+    "source_tag",
+    default="user",
+    show_default=True,
+    help=(
+        "Provenance tag stored on every imported row, so imported data can "
+        "later be told apart from rows fetched live from the glossary "
+        "('glossary' - see local stats/local get)."
+    ),
+)
+@click.option(
+    "--batch-size",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="N",
+    help=(
+        "Number of rows to buffer before writing an incremental batch to "
+        "the database, instead of reading the whole file into memory "
+        "first. Lower values save progress more often; higher values "
+        "write less often but risk losing more unwritten rows if the "
+        "import is interrupted before the next flush. Defaults to "
+        "slb_glossary.constants.constants.import_batch_size (500 unless "
+        "SLB_GLOSSARY_IMPORT_BATCH_SIZE overrides it)."
+    ),
+)
+@database_option
+@config_option
+@log_level_option
+@cli_command
+def import_(path: pathlib.Path, **params: typing.Any) -> None:
+    """
+    Import term data from a CSV, JSON, or XLSX file into the local database.
+
+    Each row/record needs at least --term-field (default 'term'); every
+    other field is optional - pass '' to any --*-field option to leave
+    that field unset on every imported row instead of looking it up.
+    Matching a row's own field names is case-insensitive.
+
+    A row's own url (or, missing that, a URL synthesized from its term -
+    see --url-field) is the local database's primary key, so importing the
+    same file twice updates existing rows rather than duplicating them.
+
+    Rows are read and upserted in batches (see --batch-size) rather than
+    all at once, so a large import stays memory-bounded, and an
+    interruption partway through still keeps whatever batches were
+    already written rather than losing the whole import.
+
+    \b
+    Examples:
+      slb-glossary local import terms.csv
+      slb-glossary local import terms.json --source-tag internal-wordlist
+      slb-glossary local import terms.xlsx --topic-field Category --url-field ""
+      slb-glossary local import terms.csv --embedding-field vector --embedding-model text-embedding-3-small
+      slb-glossary local import terms.csv --batch-size 200 --db-path ./my.db
+    """
+
+    async def run() -> int:
+        config = get_loaded_config(params)
+        db_path = resolve_db_path(config, params["db_path"])
+        async with local_pkg.database(db_path) as db:
+            return await local_pkg.load_file(
+                db,
+                path,
+                format=params["import_format"],
+                term_field=params["term_field"],
+                definition_field=params["definition_field"],
+                topic_field=params["topic_field"],
+                url_field=params["url_field"],
+                grammatical_label_field=params["grammatical_label_field"],
+                language_field=params["language_field"],
+                default_language=params["default_language"],
+                embedding_field=params["embedding_field"],
+                embedding_model=params["embedding_model"],
+                source=params["source_tag"],
+                batch_size=params["batch_size"],
+            )
+
+    written = run_async(run())
+    click.echo(f"Imported {written} row(s) from {path} into the local database.")
 
 
 @local.command("flush")
