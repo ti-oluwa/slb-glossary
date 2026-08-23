@@ -30,7 +30,8 @@ import typing
 from fastmcp.server.context import Context
 from fastmcp.server.server import FastMCP
 
-from slb_glossary.logging import DEFAULT_LOG_FORMAT, configure_logging
+from slb_glossary.constants import constants
+from slb_glossary.logging import configure_logging
 from slb_glossary.mcp.config import MCPConfig
 from slb_glossary.mcp.middleware import MCPMiddleware
 from slb_glossary.mcp.ratelimit import SlidingWindowRateLimiter
@@ -165,7 +166,7 @@ class MCPApp(NamedComponent):
             sinks=logging_config.sinks,
             level=logging_config.level,
             logger_name=logging_config.logger_name,
-            fmt=logging_config.fmt or DEFAULT_LOG_FORMAT,
+            fmt=logging_config.fmt or constants.log_format,
             propagate=logging_config.propagate,
         )
 

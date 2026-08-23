@@ -93,6 +93,7 @@ class PageHandle:
         if not self.page.is_closed():
             with contextlib.suppress(Exception):
                 await self.page.close()
+                logger.debug(f"Closed page via {type(self).__name__} context manager")
 
 
 @dataclasses.dataclass(slots=True, kw_only=True)
@@ -122,6 +123,7 @@ class Pages:
         if self.max_size < 1:
             raise ValueError("`max_size` must be at least 1")
         self._semaphore = asyncio.Semaphore(self.max_size)
+        logger.debug("Opened page pool (max_size=%d)", self.max_size)
 
     @property
     def size(self) -> int:
@@ -138,8 +140,17 @@ class Pages:
         :raises BrowserError: If this pool has already been closed.
         """
         if self._closed:
-            raise BrowserError("Cannot open a new page: this `Pages` pool is closed")
+            raise BrowserError(
+                f"Cannot open a new page: this `{type(self).__name__}` pool is closed"
+            )
 
+        started_at = time.monotonic()
+        if self._semaphore.locked():
+            logger.debug(
+                "Page pool is at capacity (%d/%d); waiting for a slot to free up",
+                self.size,
+                self.max_size,
+            )
         await self._semaphore.acquire()
         try:
             page = await self.context.new_page()
@@ -156,9 +167,16 @@ class Pages:
             released = True
             self._pages.discard(page)
             self._semaphore.release()
+            logger.debug("Closed pool page (pool size now %d/%d)", self.size, self.max_size)
 
         page.on("close", _on_close)
         self._pages.add(page)
+        logger.debug(
+            "Opened pool page (pool size now %d/%d) in %.3fs",
+            self.size,
+            self.max_size,
+            time.monotonic() - started_at,
+        )
         return PageHandle(page=page)
 
     async def close(self) -> None:
@@ -171,10 +189,17 @@ class Pages:
         if self._closed:
             return
         self._closed = True
+        started_at = time.monotonic()
+        count = self.size
         for page in list(self._pages):
             if not page.is_closed():
                 with contextlib.suppress(Exception):
                     await page.close()
+        logger.debug(
+            "Closed page pool (%d page(s) still open) in %.3fs",
+            count,
+            time.monotonic() - started_at,
+        )
 
 
 @dataclasses.dataclass(slots=True, kw_only=True)
@@ -323,8 +348,16 @@ class Session:
         :raises NetworkError: If the glossary site could not be reached.
         """
         if self.initialized:
+            logger.debug("Session for %s is already initialized; no-op", self.base_url)
             return
 
+        logger.info(
+            "Initializing session for %s (language=%s, browser_type=%s)",
+            self.base_url,
+            self.language.value,
+            self.browser_type,
+        )
+        started_at = time.monotonic()
         page = await self.new_page()
         if hold_page:
             # Hold the base page for use later on. call `Session.base_page.close()`
@@ -332,7 +365,6 @@ class Session:
             # if you have no reason to close it.
             self.base_page = page
 
-        started_at = time.monotonic()
         try:
             from slb_glossary.live.topics import fetch_topics
 
@@ -351,8 +383,12 @@ class Session:
             if not hold_page:
                 await page.close()
 
-        logger.debug(
-            "Loaded topics and size for %s in %.3fs", self.base_url, time.monotonic() - started_at
+        logger.info(
+            "Initialized session for %s: %d topic(s), %d term(s) total, in %.3fs",
+            self.base_url,
+            len(self.topics),
+            self.size,
+            time.monotonic() - started_at,
         )
 
     async def new_page(self) -> Page:
@@ -380,7 +416,9 @@ class Session:
         the `session`/`session_from_config` context managers) for full
         teardown of a session opened with `open_session`.
         """
+        started_at = time.monotonic()
         with contextlib.suppress(Exception):
             await self.pages.close()
         with contextlib.suppress(Exception):
             await self.context.close()
+        logger.info("Closed session for %s in %.3fs", self.base_url, time.monotonic() - started_at)
