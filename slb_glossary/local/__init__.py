@@ -48,7 +48,7 @@ from slb_glossary.local.api import (
     upsert_results,
 )
 from slb_glossary.local.connection import close_db, database, open_db
-from slb_glossary.local.loaders import load_file
+from slb_glossary.local.load import load_file
 from slb_glossary.local.maintenance import flush, reset
 from slb_glossary.local.sync import (
     SyncSummary,
