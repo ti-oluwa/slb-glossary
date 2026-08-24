@@ -1,10 +1,18 @@
 """Core data types and structures."""
 
+import dataclasses
 import enum
 import typing
 from collections.abc import AsyncIterable, Iterable, Sequence
 
-__all__ = ["RecordLike", "materialize_records", "Language", "RelatedTerm", "SearchResult"]
+__all__ = [
+    "RecordLike",
+    "materialize_records",
+    "Language",
+    "RelatedTerm",
+    "SearchResult",
+    "Updatable",
+]
 
 
 @typing.runtime_checkable
@@ -95,3 +103,76 @@ class SearchResult(typing.NamedTuple):
     def asdict(self) -> dict[str, typing.Any]:
         """Return a dictionary representation of this result."""
         return self._asdict()
+
+
+class Updatable:
+    """
+    Mixin adding `.update(**changes)` to a `@dataclasses.dataclass`, as a
+    shorter, more efficient alternative to `dataclasses.replace` for the
+    common case of changing a few top-level fields.
+
+    ```python
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class Options(Updatable):
+        timeout: float = 30.0
+        retries: int = 3
+
+
+    opts = Options()
+    opts2 = opts.update(timeout=60.0)  # instead of dataclasses.replace(opts, timeout=60.0)
+    ```
+
+    For a **frozen** dataclass, `update` returns a new instance with
+    `changes` applied so `self` is untouched, exactly like
+    `dataclasses.replace`, just shorter to write and to chain
+    (`config.update(a=1).update(b=2)`).
+
+    For a **non-frozen** one, `update` mutates `self` in place, field by field,
+    and returns `self` so a caller that doesn't know (or care) whether a particular config is
+    frozen can still call `.update(...)` and either use the return value or not, uniformly.
+
+    `changes` are applied via `dataclasses.replace`/`setattr`.
+
+    Declare this *before* other bases so it doesn't shadow a dataclass
+    field actually named `update`, e.g. `class Foo(Updatable): ...` not
+    `class Foo(SomethingElse, Updatable): ...` if `SomethingElse` has an
+    `update` field/method of its own.
+    """
+
+    __slots__ = ()
+
+    def update(self: "UpdatableT", **changes: typing.Any) -> "UpdatableT":
+        """
+        Apply `changes` to this dataclass instance.
+
+        :param changes: Field name to new value. Every name must be an
+            actual field of this dataclass.
+        :return: A new instance with `changes` applied, if this dataclass
+            is frozen; `self`, mutated in place, otherwise.
+        :raises TypeError: If this class isn't a `dataclasses.dataclass`,
+            or `changes` includes a name that isn't one of its fields.
+        """
+        if not dataclasses.is_dataclass(self):
+            raise TypeError(
+                f"`{type(self).__name__}.update()` requires a `dataclasses.dataclass`."
+            )
+        if not changes:
+            return self
+
+        valid = {f.name for f in dataclasses.fields(self)}
+        unknown = changes.keys() - valid
+        if unknown:
+            raise TypeError(
+                f"`{type(self).__name__}.update()` got unexpected field(s): "
+                f"{', '.join(sorted(unknown))}. Expected one of: {', '.join(sorted(valid))}."
+            )
+
+        if dataclasses.is_dataclass(self) and type(self).__dataclass_params__.frozen:  # type: ignore[attr-defined]
+            return dataclasses.replace(self, **changes)
+
+        for name, value in changes.items():
+            setattr(self, name, value)
+        return self
+
+
+UpdatableT = typing.TypeVar("UpdatableT", bound=Updatable)

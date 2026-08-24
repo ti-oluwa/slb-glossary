@@ -18,8 +18,7 @@ from slb_glossary.errors import ConfigError
 from slb_glossary.logging import LogSink
 from slb_glossary.paths import default_config_path
 from slb_glossary.retries import BackoffType, RetryPolicy
-from slb_glossary.types import Language
-from slb_glossary.utils import Updatable
+from slb_glossary.types import Language, Updatable
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -152,8 +151,15 @@ class BrowserSessionOptions(Updatable):
     viewport: dict[str, int] | None = None
     """Browser viewport size, e.g. `{"width": 1920, "height": 1080}`."""
 
-    use_stealth: bool = True
-    """Whether to apply Playwright stealth patches to the browser context."""
+    use_stealth: bool | None = None
+    """
+    Whether to apply Playwright stealth patches to the browser context.
+    `None` (the default) resolves this automatically instead, based on
+    `session.headless`: applied when headless, skipped when headed.
+    Stealth patches have been observed to be counterproductive in headed
+    mode, making the glossary consistently harder to scrape reliably,
+    not easier. See `slb_glossary.browser.open_session`.
+    """
 
     log_sink: LogSink | type[LogSink] | str | pathlib.Path | None = None
     """
@@ -546,7 +552,12 @@ class Config(Updatable):
             raise ConfigError(f"Unknown config key {key!r} (failed at {leaf!r}).")
 
         current = getattr(target, leaf)
-        setattr(target, leaf, _cast(value, like=current))
+        field = next((f for f in dataclasses.fields(target) if f.name == leaf), None)
+        setattr(
+            target,
+            leaf,
+            _cast(value, like=current, field_type=field.type if field is not None else None),
+        )
         logger.debug("Set config key %s = %r", key, getattr(target, leaf))
 
     @classmethod
@@ -555,26 +566,64 @@ class Config(Updatable):
         return default_config_path()
 
 
-def _cast(value: typing.Any, *, like: typing.Any) -> typing.Any:
+def _parse_bool(value: str) -> bool:
+    """
+    Parse a CLI-style boolean string.
+
+    :param value: `"true"`/`"1"`/`"yes"`/`"on"` for `True`,
+        `"false"`/`"0"`/`"no"`/`"off"` for `False` (case-insensitive,
+        surrounding whitespace ignored).
+    :raises ValueError: If `value` doesn't match either set.
+    """
+    lowered = value.strip().lower()
+    if lowered in ("true", "1", "yes", "on"):
+        return True
+    if lowered in ("false", "0", "no", "off"):
+        return False
+    raise ValueError(f"{value!r} is not a boolean")
+
+
+def _cast(value: typing.Any, *, like: typing.Any, field_type: typing.Any = None) -> typing.Any:
     """
     Coerce a string `value` to the type of `like`, for CLI-style key=value input.
 
     :param value: The raw value, typically a `str` from a CLI argument.
-    :param like: The field's current value, whose type `value` is coerced to.
-    :return: `value` unchanged if it isn't a `str`, or `like` is a `str` or
-        `None`; otherwise `value` parsed as `like`'s type.
-    :raises ConfigError: If `value` cannot be parsed as `like`'s type.
+    :param like: The field's current value, whose type `value` is coerced
+        to. When `like` is `None`, there's no runtime value to infer a
+        type from - `field_type` is consulted instead (see below) rather
+        than giving up and returning the raw string.
+    :param field_type: The field's own declared type annotation (e.g.
+        `dataclasses.Field.type`), used only as a fallback when `like` is
+        `None`. This matters for a field that legitimately defaults to
+        `None` while still being fundamentally `bool`-shaped, e.g.
+        `BrowserSessionOptions.use_stealth: bool | None = None`, whose
+        `None` means "resolve automatically" rather than "no type at
+        all" - without this, `--set session.use_stealth false` would
+        silently store the literal (truthy!) string `"false"` instead of
+        `False`. Ignored when `like` isn't `None`.
+    :return: `value` unchanged if it isn't a `str`, or `like` is a `str`;
+        `value` parsed as `like`'s type if `like` isn't `None`; if `like`
+        *is* `None`, `value` parsed as `bool` when `field_type` looks
+        bool-shaped, else `value` unchanged.
+    :raises ConfigError: If `value` cannot be parsed as the target type.
     """
-    if not isinstance(value, str) or like is None or isinstance(like, str):
+    if not isinstance(value, str):
         return value
+
+    if like is None:
+        if field_type is not None and "bool" in str(field_type):
+            try:
+                return _parse_bool(value)
+            except ValueError as exc:
+                raise ConfigError(f"Could not parse {value!r} as bool: {exc}") from exc
+        return value
+
+    if isinstance(like, str):
+        return value
+
     try:
         if isinstance(like, bool):
-            lowered = value.strip().lower()
-            if lowered in ("true", "1", "yes", "on"):
-                return True
-            if lowered in ("false", "0", "no", "off"):
-                return False
-            raise ValueError(f"{value!r} is not a boolean")
+            return _parse_bool(value)
         if isinstance(like, int):
             return int(value)
         if isinstance(like, float):

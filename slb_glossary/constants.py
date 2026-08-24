@@ -83,8 +83,8 @@ class Constant(typing.Generic[T]):
         default: T,
         *,
         env_var: str | None = None,
-        type: type[T] | None = None,
-        validate: typing.Callable[[T], bool] | None = None,
+        type: type[T] | typing.Callable[[str], T] | None = None,
+        validator: typing.Callable[[T], bool] | None = None,
         cache: bool = False,
     ) -> None:
         """
@@ -98,10 +98,11 @@ class Constant(typing.Generic[T]):
             `default`. `None` (the default) means this constant is never
             read from the environment.
         :param type: Expected type to cast a raw environment string to.
+            or a callable to cast the string to the correct type.
             Defaults to `type(default)`. See `slb_glossary.utils.env` for
             exactly what's supported (`bool`/`int`/`float`/`str`, and `Enum`
             subclasses matched by value).
-        :param validate: Optional extra check run on every environment-sourced
+        :param validator: Optional extra check run on every environment-sourced
             value (not on `default` itself, which is trusted as correct by
             construction). A `False` return raises `slb_glossary.utils.EnvVarError`.
         :param cache: If `True`, resolve this constant once, on first access,
@@ -112,7 +113,7 @@ class Constant(typing.Generic[T]):
         self.default = default
         self.env_var = env_var
         self.type = type if type is not None else builtins.type(default)
-        self.validate = validate
+        self.validator = validator
         self.cache = cache
         self._name = ""
         self._cached: typing.Any = _UNSET
@@ -125,7 +126,7 @@ class Constant(typing.Generic[T]):
         """Compute this constant's current value, ignoring any cache."""
         if self.env_var is None:
             return self.default
-        return env(self.env_var, self.default, type=self.type, validate=self.validate)
+        return env(self.env_var, self.default, type=self.type, validator=self.validator)
 
     def __get__(self, instance: typing.Any, owner: type | None = None) -> T:
         if instance is None:
@@ -144,7 +145,7 @@ class Constant(typing.Generic[T]):
 
     def __set__(self, instance: typing.Any, value: T) -> None:
         """Override this constant's value directly (e.g. from a test), bypassing the environment."""
-        if self.validate is not None and not self.validate(value):
+        if self.validator is not None and not self.validator(value):
             raise ValueError(f"{self._name!r}: {value!r} is not a valid value for this constant.")
         with self._lock:
             self._cached = value
@@ -181,7 +182,7 @@ class Constants:
     persist_batch_size = Constant(
         20,
         env_var="SLB_GLOSSARY_PERSIST_BATCH_SIZE",
-        validate=lambda v: v >= 1,
+        validator=lambda v: v >= 1,
     )
     """
     Default number of live results to buffer before writing an incremental
@@ -191,7 +192,7 @@ class Constants:
     relevance_threshold = Constant(
         0.45,
         env_var="SLB_GLOSSARY_RELEVANCE_THRESHOLD",
-        validate=lambda v: 0.0 <= v <= 1.0,
+        validator=lambda v: 0.0 <= v <= 1.0,
     )
     """
     Default `relevance_threshold` for `slb_glossary.query.search`'s
@@ -202,7 +203,7 @@ class Constants:
     similar_terms_pool_size = Constant(
         5,
         env_var="SLB_GLOSSARY_SIMILAR_POOL_SIZE",
-        validate=lambda v: v >= 1,
+        validator=lambda v: v >= 1,
     )
     """
     Default number of live results pulled while looking for an exact term
@@ -212,7 +213,7 @@ class Constants:
     max_similar_terms = Constant(
         3,
         env_var="SLB_GLOSSARY_MAX_SIMILAR_TERMS",
-        validate=lambda v: v >= 0,
+        validator=lambda v: v >= 0,
     )
     """Default max number of alternatives returned in `SimilarResult.similar`."""
 
@@ -225,14 +226,14 @@ class Constants:
     compare_concurrency = Constant(
         1,
         env_var="SLB_GLOSSARY_COMPARE_CONCURRENCY",
-        validate=lambda v: v >= 1,
+        validator=lambda v: v >= 1,
     )
     """Default `concurrency` for `slb_glossary.query.compare`: term lookups happen sequentially unless raised."""
 
     import_batch_size = Constant(
         500,
         env_var="SLB_GLOSSARY_IMPORT_BATCH_SIZE",
-        validate=lambda v: v >= 1,
+        validator=lambda v: v >= 1,
     )
     """
     Default number of rows `slb_glossary.local.loaders.load_file` buffers
@@ -242,7 +243,7 @@ class Constants:
     exact_match_score = Constant(
         1.0,
         env_var="SLB_GLOSSARY_EXACT_MATCH_SCORE",
-        validate=lambda v: 0.0 <= v <= 1.0,
+        validator=lambda v: 0.0 <= v <= 1.0,
     )
     """
     Score for a query that exactly matches a result's term name (case/
@@ -252,32 +253,33 @@ class Constants:
     prefix_match_score = Constant(
         0.9,
         env_var="SLB_GLOSSARY_PREFIX_MATCH_SCORE",
-        validate=lambda v: 0.0 <= v <= 1.0,
+        validator=lambda v: 0.0 <= v <= 1.0,
     )
     """Score for a result's term name starting with the query. See `slb_glossary.relevance`."""
 
     content_match_score_cap = Constant(
         0.40,
         env_var="SLB_GLOSSARY_CONTENT_MATCH_SCORE_CAP",
-        validate=lambda v: 0.0 <= v <= 1.0,
+        validator=lambda v: 0.0 <= v <= 1.0,
     )
     """
     Upper bound on a result's score when it only matched by content
-    (definition/topic text), never the term name. Kept below
-    `relevance_threshold` (0.45 by default), so a content-only match is
-    never, by default, mistaken for a confident name match. Without this
-    cap, a query that happens to line up well with one term's definition
-    (but isn't actually about that term) could otherwise look confident
-    enough to end a search right there, on the strength of word overlap
-    alone. See `slb_glossary.relevance`.
+    (definition/topic text), never the term name. 
+    
+    Kept below `relevance_threshold` (0.45 by default), so a content-only 
+    match is never, by default, mistaken for a confident name match. 
+    Without this cap, a query that happens to line up well with one term's 
+    definition (but isn't actually about that term) could otherwise look confident
+    enough to end a search right there, on the strength of word overlap alone. 
+    See `slb_glossary.relevance`.
     """
 
 
 constants = Constants()
 """
-Shared, package-wide `Constants` instance. Import this, not `Constants`
-itself.
+Shared, package-wide `Constants` instance. 
 
-`Constants()` always returns this same instance anyway, but importing
-the instance directly makes that explicit and saves a call at every use site.
+Use this, not `Constants` itself. `Constants()` always returns this same 
+instance anyway, but importing the instance directly makes that explicit 
+and saves a call at every use site.
 """

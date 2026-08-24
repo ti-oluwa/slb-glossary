@@ -173,7 +173,7 @@ async def output_results(
     :raises slb_glossary.WriterError: If writing to a save path fails.
     """
     started_at = time.monotonic()
-    async with contextlib.aclosing(results) as results:  # type: ignore[arg-type]
+    async with contextlib.aclosing(results) as results:  # type: ignore[type-var]
         count = await _collect_and_output(
             results,  # type: ignore[arg-type]
             title=title,

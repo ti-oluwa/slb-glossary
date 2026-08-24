@@ -126,7 +126,7 @@ def records_to_dicts(
     `write_json`, which additionally re-keys the list by each record's
     first field for on-disk storage, this stays a flat list, which is
     usually what you want for `json.dumps`, piping to `jq`, or embedding
-    in a larger JSON payload. It's what powers the CLI's `--json` output.
+    in a larger JSON payload.
 
     :param records: The records to convert.
     :param exclude: Field names to omit from each record's dict.
@@ -239,7 +239,7 @@ async def write_xlsx(records: Sequence[RecordLike], destination: pathlib.Path) -
         workbook = openpyxl.Workbook()
         sheet = workbook.active
         if sheet is None:
-            raise RuntimeError("openpyxl failed to create a workbook sheet")
+            raise RuntimeError("`openpyxl` failed to create a workbook sheet")
 
         sheet.append([humanize_field(field) for field in fields])
         for record in records:

@@ -1,6 +1,5 @@
 """Import user-provided CSV/JSON/XLSX data into the local database (and, optionally, its vector store)."""
 
-import csv
 import json
 import logging
 import pathlib
@@ -11,100 +10,12 @@ from slb_glossary.errors import DatabaseError
 from slb_glossary.local.api import upsert_results
 from slb_glossary.local.types import Database
 from slb_glossary.local.vectors import upsert_vector
+from slb_glossary.readers import READERS, read_rows
 from slb_glossary.types import SearchResult
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["load_file"]
-
-
-def read_csv_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
-    """
-    Lazily read `path` as CSV, yielding one `{column: value}` row at a time.
-
-    The file is opened lazily, on the generator's first row rather
-    than at call time, and stays open only for as long as it's actually
-    being iterated, so `load_file` can consume (and upsert) rows in
-    batches as they're read, instead of holding the whole file's rows in
-    memory at once.
-
-    :param path: CSV file to read.
-    :yield: One `{column: value}` dict per row.
-    """
-    with path.open("r", encoding="utf-8-sig", newline="") as fh:
-        yield from csv.DictReader(fh)
-
-
-def read_json_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
-    """
-    Lazily yield each record from `path`'s JSON array (or an object containing one).
-
-    JSON has no line-oriented record boundary the way CSV/XLSX do, so this
-    still has to parse the whole file into memory to find the record array.
-
-    :param path: JSON file to read.
-    :yield: One record dict at a time, from the array found.
-    :raises DatabaseError: If `path` doesn't contain a JSON array of
-        records (or an object with one as one of its values).
-    """
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(data, dict):
-        for value in data.values():
-            if isinstance(value, list):
-                data = value
-                break
-
-    if not isinstance(data, list):
-        raise DatabaseError(
-            f"{path}: expected a JSON array of records (or an object containing one)."
-        )
-    yield from data
-
-
-def read_xlsx_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
-    """
-    Lazily read `path`'s first worksheet, yielding one `{header: value}` row at a time.
-
-    Opens the workbook in `openpyxl`'s `read_only` mode, which itself
-    streams rows from the underlying XML rather than loading the whole
-    sheet into memory, and this generator passes that streaming straight
-    through rather than collecting it into a list first. The workbook is
-    closed once this generator is exhausted (or closed/garbage-collected
-    early, e.g. if a caller stops consuming partway through).
-
-    :param path: XLSX/XLSM file to read.
-    :yield: One `{header: value}` dict per data row (the first row is
-        treated as the header and isn't yielded itself).
-    :raises DatabaseError: If the optional `openpyxl` dependency isn't installed.
-    """
-    try:
-        import openpyxl  # noqa: F401
-    except ImportError as exc:
-        raise DatabaseError(
-            "Reading a .xlsx file requires the 'openpyxl' package. "
-            "Install it with `pip install slb-glossary[xlsx]`."
-        ) from exc
-
-    workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    try:
-        sheet = workbook.active
-        rows_iter = sheet.iter_rows(values_only=True)  # type: ignore[union-attr]
-        try:
-            header = [str(cell) if cell is not None else "" for cell in next(rows_iter)]
-        except StopIteration:
-            return
-        for row in rows_iter:
-            yield {header[i]: value for i, value in enumerate(row) if i < len(header)}
-    finally:
-        workbook.close()
-
-
-READERS: dict[str, typing.Callable[[pathlib.Path], typing.Iterator[dict[str, typing.Any]]]] = {
-    "csv": read_csv_rows,
-    "json": read_json_rows,
-    "xlsx": read_xlsx_rows,
-    "xlsm": read_xlsx_rows,
-}
 
 
 def _get_field(row: typing.Mapping[str, typing.Any], name: str | None) -> typing.Any:
@@ -216,8 +127,9 @@ async def load_file(
 
     :param db: The local database to write to.
     :param path: Path to the source file.
-    :param format: One of `"csv"`, `"json"`, `"xlsx"`. Inferred from
-        `path`'s extension if not given.
+    :param format: One of `"csv"`, `"json"`, `"xlsx"`, or any other format
+        registered with `slb_glossary.readers`'s `@reader` decorator.
+        Inferred from `path`'s extension if not given.
     :param term_field: Column/key holding each row's term name.
     :param definition_field: Column/key holding each row's definition
         text, or `None` to leave every imported row's definition unset.
@@ -235,7 +147,7 @@ async def load_file(
     :param default_language: Language stored for a row with no usable
         `language_field` value.
     :param embedding_field: Column/key holding a precomputed embedding
-        vector for each row - either a JSON array, or a delimiter-separated
+        vector for each row, either a JSON array, or a delimiter-separated
         (comma, semicolon, or whitespace) string of numbers. If given, a
         vector is stored for every row that has one (see
         `slb_glossary.local.vectors.upsert_vector`).
@@ -249,8 +161,8 @@ async def load_file(
         more often at the cost of more (smaller) database writes; larger
         values write less often but risk losing more unwritten rows if
         something interrupts the import before the next flush. `None`
-        (the default) uses `constants.import_batch_size`,
-        resolved fresh on this call.
+        (the default) uses `constants.import_batch_size`, resolved fresh
+        on this call.
     :return: Number of rows imported.
     :raises DatabaseError: If `format` (or `path`'s extension) is
         unsupported, `path` isn't a well-formed file of that format, or
@@ -263,11 +175,10 @@ async def load_file(
 
     resolved_path = pathlib.Path(path)
     resolved_format = (format or resolved_path.suffix.lstrip(".")).lower()
-    reader = READERS.get(resolved_format)
-    if reader is None:
+    if resolved_format not in READERS:
         raise DatabaseError(
             f"Unsupported import format {resolved_format!r} for {resolved_path!s}. "
-            f"Supported formats: {', '.join(sorted(set(READERS)))}."
+            f"Supported formats: {', '.join(READERS)}."
         )
 
     total_written = 0
@@ -279,9 +190,6 @@ async def load_file(
         if not buffer:
             return
         pending, buffer = buffer, []
-        # `language=None`: store each result's own `.language` field (set
-        # per row in `_record_to_result`) rather than forcing one
-        # language on the whole batch.
         written = await upsert_results(db, pending, language=None, source=source)
         total_written += written
         batches_written += 1
@@ -293,7 +201,7 @@ async def load_file(
             resolved_path,
         )
 
-    row_iter = reader(resolved_path)
+    row_iter = read_rows(resolved_path, format=resolved_format)
     try:
         while True:
             # Isolate errors actually raised while *reading* the next row

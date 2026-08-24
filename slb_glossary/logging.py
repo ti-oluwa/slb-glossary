@@ -339,7 +339,7 @@ def resolve_sink(
 
     if _looks_like_import_path(text):
         target = import_sink(text)
-        return target() if isinstance(target, type) else target
+        return typing.cast(LogSink, target() if isinstance(target, type) else target)
     return FileSink(text)
 
 

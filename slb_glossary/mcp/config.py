@@ -11,11 +11,7 @@ config = MCPConfig.default().update(
 
 Every nested config is a frozen, `slots=True`, keyword-only dataclass, so
 instances are hashable-by-value-where-possible, cannot be mutated out
-from under a running server, and are cheap to copy with `.update(...)`
-(`slb_glossary.utils.Updatable`, a thin wrapper over
-`dataclasses.replace` - reach for `dataclasses.replace` directly instead
-if you need its `changes` to come from an unpacked mapping rather than
-keyword arguments).
+from under a running server, and are cheap to copy with `.update(...)`.
 """
 
 import dataclasses
@@ -32,8 +28,7 @@ from slb_glossary.mcp.errors import MCPConfigError
 from slb_glossary.mcp.ratelimit import RateLimiter
 from slb_glossary.mcp.types import AfterToolHook, BeforeToolHook, LifecycleHook, ToolErrorHook
 from slb_glossary.query import Source
-from slb_glossary.types import Language
-from slb_glossary.utils import Updatable
+from slb_glossary.types import Language, Updatable
 
 if sys.version_info >= (3, 11):
     from typing import Self

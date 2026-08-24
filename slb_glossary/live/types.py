@@ -24,7 +24,7 @@ __all__ = [
 ]
 
 
-class BrowserType(enum.StrEnum):
+class BrowserType(enum.StrEnum):  # type: ignore[name-defined]
     """Playwright browser families `open_session` can launch."""
 
     CHROMIUM = "chromium"
@@ -240,7 +240,7 @@ class Session:
     size: int
     """Total number of terms in the glossary, as reported by the site."""
 
-    browser_type: BrowserType = BrowserType.CHROMIUM
+    browser_type: BrowserType = BrowserType.CHROMIUM  # type: ignore[assignment]
     """Playwright browser family this session launched."""
 
     terms_per_tab: int = 12

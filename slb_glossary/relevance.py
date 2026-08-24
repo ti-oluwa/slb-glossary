@@ -6,21 +6,12 @@ an exact/prefix name-match tier). A live search has no database to run
 that kind of query against, so `slb_glossary.query` scores live results
 here instead, using the same tiers and the same `constants.content_match_score_cap`
 so a local score and a live score mean roughly the same thing to a caller comparing the two.
-
-The actual score values (`constants.exact_match_score`,
-`constants.prefix_match_score`, `constants.content_match_score_cap`) live
-on `slb_glossary.constants.constants`, alongside every other tunable
-constant in the package, rather than as bare module-level values here.
 """
 
 from slb_glossary.constants import constants
 from slb_glossary.types import SearchResult
 
-__all__ = [
-    "score_name_match",
-    "score_content_overlap",
-    "score_result",
-]
+__all__ = ["score_name_match", "score_content_overlap", "score_result"]
 
 
 def _normalize(text: str) -> str:

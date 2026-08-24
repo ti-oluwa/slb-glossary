@@ -237,7 +237,7 @@ async def _launch_browser(
     launch_started_at = time.monotonic()
     launched = await launcher.launch(**launch_kwargs)
     logger.debug("Launched %s in %.3fs", browser_type, time.monotonic() - launch_started_at)
-    return launched
+    return typing.cast(Browser, launched)
 
 
 async def open_session(
@@ -258,7 +258,7 @@ async def open_session(
     viewport: dict[str, int] | None = None,
     launch_kwargs: dict[str, typing.Any] | None = None,
     context_kwargs: dict[str, typing.Any] | None = None,
-    use_stealth: bool = True,
+    use_stealth: bool | None = None,
     initialize: bool = True,
     log_sink: LogSink | type[LogSink] | str | pathlib.Path | None = None,
 ) -> SessionT:
@@ -306,8 +306,12 @@ async def open_session(
         none is provided.
     :param context_kwargs: Additional keyword arguments to pass to `browser.new_context()`.
         Values passed here are merged with the library defaults.
-    :param use_stealth: Whether to apply Playwright stealth patches to the
-        browser context. Defaults to `True`.
+    :param use_stealth: Whether to apply Playwright stealth patches to the browser context.
+        `None` (the default) resolves this automatically instead, based on
+        `headless`: applied when headless, skipped when headed.
+        Stealth patches have been observed to be counterproductive in headed
+        mode, making the glossary consistently harder to scrape reliably,
+        not easier.
     :param initialize: Whether to load the glossary's topics/size before
         returning the session, so it's immediately ready to pass to search
         functions. Defaults to `True`. Pass `False` to get the session back
@@ -362,12 +366,13 @@ async def open_session(
         context_kwargs = dict(context_kwargs or {})
         if viewport is not None:
             context_kwargs["viewport"] = viewport
+
         context = await browser.new_context(**context_kwargs)
         # Set timeout once here so all pages created inherit same, except overriden
         context.set_default_timeout(timeout)
         context.set_default_navigation_timeout(timeout)
 
-        if use_stealth:
+        if use_stealth or (use_stealth is None and headless):
             stealth_started_at = time.monotonic()
             await Stealth().apply_stealth_async(context)  # type: ignore[arg-type]
             logger.debug("Applied stealth patches in %.3fs", time.monotonic() - stealth_started_at)
@@ -468,10 +473,10 @@ async def session(
     viewport: dict[str, int] | None = None,
     launch_kwargs: dict[str, typing.Any] | None = None,
     context_kwargs: dict[str, typing.Any] | None = None,
-    use_stealth: bool = True,
+    use_stealth: bool | None = None,
     initialize: bool = True,
     log_sink: LogSink | type[LogSink] | str | pathlib.Path | None = None,
-) -> typing.AsyncIterator[Session]:
+) -> typing.AsyncIterator[SessionT]:
     """
     Open a `Session` for the duration of an `async with` block.
 
@@ -508,8 +513,12 @@ async def session(
         none is provided.
     :param context_kwargs: Additional keyword arguments to pass to `browser.new_context()`.
         Values passed here are merged with the library defaults.
-    :param use_stealth: Whether to apply Playwright stealth patches to the
-        browser context. Defaults to `True`.
+    :param use_stealth: Whether to apply Playwright stealth patches to the browser context.
+        `None` (the default) resolves this automatically instead, based on
+        `headless`: applied when headless, skipped when headed.
+        Stealth patches have been observed to be counterproductive in headed
+        mode, making the glossary consistently harder to scrape reliably,
+        not easier.
     :param initialize: Whether to load the glossary's topics/size before
         yielding the session. See `open_session`.
     :param log_sink: Where to route `slb_glossary`'s logging for this

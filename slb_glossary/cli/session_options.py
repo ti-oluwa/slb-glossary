@@ -278,9 +278,14 @@ def session_options(func: F) -> F:
         click.option(
             "--stealth/--no-stealth",
             "use_stealth",
-            default=True,
-            show_default=True,
-            help="Apply Playwright stealth patches to the browser context.",
+            default=None,
+            help=(
+                "Apply Playwright stealth patches to the browser context. "
+                "Leave unset (the default) to resolve this automatically "
+                "based on --headless/--headed instead: stealth on when "
+                "headless, off when headed as stealth patches have been "
+                "observed to be counterproductive in headed mode."
+            ),
         ),
         click.option(
             "--initialize/--no-initialize",
@@ -461,7 +466,7 @@ def resolve_session_kwargs(
         needed = (params["concurrency"] or 1) + 1
         if needed > resolved.session.max_pages:
             logger.debug(
-                "Bumping session.max_pages %d -> %d to cover --concurrency=%r",
+                "Bumping `session.max_pages` %d -> %d to cover --concurrency=%r",
                 resolved.session.max_pages,
                 needed,
                 params["concurrency"],

@@ -1,7 +1,6 @@
 """Utilities shared across the package."""
 
 import builtins
-import dataclasses
 import enum
 import logging
 import os
@@ -22,7 +21,6 @@ __all__ = [
     "print_records",
     "print_async_records",
     "log_timed_yields",
-    "Updatable",
     "env",
     "EnvVarError",
     "Lookup",
@@ -32,7 +30,6 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 T = typing.TypeVar("T")
-UpdatableT = typing.TypeVar("UpdatableT", bound="Updatable")
 
 
 class EnvVarError(ValueError):
@@ -51,32 +48,32 @@ def env(
     name: str,
     default: T,
     *,
-    type: type[T] | None = None,
-    validate: typing.Callable[[T], bool] | None = None,
+    type: type[T] | typing.Callable[[str], T] | None = None,
+    validator: typing.Callable[[T], bool] | None = None,
 ) -> T:
     """
     Read environment variable `name` at call time, cast it, and validate it.
 
-    Meant for module-level constants that should be overridable without
-    editing code, e.g.:
+    Example:
 
     ```python
     DEFAULT_RELEVANCE_THRESHOLD = env(
-        "SLB_GLOSSARY_RELEVANCE_THRESHOLD", 0.55, validate=lambda v: 0.0 <= v <= 1.0
+        "SLB_GLOSSARY_RELEVANCE_THRESHOLD", default=0.55, validator=lambda v: 0.0 <= v <= 1.0
     )
     ```
 
     :param name: Environment variable name to read.
     :param default: Value used when `name` isn't set in the environment.
         Also determines the expected type when `type` isn't given explicitly.
-    :param type: Expected type to cast the raw string value to. Defaults
-        to `type(default)`. Supports `bool`, `int`, `float`, `str`, and
-        any `enum.Enum` subclass (matched by value).
-    :param validate: Optional extra check run on the cast value. A
+    :param type: Expected type to cast the raw string value to, or the callable
+        to cast the string to the correct type. Defaults to `type(default)`.
+        Supports `bool`, `int`, `float`, `str`, and any `enum.Enum` subclass
+        (matched by value).
+    :param validator: Optional extra check run on the cast value. A
         `False` return is treated the same as a cast failure.
     :return: The cast, validated value, or `default` if `name` isn't set.
     :raises EnvVarError: If `name` is set but its value can't be cast to
-        the expected type, or fails `validate`.
+        the expected type, or fails `validator`.
     """
     raw = os.environ.get(name)
     if raw is None:
@@ -86,85 +83,19 @@ def env(
     try:
         if isinstance(expected, builtins.type) and issubclass(expected, enum.Enum):
             value = expected(raw)  # type: ignore[call-arg]
+        elif not isinstance(expected, builtins.type) and callable(expected):
+            value = expected(raw)  # type: ignore[arg-type,assignment]
         else:
             caster = _ENV_CASTERS.get(expected, expected)
-            value = caster(raw)
+            value = caster(raw)  # type: ignore[union-attr]
     except (ValueError, TypeError) as exc:
         raise EnvVarError(
             f"Environment variable {name}={raw!r} is not a valid {expected.__name__}."
         ) from exc
 
-    if validate is not None and not validate(value):  # type: ignore[arg-type]
+    if validator is not None and not validator(value):  # type: ignore[arg-type]
         raise EnvVarError(f"Environment variable {name}={raw!r} is not a valid value.")
     return typing.cast(T, value)
-
-
-class Updatable:
-    """
-    Mixin adding `.update(**changes)` to a `@dataclasses.dataclass`, as a
-    shorter, more efficient alternative to `dataclasses.replace` for the
-    common case of changing a few top-level fields.
-
-    ```python
-    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
-    class Options(Updatable):
-        timeout: float = 30.0
-        retries: int = 3
-
-
-    opts = Options()
-    opts2 = opts.update(timeout=60.0)  # instead of dataclasses.replace(opts, timeout=60.0)
-    ```
-
-    For a **frozen** dataclass, `update` returns a new instance with
-    `changes` applied so `self` is untouched, exactly like
-    `dataclasses.replace`, just shorter to write and to chain
-    (`config.update(a=1).update(b=2)`).
-
-    For a **non-frozen** one, `update` mutates `self` in place, field by field,
-    and returns `self` so a caller that doesn't know (or care) whether a particular config is
-    frozen can still call `.update(...)` and either use the return value or not, uniformly.
-
-    `changes` are applied via `dataclasses.replace`/`setattr`.
-
-    Declare this *before* other bases so it doesn't shadow a dataclass
-    field actually named `update`, e.g. `class Foo(Updatable): ...` not
-    `class Foo(SomethingElse, Updatable): ...` if `SomethingElse` has an
-    `update` field/method of its own.
-    """
-
-    __slots__ = ()
-
-    def update(self: UpdatableT, **changes: typing.Any) -> UpdatableT:
-        """
-        Apply `changes` to this dataclass instance.
-
-        :param changes: Field name to new value. Every name must be an
-            actual field of this dataclass.
-        :return: A new instance with `changes` applied, if this dataclass
-            is frozen; `self`, mutated in place, otherwise.
-        :raises TypeError: If this class isn't a `dataclasses.dataclass`,
-            or `changes` includes a name that isn't one of its fields.
-        """
-        if not dataclasses.is_dataclass(self):
-            raise TypeError(f"`{type(self).__name__}.update()` requires a dataclasses.dataclass.")
-        if not changes:
-            return self
-
-        valid = {f.name for f in dataclasses.fields(self)}
-        unknown = changes.keys() - valid
-        if unknown:
-            raise TypeError(
-                f"`{type(self).__name__}.update()` got unexpected field(s): "
-                f"{', '.join(sorted(unknown))}. Expected one of: {', '.join(sorted(valid))}."
-            )
-
-        if dataclasses.is_dataclass(self) and type(self).__dataclass_params__.frozen:  # type: ignore[attr-defined]
-            return dataclasses.replace(self, **changes)
-
-        for name, value in changes.items():
-            setattr(self, name, value)
-        return self
 
 
 def parse_int(text: str) -> int:
@@ -601,38 +532,6 @@ def _unwrap(record: typing.Any, *, annotate: bool) -> tuple[typing.Any, str | No
     return lookup.value, lookup.source.value, lookup.score
 
 
-@typing.overload
-def print_records(
-    results: typing.Iterable[RecordT],
-    *,
-    title: str | None = None,
-    out: typing.TextIO | None = None,
-    limit: int | None = None,
-    show_url: bool = True,
-    show_topic: bool = True,
-    show_grammar: bool = True,
-    show_image: bool = False,
-    show_related: bool = False,
-    annotate: typing.Literal[False] = False,
-) -> int: ...
-
-
-@typing.overload
-def print_records(
-    results: typing.Iterable[_Lookup[RecordT]],
-    *,
-    title: str | None = None,
-    out: typing.TextIO | None = None,
-    limit: int | None = None,
-    show_url: bool = True,
-    show_topic: bool = True,
-    show_grammar: bool = True,
-    show_image: bool = False,
-    show_related: bool = False,
-    annotate: typing.Literal[True],
-) -> int: ...
-
-
 def print_records(
     results: typing.Iterable[typing.Any],
     *,
@@ -718,38 +617,6 @@ def print_records(
 
     console.print(table)
     return count
-
-
-@typing.overload
-async def print_async_records(
-    results: typing.AsyncIterable[RecordT],
-    *,
-    title: str | None = None,
-    out: typing.TextIO | None = None,
-    limit: int | None = None,
-    show_url: bool = True,
-    show_topic: bool = True,
-    show_grammar: bool = True,
-    show_image: bool = False,
-    show_related: bool = False,
-    annotate: typing.Literal[False] = False,
-) -> int: ...
-
-
-@typing.overload
-async def print_async_records(
-    results: typing.AsyncIterable[_Lookup[RecordT]],
-    *,
-    title: str | None = None,
-    out: typing.TextIO | None = None,
-    limit: int | None = None,
-    show_url: bool = True,
-    show_topic: bool = True,
-    show_grammar: bool = True,
-    show_image: bool = False,
-    show_related: bool = False,
-    annotate: typing.Literal[True],
-) -> int: ...
 
 
 async def print_async_records(
