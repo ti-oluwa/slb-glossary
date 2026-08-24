@@ -67,7 +67,7 @@ from slb_glossary.live.browser import Session
 from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
 from slb_glossary.natural_language import clean_query
-from slb_glossary.relevance import EXACT_MATCH_SCORE, score_result
+from slb_glossary.relevance import score_result
 from slb_glossary.types import RelatedTerm, SearchResult
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ class SimilarResult:
     """
     A `LookupResult` wrapping the exact (case-insensitive) term-name
     match, or `None` if there wasn't one. Its own `.score` is
-    `EXACT_MATCH_SCORE`, since it's exact by definition.
+    `constants.exact_match_score`, since it's exact by definition.
     """
 
     similar: tuple[LookupResult[SearchResult], ...] = ()
@@ -1025,7 +1025,7 @@ async def get_term(
         `constants.max_similar_terms`, resolved
         fresh on this call.
     :return: A `LookupResult` wrapping the found `SearchResult` (or `None` if
-        not found by the resolved source(s)), scored `EXACT_MATCH_SCORE` if
+        not found by the resolved source(s)), scored `constants.exact_match_score` if
         found. Or, with `with_similar=True`, a `SimilarResult`, where each
         of `.exact`/`.similar` carries its own score.
     :param auto_initialize: If a live fetch happens and `session` isn't
@@ -1110,14 +1110,14 @@ async def _lookup_local_term(
     Look up `term_or_url` in `db` and build `get_term`'s return value from it.
 
     A local lookup's exact match is always a name match by construction,
-    so a hit always scores `EXACT_MATCH_SCORE`. With `with_similar=True`,
+    so a hit always scores `constants.exact_match_score`. With `with_similar=True`,
     alternatives come from `slb_glossary.local.get_term`'s own
     `with_similar` support (backed by `scored_search`), scored the same
     way `search` itself scores local results.
     """
     if not with_similar:
         result = await local.get_term(db, term_or_url, language=language)
-        score = EXACT_MATCH_SCORE if result is not None else None
+        score = constants.exact_match_score if result is not None else None
         return LookupResult(value=result, source=Source.LOCAL, persisted=False, score=score)
 
     result, similar_pairs = await local.get_term(
@@ -1129,7 +1129,9 @@ async def _lookup_local_term(
         max_similar_terms=max_similar_terms,
     )
     exact = (
-        LookupResult(value=result, source=Source.LOCAL, persisted=False, score=EXACT_MATCH_SCORE)
+        LookupResult(
+            value=result, source=Source.LOCAL, persisted=False, score=constants.exact_match_score
+        )
         if result is not None
         else None
     )
@@ -1261,10 +1263,13 @@ async def _lookup_live_term(
 
         # A direct URL fetch is definitionally an exact match: the caller
         # already knows exactly which page they want, so every definition
-        # found on it scores `EXACT_MATCH_SCORE`.
+        # found on it scores `constants.exact_match_score`.
         wrapped = [
             LookupResult(
-                value=result, source=Source.LIVE, persisted=False, score=EXACT_MATCH_SCORE
+                value=result,
+                source=Source.LIVE,
+                persisted=False,
+                score=constants.exact_match_score,
             )
             for result in results
         ]
@@ -1280,7 +1285,10 @@ async def _lookup_live_term(
         async for result in live.search(session, term, limit=resolved_pool_size, concurrency=2):
             if result.term and result.term.strip().lower() == term:
                 return LookupResult(
-                    value=result, source=Source.LIVE, persisted=False, score=EXACT_MATCH_SCORE
+                    value=result,
+                    source=Source.LIVE,
+                    persisted=False,
+                    score=constants.exact_match_score,
                 )
 
         # No exact (case-insensitive) match among the top results;
@@ -1301,7 +1309,10 @@ async def _lookup_live_term(
     )
     exact = (
         LookupResult(
-            value=exact_result, source=Source.LIVE, persisted=False, score=EXACT_MATCH_SCORE
+            value=exact_result,
+            source=Source.LIVE,
+            persisted=False,
+            score=constants.exact_match_score,
         )
         if exact_result is not None
         else None

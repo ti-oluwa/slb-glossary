@@ -4,37 +4,23 @@ Shared relevance-scoring building blocks for search results, local or live.
 `slb_glossary.local.scored_search` computes its scores in SQL (bm25 plus
 an exact/prefix name-match tier). A live search has no database to run
 that kind of query against, so `slb_glossary.query` scores live results
-here instead, using the same tiers and the same `CONTENT_MATCH_SCORE_CAP`
+here instead, using the same tiers and the same `constants.content_match_score_cap`
 so a local score and a live score mean roughly the same thing to a caller comparing the two.
+
+The actual score values (`constants.exact_match_score`,
+`constants.prefix_match_score`, `constants.content_match_score_cap`) live
+on `slb_glossary.constants.constants`, alongside every other tunable
+constant in the package, rather than as bare module-level values here.
 """
 
+from slb_glossary.constants import constants
 from slb_glossary.types import SearchResult
 
 __all__ = [
-    "EXACT_MATCH_SCORE",
-    "PREFIX_MATCH_SCORE",
-    "CONTENT_MATCH_SCORE_CAP",
     "score_name_match",
     "score_content_overlap",
     "score_result",
 ]
-
-EXACT_MATCH_SCORE = 1.0
-"""Score for a query that exactly matches a result's term name (case/whitespace-insensitive)."""
-
-PREFIX_MATCH_SCORE = 0.9
-"""Score for a result's term name starting with the query."""
-
-CONTENT_MATCH_SCORE_CAP = 0.40
-"""
-Upper bound on a result's score when it only matched by content
-(definition/topic text), never the term name. Kept below
-`constants.relevance_threshold` (0.55), so a content-only
-match is never, by default, mistaken for a confident name match. Without
-this cap, a query that happens to line up well with one term's definition
-(but isn't actually about that term) could otherwise look confident
-enough to end a search right there, on the strength of word overlap alone.
-"""
 
 
 def _normalize(text: str) -> str:
@@ -48,24 +34,25 @@ def score_name_match(query: str, term: str) -> float | None:
 
     :param query: The free-text query.
     :param term: A result's term name.
-    :return: `EXACT_MATCH_SCORE`, `PREFIX_MATCH_SCORE`, or `None` if `term`
-        is neither an exact nor a prefix match. `None` tells the caller to
-        fall back to `score_content_overlap`, or an equivalent bm25 pass.
+    :return: `constants.exact_match_score`, `constants.prefix_match_score`,
+        or `None` if `term` is neither an exact nor a prefix match. `None`
+        tells the caller to fall back to `score_content_overlap`, or an
+        equivalent bm25 pass.
     """
     query_norm = _normalize(query)
     term_norm = _normalize(term)
     if not query_norm or not term_norm:
         return None
     if term_norm == query_norm:
-        return EXACT_MATCH_SCORE
+        return constants.exact_match_score
     if term_norm.startswith(query_norm):
-        return PREFIX_MATCH_SCORE
+        return constants.prefix_match_score
     return None
 
 
 def score_content_overlap(query: str, *texts: str) -> float:
     """
-    Score `query` against `texts` by token overlap, capped at `CONTENT_MATCH_SCORE_CAP`.
+    Score `query` against `texts` by token overlap, capped at `constants.content_match_score_cap`.
 
     Used where there's no larger corpus to rank against (a single live
     result, scored on its own), so a proper bm25-style pass isn't
@@ -79,7 +66,7 @@ def score_content_overlap(query: str, *texts: str) -> float:
     :param texts: The result's other fields to check for overlap (its
         definition, topic, and so on). Assumed not to be the term name
         itself. Use `score_name_match` for that.
-    :return: A score in `[0.0, CONTENT_MATCH_SCORE_CAP]`.
+    :return: A score in `[0.0, constants.content_match_score_cap]`.
     """
     query_tokens = _normalize(query).split()
     if not query_tokens:
@@ -91,7 +78,7 @@ def score_content_overlap(query: str, *texts: str) -> float:
 
     matched = sum(1 for token in query_tokens if token in haystack)
     coverage = matched / len(query_tokens)
-    return round(CONTENT_MATCH_SCORE_CAP * coverage, 4)
+    return round(constants.content_match_score_cap * coverage, 4)
 
 
 def score_result(query: str, result: SearchResult) -> float:

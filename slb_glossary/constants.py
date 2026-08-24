@@ -239,6 +239,39 @@ class Constants:
     before writing an incremental upsert batch to the local database.
     """
 
+    exact_match_score = Constant(
+        1.0,
+        env_var="SLB_GLOSSARY_EXACT_MATCH_SCORE",
+        validate=lambda v: 0.0 <= v <= 1.0,
+    )
+    """
+    Score for a query that exactly matches a result's term name (case/
+    whitespace-insensitive). See `slb_glossary.relevance`.
+    """
+
+    prefix_match_score = Constant(
+        0.9,
+        env_var="SLB_GLOSSARY_PREFIX_MATCH_SCORE",
+        validate=lambda v: 0.0 <= v <= 1.0,
+    )
+    """Score for a result's term name starting with the query. See `slb_glossary.relevance`."""
+
+    content_match_score_cap = Constant(
+        0.40,
+        env_var="SLB_GLOSSARY_CONTENT_MATCH_SCORE_CAP",
+        validate=lambda v: 0.0 <= v <= 1.0,
+    )
+    """
+    Upper bound on a result's score when it only matched by content
+    (definition/topic text), never the term name. Kept below
+    `relevance_threshold` (0.45 by default), so a content-only match is
+    never, by default, mistaken for a confident name match. Without this
+    cap, a query that happens to line up well with one term's definition
+    (but isn't actually about that term) could otherwise look confident
+    enough to end a search right there, on the strength of word overlap
+    alone. See `slb_glossary.relevance`.
+    """
+
 
 constants = Constants()
 """

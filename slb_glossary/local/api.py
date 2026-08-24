@@ -13,7 +13,6 @@ import aiosqlite
 from slb_glossary.constants import constants
 from slb_glossary.local.types import Database
 from slb_glossary.natural_language import clean_query
-from slb_glossary.relevance import CONTENT_MATCH_SCORE_CAP, EXACT_MATCH_SCORE, PREFIX_MATCH_SCORE
 from slb_glossary.types import RelatedTerm, SearchResult
 from slb_glossary.utils import as_async_iterator, split_exclude
 
@@ -458,13 +457,13 @@ async def scored_search(
     Ranking happens entirely in SQL, in two tiers:
 
     1. An exact (case/whitespace-insensitive) match against `term` scores
-       `EXACT_MATCH_SCORE`; `term` starting with `query` scores
-       `PREFIX_MATCH_SCORE`. Computed directly against `terms.term`, so
+       `constants.exact_match_score`; `term` starting with `query` scores
+       `constants.prefix_match_score`. Computed directly against `terms.term`, so
        this tier is never affected by how often `query` happens to appear
        elsewhere.
     2. Everything else is ordered by `bm25()`, weighted toward the `term`
        column (see `FTS_COLUMN_WEIGHTS`), and scored by normalizing that
-       result set's own bm25 spread into `(0.0, CONTENT_MATCH_SCORE_CAP]`,
+       result set's own bm25 spread into `(0.0, constants.content_match_score_cap]`,
        worst match to best. bm25 isn't comparable across different
        queries, only within one, which is exactly what this needs it for.
 
@@ -475,11 +474,11 @@ async def scored_search(
     throughout that definition, is the failure mode a purely
     bm25/word-count-driven ranking is prone to. Tier 2's score is also
     capped below `constants.relevance_threshold` (see
-    `CONTENT_MATCH_SCORE_CAP`), so a query that only ever matches by
+    `constants.content_match_score_cap`), so a query that only ever matches by
     content, never an actual term name, reads as unconfident by default.
     A real name match should generally be trusted over content overlap alone.
 
-    These are the same tiers and the same `CONTENT_MATCH_SCORE_CAP`
+    These are the same tiers and the same `constants.content_match_score_cap`
     `slb_glossary.relevance.score_result` uses to score a live result, so a
     local score and a live score mean roughly the same thing.
 
@@ -595,11 +594,13 @@ async def scored_search(
     scored: list[tuple[SearchResult, float]] = []
     for row in rows:
         if row["is_exact"]:
-            score = EXACT_MATCH_SCORE
+            score = constants.exact_match_score
         elif row["is_prefix"]:
-            score = PREFIX_MATCH_SCORE
+            score = constants.prefix_match_score
         else:
-            score = round(CONTENT_MATCH_SCORE_CAP * (worst - row["bm25_score"]) / spread, 4)
+            score = round(
+                constants.content_match_score_cap * (worst - row["bm25_score"]) / spread, 4
+            )
         scored.append((_row_to_result(row), score))
 
     elapsed = time.monotonic() - started_at
