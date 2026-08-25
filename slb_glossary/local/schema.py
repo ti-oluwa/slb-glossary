@@ -15,18 +15,36 @@ gate migrations on it.
 
 CREATE_TERMS_TABLE = """
 CREATE TABLE IF NOT EXISTS terms (
-    url TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
     term TEXT NOT NULL,
     definition TEXT,
     grammatical_label TEXT,
-    topic TEXT,
+    topic TEXT NOT NULL DEFAULT '',
     language TEXT NOT NULL DEFAULT 'en',
     image TEXT,
     image_caption TEXT,
     related_json TEXT,
     source TEXT NOT NULL DEFAULT 'glossary',
-    fetched_at TEXT NOT NULL
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (url, topic)
 )
+"""
+"""
+A glossary page can hold several definitions of the same term, one per
+topic it's filed under (see `slb_glossary.live.parsers.TERM_SECTION_SELECTOR`),
+all at the same `url`. Keying on `url` alone would let the second
+definition upserted silently overwrite the first, so `url` and `topic`
+together are the real identity of one definition.
+
+`topic` is `NOT NULL DEFAULT ''` rather than nullable so two untopicked
+definitions at the same `url` (a page with only one, topic-less section)
+still collide correctly on upsert instead of comparing unequal - SQLite
+(like standard SQL) never considers `NULL = NULL` true, so two `NULL`
+topics in a composite primary key wouldn't conflict with each other at
+all and would just accumulate as duplicate rows on every re-sync. The
+empty string is mapped back to `None` at the Python boundary (see
+`slb_glossary.local.api._row_to_result`), so `SearchResult.topic` still
+reads as `None` for a topic-less definition.
 """
 
 CREATE_TERMS_INDEXES = [

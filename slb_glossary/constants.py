@@ -162,6 +162,9 @@ class Constant(typing.Generic[T]):
         )
 
 
+SEARCH_MODES = frozenset(("lexical", "semantic", "hybrid"))
+
+
 class Constants:
     """
     Package-wide constants.
@@ -348,6 +351,24 @@ class Constants:
         validator=lambda v: v >= 1,
     )
     """Terms embedded per model call in `slb_glossary.local.embed_terms`."""
+
+    default_search_mode = Constant(
+        "lexical",
+        env_var="SLB_GLOSSARY_DEFAULT_SEARCH_MODE",
+        validator=lambda v: v in SEARCH_MODES,
+    )
+    """
+    Default `mode` for `slb_glossary.local.search`/the `search` CLI command
+    when the caller doesn't pass one explicitly. One of `"lexical"` (the
+    default), `"semantic"`, or `"hybrid"`; see
+    `slb_glossary.local.types.SearchMode`.
+
+    Stays `"lexical"` by default so a bare `search(db, query)` (or the CLI
+    with no `--mode`) keeps working on a database that's never had
+    `slb_glossary.local.embed_terms` run on it, without forcing the
+    `semantic` extra on every install. Set this to `"hybrid"` once your
+    terms are embedded; it generally ranks better than `"lexical"` alone.
+    """
 
 
 constants = Constants()

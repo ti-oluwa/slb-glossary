@@ -26,6 +26,7 @@ __all__ = [
     "search",
     "get_terms_on",
     "get_term",
+    "get_term_definitions",
     "get_random_term",
     "get_terms_urls",
     "get_topics",
@@ -54,7 +55,7 @@ def _row_to_result(row: aiosqlite.Row) -> SearchResult:
         term=row["term"],
         definition=row["definition"],
         grammatical_label=row["grammatical_label"],
-        topic=row["topic"],
+        topic=row["topic"] or None,
         url=row["url"],
         image=row["image"],
         image_caption=row["image_caption"],
@@ -68,11 +69,10 @@ UPSERT_STATEMENT = """
         url, term, definition, grammatical_label, topic, language,
         image, image_caption, related_json, source, fetched_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(url) DO UPDATE SET
+    ON CONFLICT(url, topic) DO UPDATE SET
         term=excluded.term,
         definition=excluded.definition,
         grammatical_label=excluded.grammatical_label,
-        topic=excluded.topic,
         language=excluded.language,
         image=excluded.image,
         image_caption=excluded.image_caption,
@@ -90,10 +90,14 @@ async def upsert_results(
     source: str = "glossary",
 ) -> int:
     """
-    Insert or replace `results` into the local database, keyed by URL.
+    Insert or replace `results` into the local database, keyed by (URL, topic).
 
-    A result with no `url` is skipped, since `url` is the local database's
-    primary key and there's nothing stable to upsert it against.
+    A result with no `url` is skipped, since `url` is half of the local
+    database's primary key and there's nothing stable to upsert it
+    against. A page with several definitions (one per topic it's filed
+    under) upserts as that many distinct rows, all sharing the same
+    `url` - keying on `url` alone would let the second definition
+    silently overwrite the first.
 
     This writes everything in `results` in one go, only once `results` is
     fully consumed. For a live-fetched, potentially long-running stream,
@@ -128,7 +132,7 @@ async def upsert_results(
             result.term,
             result.definition,
             result.grammatical_label,
-            result.topic,
+            result.topic or "",
             language if language is not None else result.language,
             result.image,
             result.image_caption,
@@ -411,7 +415,7 @@ async def search(
     language: str | None = None,
     limit: int | None = 20,
     fuzzy: bool = False,
-    mode: SearchMode | str = "lexical",
+    mode: SearchMode | str | None = None,
     scored: typing.Literal[False] = False,
     exclude: Collection[str] | None = None,
 ) -> list[SearchResult]: ...
@@ -425,7 +429,7 @@ async def search(
     language: str | None = None,
     limit: int | None = 20,
     fuzzy: bool = False,
-    mode: SearchMode | str = "lexical",
+    mode: SearchMode | str | None = None,
     scored: typing.Literal[True],
     exclude: Collection[str] | None = None,
 ) -> list[tuple[SearchResult, float]]: ...
@@ -440,7 +444,7 @@ async def search(
     language: str | None = None,
     limit: int | None = 20,
     fuzzy: bool = False,
-    mode: SearchMode | str = "lexical",
+    mode: SearchMode | str | None = None,
     scored: bool = False,
     exclude: Collection[str] | None = None,
 ) -> list[SearchResult] | list[tuple[SearchResult, float]]:
@@ -457,11 +461,12 @@ async def search(
     - `"hybrid"`: `slb_glossary.local.hybrid_search`, both, fused. Same
       extra/embedding requirement as `"semantic"`.
 
-    The default stays `"lexical"` rather than `"hybrid"` so that plain
-    `search(db, query)` keeps working on a database that's never had
-    `embed_terms` run on it, and without forcing the `semantic` extra on
-    every install. Pass `mode="hybrid"` explicitly once you've embedded
-    your terms; it generally ranks better than `"lexical"` alone.
+    `constants.default_search_mode` stays `"lexical"` rather than
+    `"hybrid"` out of the box, so that plain `search(db, query)` keeps
+    working on a database that's never had `embed_terms` run on it, and
+    without forcing the `semantic` extra on every install. Set that
+    constant (or pass `mode="hybrid"` per call) once you've embedded your
+    terms; it generally ranks better than `"lexical"` alone.
 
     Pass `scored=True` to get each result's `[0.0, 1.0]`-ish relevance
     score alongside it, as `(result, score)` pairs, instead of calling
@@ -482,9 +487,10 @@ async def search(
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
         Has no effect if `topic` is falsy.
-    :param mode: Which ranking strategy to use: `"lexical"` (the
-        default), `"semantic"`, or `"hybrid"`, or the matching
-        `slb_glossary.local.types.SearchMode` member.
+    :param mode: Which ranking strategy to use: `"lexical"`, `"semantic"`,
+        or `"hybrid"`, or the matching `slb_glossary.local.types.SearchMode`
+        member. `None` (the default) uses `constants.default_search_mode`,
+        resolved fresh on this call.
     :param scored: If `True`, yield `(result, score)` pairs instead of
         bare results.
     :param exclude: URLs and/or term names to leave out of the results
@@ -498,7 +504,7 @@ async def search(
         `model2vec` isn't installed, or the embedding model's output size
         doesn't match `constants.embedding_dim`.
     """
-    search_mode = SearchMode(mode)
+    search_mode = SearchMode(mode if mode is not None else constants.default_search_mode)
     if search_mode is SearchMode.LEXICAL:
         results = await lexical_search(
             db,
@@ -625,6 +631,7 @@ async def get_term(
     term_or_url: str,
     *,
     language: str | None = None,
+    topic: str | None = None,
     with_similar: typing.Literal[False] = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
@@ -635,6 +642,7 @@ async def get_term(
     term_or_url: str,
     *,
     language: str | None = None,
+    topic: str | None = None,
     with_similar: typing.Literal[True],
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
@@ -646,6 +654,7 @@ async def get_term(
     term_or_url: str,
     *,
     language: str | None = None,
+    topic: str | None = None,
     with_similar: bool = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
@@ -653,12 +662,25 @@ async def get_term(
     """
     Look up a single locally stored term by exact URL or exact term name.
 
+    A glossary page can carry several definitions of the same term, one
+    per topic it's filed under (see
+    `slb_glossary.live.parsers.TERM_SECTION_SELECTOR`), all sharing the
+    same URL. Pass `topic` to pick a specific one; without it, and more
+    than one is stored, which one comes back is only deterministic (by
+    topic name, alphabetically), not meaningful - use
+    `get_term_definitions` instead if you want all of them, or need to
+    pick by some other criterion.
+
     :param db: The local database to read from.
     :param term_or_url: A glossary term detail-page URL, or an exact
         (case-insensitive) term name.
     :param language: Restrict the lookup (and, with `with_similar=True`,
         the alternatives search) to this glossary language edition (e.g.
         `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+    :param topic: Restrict the lookup to this exact (case-insensitive)
+        topic, disambiguating a term/URL with several stored definitions.
+        `None` (the default) doesn't filter by topic; see above for what
+        that means when more than one definition is stored.
     :param with_similar: If `True`, also search for up to `max_similar_terms`
         other locally stored results, via `lexical_search` on `term_or_url`
         itself, best match first, the exact match (if any) excluded. Each
@@ -678,13 +700,16 @@ async def get_term(
         With `with_similar=True`, a `(result, similar)` pair instead,
         `similar` being `(alternative, score)` pairs.
     """
-    logger.debug("Local get_term: %r (language=%r)", term_or_url, language)
+    logger.debug("Local get_term: %r (language=%r topic=%r)", term_or_url, language, topic)
     sql = "SELECT * FROM terms WHERE (url = ? OR term = ? COLLATE NOCASE)"
     params: list[typing.Any] = [term_or_url, term_or_url]
     if language:
         sql += " AND language = ?"
         params.append(language)
-    sql += " LIMIT 1"
+    if topic:
+        sql += " AND topic = ? COLLATE NOCASE"
+        params.append(topic)
+    sql += " ORDER BY topic LIMIT 1"
 
     async with db.connection.execute(sql, params) as cursor:
         row = await cursor.fetchone()
@@ -712,6 +737,44 @@ async def get_term(
         if result is None or candidate.url != result.url
     ][:resolved_max_similar]
     return result, similar
+
+
+async def get_term_definitions(
+    db: Database,
+    term_or_url: str,
+    *,
+    language: str | None = None,
+) -> list[SearchResult]:
+    """
+    Return every locally stored definition of a term, one per topic it's filed under.
+
+    A glossary page can carry several definitions of the same term, one
+    per topic (see `slb_glossary.live.parsers.TERM_SECTION_SELECTOR`), all
+    sharing the same URL - `get_term` only ever returns one of them,
+    picked by `topic` if given. Use this instead when you want all of
+    them, e.g. to show every sense of a term across disciplines.
+
+    :param db: The local database to read from.
+    :param term_or_url: A glossary term detail-page URL, or an exact
+        (case-insensitive) term name.
+    :param language: Restrict to this glossary language edition (e.g.
+        `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+    :return: Every stored definition for `term_or_url`, ordered by topic.
+        Empty if nothing locally stored matches.
+    """
+    sql = "SELECT * FROM terms WHERE (url = ? OR term = ? COLLATE NOCASE)"
+    params: list[typing.Any] = [term_or_url, term_or_url]
+    if language:
+        sql += " AND language = ?"
+        params.append(language)
+    sql += " ORDER BY topic"
+
+    async with db.connection.execute(sql, params) as cursor:
+        rows = await cursor.fetchall()
+
+    results = [_row_to_result(row) for row in rows]
+    logger.debug("Local `get_term_definitions(%r)` returned %d row(s)", term_or_url, len(results))
+    return results
 
 
 async def get_random_term(

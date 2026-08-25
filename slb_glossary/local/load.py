@@ -44,10 +44,10 @@ def _record_to_result(
 
     url = _get_field(row, url_field)
     if not url:
-        # url is the local database's primary key; synthesize a stable one
-        # from the term itself so rows without a URL column still
-        # round-trip through upsert_results/get_term. Such rows just can't
-        # be matched against a live glossary URL later.
+        # url is half of the local database's primary key (url, topic);
+        # synthesize a stable one from the term itself so rows without a
+        # URL column still round-trip through upsert_results/get_term.
+        # Such rows just can't be matched against a live glossary URL later.
         slug = "-".join(str(term).strip().lower().split())
         url = f"local://imported/{slug}"
 
@@ -102,7 +102,8 @@ async def load_file(
         leave every imported row's topic unset.
     :param url_field: Column/key holding each row's source URL, or `None`
         to always synthesize a `local://imported/<slugified-term>` URL -
-        needed since `url` is the local database's primary key.
+        needed since `url` is half of the local database's primary key
+        (the other half being `topic`).
     :param grammatical_label_field: Column/key holding each row's
         grammatical label (e.g. "Noun"), or `None` to leave it unset.
     :param language_field: Column/key holding each row's language edition

@@ -22,7 +22,7 @@ from slb_glossary.cli.source_options import (
 from slb_glossary.cli.tui import launch_tui
 from slb_glossary.constants import constants
 from slb_glossary.local import api as local
-from slb_glossary.local.types import Database
+from slb_glossary.local.types import Database, SearchMode
 from slb_glossary.query import LookupResult, Source
 from slb_glossary.types import SearchResult
 
@@ -112,6 +112,7 @@ async def auto_search_stream(
         start_letter=params["start_letter"],
         limit=limit,
         fuzzy=params["fuzzy"],
+        mode=params["mode"],
         scored=True,
     )
     best_score = scored[0][1] if scored else 0.0
@@ -131,6 +132,7 @@ async def auto_search_stream(
             limit=limit,
             concurrency=concurrency,
             fuzzy=params["fuzzy"],
+            mode=params["mode"],
             relevance_threshold=relevance_threshold,
             **persist_kwargs(params),
         ):
@@ -241,6 +243,20 @@ async def auto_search_stream(
     "the local database, matched against topics actually stored locally, "
     "instead of requiring an exact (case-insensitive) match.",
 )
+@click.option(
+    "--mode",
+    "-m",
+    type=click.Choice([mode.value for mode in SearchMode], case_sensitive=False),
+    default=None,
+    show_default="the SLB_GLOSSARY_DEFAULT_SEARCH_MODE / default_search_mode setting",
+    help=(
+        "Local ranking strategy: 'lexical' (bm25 full-text, works out of "
+        "the box), 'semantic' (embedding similarity), or 'hybrid' (both, "
+        "fused; needs the [semantic] extra and terms already embedded via "
+        "slb_glossary.local.embed_terms). Only affects local reads; has "
+        "no effect with --live."
+    ),
+)
 @source_options
 @database_option
 @config_option
@@ -291,6 +307,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
       slb-glossary search porosity --live --limit 0 --cache-batch-size 5
       slb-glossary search porosity --relevance-threshold 0.8
       slb-glossary search porosity --annotate always
+      slb-glossary search porosity --mode hybrid
       slb-glossary search porosity --config ~/my-config.toml
       slb-glossary search porosity --config none --headed
     """
@@ -332,6 +349,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
                         start_letter=params["start_letter"],
                         limit=limit,
                         fuzzy=params["fuzzy"],
+                        mode=params["mode"],
                     ),
                     live_call=lambda session: query_api.search(
                         query,

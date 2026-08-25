@@ -65,7 +65,7 @@ from slb_glossary.constants import constants
 from slb_glossary.errors import QueryError
 from slb_glossary.live.browser import Session
 from slb_glossary.local import api as local
-from slb_glossary.local.types import Database
+from slb_glossary.local.types import Database, SearchMode
 from slb_glossary.natural_language import clean_query
 from slb_glossary.relevance import score_result
 from slb_glossary.types import RelatedTerm, SearchResult
@@ -301,6 +301,7 @@ async def search(
     persist_batch_size: int | None = None,
     persist_on_error: bool = True,
     fuzzy: bool = False,
+    mode: SearchMode | str | None = None,
     relevance_threshold: float | None = None,
     exclude: Collection[str] | None = None,
     auto_initialize: bool = True,
@@ -358,6 +359,17 @@ async def search(
         or `Source.AUTO`'s local-first attempt) tolerates minor
         misspellings/partial names in `topic`. Live reads already
         fuzzy-match topics unconditionally, so this has no effect on them.
+    :param mode: Which local ranking strategy to use - `"lexical"`,
+        `"semantic"`, or `"hybrid"`, or the matching
+        `slb_glossary.local.types.SearchMode` member. Only affects a
+        local read (`Source.LOCAL`, or `Source.AUTO`'s local-first
+        attempt); has no effect on `Source.LIVE`, which has no notion of
+        ranking mode. `None` (the default) uses `constants.default_search_mode`.
+        Note that `"semantic"`'s score is a raw cosine similarity, not
+        the calibrated `[0.0, 1.0]` scale `"lexical"`/`"hybrid"` use, so
+        pairing `mode="semantic"` with `source=Source.AUTO` means
+        `relevance_threshold` is compared against that uncalibrated
+        scale instead - `"hybrid"` is generally the better pairing.
     :param relevance_threshold: Only used by `Source.AUTO`. The local
         database's best-scoring result must meet this (`0.0`-`1.0`, see
         `slb_glossary.local.lexical_search`) for its results to be served
@@ -405,6 +417,7 @@ async def search(
             language=language,
             limit=limit,
             fuzzy=fuzzy,
+            mode=mode,
             scored=True,
             exclude=exclude,
         ):
@@ -461,6 +474,7 @@ async def search(
         language=language,
         limit=limit,
         fuzzy=fuzzy,
+        mode=mode,
         exclude=exclude,
         scored=True,
     )
@@ -1012,13 +1026,12 @@ async def get_term(
         instead: `SimilarResult.exact` holds what a plain call would have
         returned, and `SimilarResult.similar` holds up to `max_similar_terms`
         other results found for `term_or_url` along the way, best match
-        first, whether that's a local `lexical_search` pass or a live one.
+        first, whether that's a local `search` pass or a live one.
         Handy for a "did you mean" prompt when the exact match turns out
         to be `None`.
     :param similar_pool_size: Candidates pulled while looking for the
         exact match, and, with `with_similar=True`, to draw alternatives
-        from. `None` (the default) uses
-        `constants.similar_terms_pool_size`,
+        from. `None` (the default) uses `constants.similar_terms_pool_size`,
         resolved fresh on this call.
     :param max_similar_terms: Max alternatives returned in
         `SimilarResult.similar`. Ignored unless `with_similar=True`.
@@ -1408,9 +1421,8 @@ async def get_random_term(
     :param persist: If `True`, and a live pick happens, cache it into `db`.
         A single-value lookup, so batching doesn't apply.
     :param fuzzy: If `True`, a local pick tolerates minor misspellings/
-        partial names in `topic`.
-        Live picks already fuzzy-match topics unconditionally, so this has
-        no effect on them.
+        partial names in `topic`. Live picks already fuzzy-match topics 
+        unconditionally, so this has no effect on them.
     :return: A `LookupResult` wrapping the picked `SearchResult`, or `None` if
         nothing matched (empty local database/topic, or no live match found).
     :raises slb_glossary.QueryError: If neither `db` nor `session` is given,

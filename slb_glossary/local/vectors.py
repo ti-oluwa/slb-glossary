@@ -99,9 +99,14 @@ async def ensure_table(db: Database) -> None:
     """
     await load_extension(db)
     dim = embedding_dim()
+    # Keyed by `rowid`, matching `terms.rowid`, not by `url`: a page with
+    # several definitions (one per topic) shares one `url` across several
+    # `terms` rows, so `url` alone can't identify which row's embedding
+    # this is. `vec0` (like every SQLite table) already has an implicit
+    # `rowid`, no separate PK column needed to use it as the join key.
     await db.connection.execute(
         f"CREATE VIRTUAL TABLE IF NOT EXISTS {VECTOR_TABLE} USING vec0("
-        f"url TEXT PRIMARY KEY, embedding FLOAT[{dim}] distance_metric=cosine)"
+        f"embedding FLOAT[{dim}] distance_metric=cosine)"
     )
     await db.connection.commit()
 
@@ -149,16 +154,22 @@ async def embed_terms(
     """
     Compute and store embeddings for locally stored terms, for `vector_search`/`hybrid_search`.
 
+    A term with several stored definitions (one per topic, all sharing
+    one URL, see `slb_glossary.local.upsert_results`) gets one embedding
+    per definition, keyed by that row's own `rowid`, since each
+    definition's text (and therefore its embedding) genuinely differs.
+
     :param db: The local database to read terms from and write vectors to.
-    :param urls: Only (re-)embed these terms, by URL. `None` (the
-        default) considers every locally stored term.
-    :param only_missing: If `True` (the default), skip a term that
+    :param urls: Only (re-)embed rows at these URLs. `None` (the default)
+        considers every locally stored row. A URL with several stored
+        definitions embeds all of them, not just one.
+    :param only_missing: If `True` (the default), skip a row that
         already has a stored embedding, so a repeat call after a sync
         only pays for what's newly added. Pass `False` to re-embed
         everything in scope, e.g. after switching `constants.embedding_model`.
-    :param batch_size: Terms embedded per model call. `None` (the
+    :param batch_size: Rows embedded per model call. `None` (the
         default) uses `constants.embed_batch_size`.
-    :return: Number of terms newly embedded.
+    :return: Number of rows newly embedded.
     :raises DatabaseError: If `sqlite-vec` isn't installed, or its
         extension can't be loaded.
     :raises EmbeddingError: If `model2vec` isn't installed, or the
@@ -167,7 +178,7 @@ async def embed_terms(
     await ensure_table(db)
     resolved_batch_size = batch_size if batch_size is not None else constants.embed_batch_size
 
-    sql = "SELECT terms.url, terms.term, terms.definition, terms.topic FROM terms"
+    sql = "SELECT terms.rowid AS rowid, terms.term, terms.definition, terms.topic FROM terms"
     params: list[typing.Any] = []
     conditions: list[str] = []
     if urls:
@@ -175,7 +186,7 @@ async def embed_terms(
         conditions.append(f"terms.url IN ({placeholders})")
         params.extend(urls)
     if only_missing:
-        conditions.append(f"terms.url NOT IN (SELECT url FROM {VECTOR_TABLE})")
+        conditions.append(f"terms.rowid NOT IN (SELECT rowid FROM {VECTOR_TABLE})")
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)
 
@@ -192,18 +203,18 @@ async def embed_terms(
         batch = rows[start : start + resolved_batch_size]
         texts = [_build_embed_text(row["term"], row["definition"], row["topic"]) for row in batch]
         vectors = embed(texts)
-        urls = [row["url"] for row in batch]
+        rowids = [row["rowid"] for row in batch]
         # `vec0` doesn't support `ON CONFLICT`/`INSERT OR REPLACE` as an
-        # upsert; delete first so a re-embedded term doesn't just fail to
+        # upsert; delete first so a re-embedded row doesn't just fail to
         # insert on top of its old vector.
-        placeholders = ", ".join("?" for _ in urls)
+        placeholders = ", ".join("?" for _ in rowids)
         await db.connection.execute(
-            f"DELETE FROM {VECTOR_TABLE} WHERE url IN ({placeholders})", urls
+            f"DELETE FROM {VECTOR_TABLE} WHERE rowid IN ({placeholders})", rowids
         )
         await db.connection.executemany(
-            f"INSERT INTO {VECTOR_TABLE}(url, embedding) VALUES (?, ?)",
+            f"INSERT INTO {VECTOR_TABLE}(rowid, embedding) VALUES (?, ?)",
             [
-                (row["url"], vector.astype("float32").tobytes())
+                (row["rowid"], vector.astype("float32").tobytes())
                 for row, vector in zip(batch, vectors, strict=True)
             ],
         )
@@ -212,7 +223,7 @@ async def embed_terms(
 
     elapsed = time.monotonic() - started_at
     logger.info(
-        "Embedded %d term(s) in %.3fs (avg %.3fs/term)", embedded, elapsed, elapsed / embedded
+        "Embedded %d row(s) in %.3fs (avg %.3fs/row)", embedded, elapsed, elapsed / embedded
     )
     return embedded
 
@@ -225,8 +236,9 @@ async def delete_embeddings(db: Database, *, urls: Collection[str] | None = None
     never called), so this is always safe to call speculatively.
 
     :param db: The local database to write to.
-    :param urls: If given, only delete these terms' embeddings.
-        Otherwise delete every stored embedding.
+    :param urls: If given, only delete embeddings for rows at these URLs
+        (every stored definition at that URL, not just one). Otherwise
+        delete every stored embedding.
     """
     await load_extension(db)
     if not await check_table_exists(db):
@@ -235,7 +247,12 @@ async def delete_embeddings(db: Database, *, urls: Collection[str] | None = None
     if urls:
         placeholders = ", ".join("?" for _ in urls)
         await db.connection.execute(
-            f"DELETE FROM {VECTOR_TABLE} WHERE url IN ({placeholders})", list(urls)
+            f"""
+            DELETE FROM {VECTOR_TABLE} WHERE rowid IN (
+                SELECT rowid FROM terms WHERE url IN ({placeholders})
+            )
+            """,
+            list(urls),
         )
     else:
         await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
@@ -307,12 +324,12 @@ async def vector_search(
 
     sql = f"""
         WITH matches AS (
-            SELECT url, distance FROM {VECTOR_TABLE}
+            SELECT rowid, distance FROM {VECTOR_TABLE}
             WHERE embedding MATCH ? AND k = ?
             ORDER BY distance
         )
         SELECT terms.*, matches.distance AS distance
-        FROM matches JOIN terms ON terms.url = matches.url
+        FROM matches JOIN terms ON terms.rowid = matches.rowid
         WHERE 1 = 1
     """
     params: list[typing.Any] = [query_vector, k]
