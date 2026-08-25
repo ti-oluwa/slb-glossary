@@ -38,6 +38,7 @@ async def get_known_urls_set(
     query: str | None = None,
     topic: str | None = None,
     start_letter: str | None = None,
+    language: str | None = None,
 ) -> frozenset[str]:
     """
     Collect every locally stored URL matching the given filters, as a `frozenset`.
@@ -50,8 +51,8 @@ async def get_known_urls_set(
     return frozenset(
         [
             url
-            async for url in get_known_urls(
-                db, query=query, topic=topic, start_letter=start_letter
+            for url in await get_known_urls(
+                db, query=query, topic=topic, start_letter=start_letter, language=language
             )
         ]
     )
@@ -59,7 +60,7 @@ async def get_known_urls_set(
 
 @dataclasses.dataclass(slots=True, frozen=True, kw_only=True)
 class SyncSummary:
-    """Outcome of a `slb_glossary.local.sync` call."""
+    """Outcome of a live-to-local synchronization call."""
 
     terms_written: int
     """Number of term rows inserted or updated by this sync."""
@@ -86,7 +87,7 @@ async def _record_sync(
 ) -> SyncSummary:
     """Recompute the local database's totals and persist them to `metadata.json`."""
     total = await count_terms(db)
-    topics = await get_topics(db)
+    topics = await get_topics(db, language=language)
 
     metadata = Metadata.load(db.metadata_path)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -218,7 +219,13 @@ async def sync_query(
     started_at = time.monotonic()
     logger.info("Syncing query %r to the local database", query)
     exclude = (
-        await get_known_urls_set(db, query=query, topic=topic, start_letter=start_letter)
+        await get_known_urls_set(
+            db,
+            query=query,
+            topic=topic,
+            start_letter=start_letter,
+            language=session.language.value,
+        )
         if skip_existing
         else None
     )
@@ -289,7 +296,15 @@ async def sync_topic(
     """
     started_at = time.monotonic()
     logger.info("Syncing topic %r to the local database", topic)
-    exclude = await get_known_urls_set(db, topic=topic) if skip_existing else None
+    exclude = (
+        await get_known_urls_set(
+            db,
+            topic=topic,
+            language=session.language.value,
+        )
+        if skip_existing
+        else None
+    )
     results = get_terms_on(session, topic, limit=limit, concurrency=concurrency, exclude=exclude)
     written, interrupted = await _drain_and_upsert(
         db,
@@ -357,7 +372,12 @@ async def sync_letter(
     started_at = time.monotonic()
     logger.info("Syncing letter %r (topic=%r) to the local database", start_letter, topic)
     exclude = (
-        await get_known_urls_set(db, topic=topic, start_letter=start_letter)
+        await get_known_urls_set(
+            db,
+            topic=topic,
+            start_letter=start_letter,
+            language=session.language.value,
+        )
         if skip_existing
         else None
     )
@@ -449,7 +469,15 @@ async def sync_all(
     try:
         for index, topic_name in enumerate(topic_names, start=1):
             topic_started_at = time.monotonic()
-            exclude = await get_known_urls_set(db, topic=topic_name) if skip_existing else None
+            exclude = (
+                await get_known_urls_set(
+                    db,
+                    topic=topic_name,
+                    language=session.language.value,
+                )
+                if skip_existing
+                else None
+            )
             results = get_terms_on(session, topic_name, concurrency=concurrency, exclude=exclude)
             written, _ = await _drain_and_upsert(
                 db,

@@ -31,7 +31,7 @@ behaves like whichever of `Source.LOCAL`/`Source.LIVE` that one supports.
 
 `search` narrows `Source.AUTO` further than the other functions here: a
 local hit doesn't automatically end the search. Each local result is
-scored against the query (see `slb_glossary.local.scored_search`), and if
+scored against the query (see `slb_glossary.local.lexical_search`), and if
 even the best of them isn't a confident match, the live glossary is
 queried too and its results are added on. The local results aren't
 thrown away, just no longer treated as the whole answer.
@@ -197,7 +197,7 @@ def validate_language(session: Session | None, language: str | None) -> None:
     Validate that `language`, if given, matches `session`'s own language.
 
     A `Session` is bound to one glossary language edition for its whole
-    lifetime, set when it was opened. So a live fetch can't honor a
+    lifetime, set when it was opened. So a live fetch can't honor arow["url"] for
     different `language` on a per-call basis the way a local read can.
     To search a different language live, open a second `Session` with
     that language instead.
@@ -360,7 +360,7 @@ async def search(
         fuzzy-match topics unconditionally, so this has no effect on them.
     :param relevance_threshold: Only used by `Source.AUTO`. The local
         database's best-scoring result must meet this (`0.0`-`1.0`, see
-        `slb_glossary.local.scored_search`) for its results to be served
+        `slb_glossary.local.lexical_search`) for its results to be served
         without also querying the live glossary. Lower it to trust local
         results more readily (fewer live fetches); raise it to augment
         with live results more often. `None` (the default) uses
@@ -397,7 +397,7 @@ async def search(
     count = 0
     if resolved is Source.LOCAL:
         assert db is not None
-        async for result, score in local.search(
+        for result, score in await local.search(
             db,
             normalized_query,
             topic=topic,
@@ -453,7 +453,7 @@ async def search(
 
     # source is `Source.AUTO`, resolved started as `LOCAL`: score it, then decide.
     assert db is not None
-    scored = await local.scored_search(
+    scored = await local.search(
         db,
         normalized_query,
         topic=topic,
@@ -462,6 +462,7 @@ async def search(
         limit=limit,
         fuzzy=fuzzy,
         exclude=exclude,
+        scored=True,
     )
     results = [result for result, _ in scored]
     best_score = scored[0][1] if scored else 0.0
@@ -642,7 +643,7 @@ async def get_terms_on(
     if resolved is Source.LOCAL:
         assert db is not None
         count = 0
-        async for result in local.get_terms_on(
+        for result in await local.get_terms_on(
             db,
             topic,
             start_letter=start_letter,
@@ -696,7 +697,7 @@ async def get_terms_on(
     assert db is not None
     results = [
         result
-        async for result in local.get_terms_on(
+        for result in await local.get_terms_on(
             db,
             topic,
             start_letter=start_letter,
@@ -812,7 +813,7 @@ async def get_terms_urls(
     resolved = resolve_source(db, session, source)
     if resolved is Source.LOCAL:
         assert db is not None
-        async for url in local.get_terms_urls(
+        for url in await local.get_terms_urls(
             db,
             query=query,
             topic=topic,
@@ -843,7 +844,7 @@ async def get_terms_urls(
     assert db is not None
     urls = [
         url
-        async for url in local.get_terms_urls(
+        for url in await local.get_terms_urls(
             db,
             query=query,
             topic=topic,
@@ -1011,7 +1012,7 @@ async def get_term(
         instead: `SimilarResult.exact` holds what a plain call would have
         returned, and `SimilarResult.similar` holds up to `max_similar_terms`
         other results found for `term_or_url` along the way, best match
-        first, whether that's a local `scored_search` pass or a live one.
+        first, whether that's a local `lexical_search` pass or a live one.
         Handy for a "did you mean" prompt when the exact match turns out
         to be `None`.
     :param similar_pool_size: Candidates pulled while looking for the
@@ -1112,7 +1113,7 @@ async def _lookup_local_term(
     A local lookup's exact match is always a name match by construction,
     so a hit always scores `constants.exact_match_score`. With `with_similar=True`,
     alternatives come from `slb_glossary.local.get_term`'s own
-    `with_similar` support (backed by `scored_search`), scored the same
+    `with_similar` support (backed by `lexical_search`), scored the same
     way `search` itself scores local results.
     """
     if not with_similar:

@@ -1,129 +1,354 @@
 """
-Local vector store: *bring-your-own-embedding* similarity search over stored terms.
+Local semantic search API. Uses cosine similarity over `model2vec`-embedded terms.
 
-`slb_glossary.local` deliberately doesn't bundle an embedding model as
-that would drag in a heavy ML dependency for something most callers won't
-use. Instead, this module just stores whatever embedding vector the
-caller already computed for a term (with any model they like) and ranks
-stored vectors by cosine similarity against a query vector, also supplied
-by the caller.
+Backed by the `sqlite-vec` SQLite extension (a `vec0` virtual table), so
+nearest-neighbor search runs in SQLite itself rather than a Python scan.
+`embed_terms` computes and stores each locally stored term's vector.
+`vector_search` embeds a query the same way and ranks stored terms
+against it.
+
+Install the `semantic` extra to use anything here:
+
+```bash
+`pip install slb-glossary[semantic]`.
+```
 """
 
-import array
-import math
+import logging
+import time
 import typing
+from collections.abc import Collection
 
-from slb_glossary.local.api import _row_to_result
+from slb_glossary.constants import constants
+from slb_glossary.errors import DatabaseError
+from slb_glossary.local.embeddings import embed, embedding_dim
 from slb_glossary.local.types import Database
+from slb_glossary.natural_language import clean_query
 from slb_glossary.types import SearchResult
 
-__all__ = ["upsert_vector", "delete_vectors", "vector_search"]
+logger = logging.getLogger(__name__)
+
+__all__ = ["embed_terms", "delete_embeddings", "vector_search"]
+
+VECTOR_TABLE = "terms_vec"
+
+OVERFETCH_FACTOR = 4
+"""
+`vec0` applies its `k` nearest-neighbor cutoff before the SQL join below
+can filter by topic/language/exclude, so asking it for exactly as many
+neighbors as the caller wants can come up short once those filters are
+applied. Asking for this many times more compensates, at the cost of a
+slightly larger scan.
+"""
 
 
-def _pack(embedding: typing.Sequence[float]) -> bytes:
-    """Pack a vector of floats into a compact binary blob (32-bit floats)."""
-    return array.array("f", embedding).tobytes()
-
-
-def _unpack(blob: bytes) -> array.array:
-    """Unpack a binary blob back into an `array.array` of 32-bit floats."""
-    values: array.array = array.array("f")
-    values.frombytes(blob)
-    return values
-
-
-def _cosine_similarity(a: typing.Sequence[float], b: typing.Sequence[float]) -> float:
-    """Compute cosine similarity between two equal-length vectors, 0.0 if either is a zero vector."""
-    dot = sum(x * y for x, y in zip(a, b, strict=False))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(y * y for y in b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)
-
-
-async def upsert_vector(
-    db: Database, url: str, embedding: typing.Sequence[float], *, model: str = "custom"
-) -> None:
+async def load_extension(db: Database) -> typing.Any:
     """
-    Store (or replace) the embedding vector for a locally stored term.
+    Load the `sqlite-vec` extension onto `db`'s connection.
 
-    :param db: The local database to write to.
-    :param url: URL of a term already stored in `db` (see
-        `slb_glossary.local.api.upsert_results`). Its vectors are
-        removed automatically if that term is later deleted.
-    :param embedding: The embedding vector, as computed by whatever model
-        the caller chooses.
-    :param model: A label identifying which model produced `embedding`,
-        e.g. `"text-embedding-3-small"`. `vector_search` only compares
-        vectors stored under the same label, so mixed-model vectors for
-        one term don't get compared against each other.
+    Idempotent and cheap to call.
+
+    :param db: The local database to prepare.
+    :return: The imported `sqlite_vec` module.
+    :raises DatabaseError: If `sqlite-vec` isn't installed, or the
+        installed SQLite build can't load extensions.
     """
+    try:
+        import sqlite_vec  # type: ignore[import]
+    except ImportError as exc:
+        raise DatabaseError(
+            "Semantic search needs the `sqlite-vec` package, which isn't "
+            "installed. Install it with `pip install slb-glossary[semantic]`."
+        ) from exc
+
+    try:
+        await db.connection.enable_load_extension(True)
+        await db.connection.load_extension(sqlite_vec.loadable_path())
+    except Exception as exc:
+        raise DatabaseError(
+            "Could not load the `sqlite-vec` SQLite extension. The "
+            "installed SQLite build may have extension loading disabled."
+        ) from exc
+    finally:
+        await db.connection.enable_load_extension(False)
+    return sqlite_vec
+
+
+async def check_table_exists(db: Database) -> bool:
+    """Check whether the local vector table has been created yet."""
+    async with db.connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (VECTOR_TABLE,)
+    ) as cursor:
+        return await cursor.fetchone() is not None
+
+
+async def ensure_table(db: Database) -> None:
+    """
+    Load `sqlite-vec` and create the local vector table if missing.
+
+    Also resolves `embedding_dim()`, which loads the embedding model, so
+    only call this where a term or query is actually about to be
+    embedded. `delete_embeddings`/maintenance cleanup don't need the
+    model at all, just the table, so they don't go through this.
+
+    :param db: The local database to prepare.
+    :raises DatabaseError: If `sqlite-vec` isn't installed, or its
+        extension can't be loaded.
+    :raises EmbeddingError: If `model2vec` isn't installed, or the
+        embedding model's real output size doesn't match `constants.embedding_dim`.
+    """
+    await load_extension(db)
+    dim = embedding_dim()
     await db.connection.execute(
-        """
-        INSERT INTO vectors (url, model, dim, embedding)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(url, model) DO UPDATE SET
-            dim=excluded.dim, embedding=excluded.embedding
-        """,
-        (url, model, len(embedding), _pack(embedding)),
+        f"CREATE VIRTUAL TABLE IF NOT EXISTS {VECTOR_TABLE} USING vec0("
+        f"url TEXT PRIMARY KEY, embedding FLOAT[{dim}] distance_metric=cosine)"
     )
     await db.connection.commit()
 
 
-async def delete_vectors(db: Database, *, model: str | None = None) -> None:
+async def clear(db: Database) -> None:
     """
-    Delete stored vectors, optionally scoped to one `model`.
+    Delete every stored embedding, if the vector table exists at all.
+
+    Used by `slb_glossary.local.maintenance.flush`/`reset`, which have
+    to work on a database that never had semantic search set up, so this
+    is a deliberate no-op rather than an error in that case, including
+    when `sqlite-vec` itself isn't installed.
+
+    :param db: The local database to clear.
+    """
+    try:
+        exists_before_load = await check_table_exists(db)
+        if not exists_before_load:
+            return
+        await load_extension(db)
+    except DatabaseError:
+        logger.warning(
+            "Local vector table exists but `sqlite-vec` could not be "
+            "loaded to clear it; leaving it as-is."
+        )
+        return
+
+    await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
+    await db.connection.commit()
+
+
+def _build_embed_text(term: str, definition: str | None, topic: str | None) -> str:
+    """Build the text a term is embedded from, joining whichever of its fields are present."""
+    parts = [part for part in (term, definition, topic) if part]
+    return ". ".join(parts)
+
+
+async def embed_terms(
+    db: Database,
+    *,
+    urls: Collection[str] | None = None,
+    only_missing: bool = True,
+    batch_size: int | None = None,
+) -> int:
+    """
+    Compute and store embeddings for locally stored terms, for `vector_search`/`hybrid_search`.
+
+    :param db: The local database to read terms from and write vectors to.
+    :param urls: Only (re-)embed these terms, by URL. `None` (the
+        default) considers every locally stored term.
+    :param only_missing: If `True` (the default), skip a term that
+        already has a stored embedding, so a repeat call after a sync
+        only pays for what's newly added. Pass `False` to re-embed
+        everything in scope, e.g. after switching `constants.embedding_model`.
+    :param batch_size: Terms embedded per model call. `None` (the
+        default) uses `constants.embed_batch_size`.
+    :return: Number of terms newly embedded.
+    :raises DatabaseError: If `sqlite-vec` isn't installed, or its
+        extension can't be loaded.
+    :raises EmbeddingError: If `model2vec` isn't installed, or the
+        embedding model's output size doesn't match `constants.embedding_dim`.
+    """
+    await ensure_table(db)
+    resolved_batch_size = batch_size if batch_size is not None else constants.embed_batch_size
+
+    sql = "SELECT terms.url, terms.term, terms.definition, terms.topic FROM terms"
+    params: list[typing.Any] = []
+    conditions: list[str] = []
+    if urls:
+        placeholders = ", ".join("?" for _ in urls)
+        conditions.append(f"terms.url IN ({placeholders})")
+        params.extend(urls)
+    if only_missing:
+        conditions.append(f"terms.url NOT IN (SELECT url FROM {VECTOR_TABLE})")
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+
+    async with db.connection.execute(sql, params) as cursor:
+        rows = tuple(await cursor.fetchall())
+
+    if not rows:
+        logger.debug("embed_terms: nothing to embed")
+        return 0
+
+    started_at = time.monotonic()
+    embedded = 0
+    for start in range(0, len(rows), resolved_batch_size):
+        batch = rows[start : start + resolved_batch_size]
+        texts = [_build_embed_text(row["term"], row["definition"], row["topic"]) for row in batch]
+        vectors = embed(texts)
+        urls = [row["url"] for row in batch]
+        # `vec0` doesn't support `ON CONFLICT`/`INSERT OR REPLACE` as an
+        # upsert; delete first so a re-embedded term doesn't just fail to
+        # insert on top of its old vector.
+        placeholders = ", ".join("?" for _ in urls)
+        await db.connection.execute(
+            f"DELETE FROM {VECTOR_TABLE} WHERE url IN ({placeholders})", urls
+        )
+        await db.connection.executemany(
+            f"INSERT INTO {VECTOR_TABLE}(url, embedding) VALUES (?, ?)",
+            [
+                (row["url"], vector.astype("float32").tobytes())
+                for row, vector in zip(batch, vectors, strict=True)
+            ],
+        )
+        await db.connection.commit()
+        embedded += len(batch)
+
+    elapsed = time.monotonic() - started_at
+    logger.info(
+        "Embedded %d term(s) in %.3fs (avg %.3fs/term)", embedded, elapsed, elapsed / embedded
+    )
+    return embedded
+
+
+async def delete_embeddings(db: Database, *, urls: Collection[str] | None = None) -> None:
+    """
+    Delete stored embeddings, optionally scoped to `urls`.
+
+    A no-op if no embeddings have ever been stored (`embed_terms` was
+    never called), so this is always safe to call speculatively.
 
     :param db: The local database to write to.
-    :param model: If given, only delete vectors stored under this model
-        label. Otherwise delete every stored vector.
+    :param urls: If given, only delete these terms' embeddings.
+        Otherwise delete every stored embedding.
     """
-    if model is None:
-        await db.connection.execute("DELETE FROM vectors")
+    await load_extension(db)
+    if not await check_table_exists(db):
+        return
+
+    if urls:
+        placeholders = ", ".join("?" for _ in urls)
+        await db.connection.execute(
+            f"DELETE FROM {VECTOR_TABLE} WHERE url IN ({placeholders})", list(urls)
+        )
     else:
-        await db.connection.execute("DELETE FROM vectors WHERE model = ?", (model,))
+        await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
     await db.connection.commit()
 
 
 async def vector_search(
     db: Database,
-    query_embedding: typing.Sequence[float],
+    query: str,
     *,
-    model: str = "custom",
-    limit: int = 10,
-    min_similarity: float = 0.0,
+    topic: str | None = None,
+    start_letter: str | None = None,
+    language: str | None = None,
+    limit: int | None = 10,
+    fuzzy: bool = False,
+    exclude: Collection[str] | None = None,
 ) -> list[tuple[SearchResult, float]]:
     """
-    Rank locally stored terms by cosine similarity to `query_embedding`.
+    Rank locally stored, embedded terms by semantic similarity to `query`.
 
-    This is a brute-force scan over every vector stored under `model` which is
-    fine for a glossary-sized dataset (thousands of terms), but is not good for
-    million-row corpora.
+    Purely semantic: a paraphrase or a related concept can outrank a
+    result that shares no words with `query` at all, which lexical
+    search (`slb_glossary.local.search`) can never do. It also has no
+    equivalent of lexical search's exact/prefix name tier, so a term
+    named exactly what you searched for isn't guaranteed to rank first.
+    Prefer `slb_glossary.local.hybrid_search` unless you specifically
+    want ranking with no lexical signal mixed in.
 
-    Compute `query_embedding` with whatever model produced the stored vectors
-    (see `upsert_vector`); mismatched dimensions raise, since cosine similarity
-    is undefined between them.
+    Only terms already embedded via `embed_terms` are considered; a term
+    synced or imported since the last `embed_terms` call is invisible here.
 
     :param db: The local database to search.
-    :param query_embedding: The query's embedding vector.
-    :param model: Only compare against vectors stored under this model label.
-    :param limit: Maximum number of results.
-    :param min_similarity: Drop results below this cosine similarity (-1.0 to 1.0).
+    :param query: Free-text query. Passed through
+        `slb_glossary.natural_language.clean_query` first, same as
+        `slb_glossary.local.lexical_search`, so a plain-English question
+        like "what is X" is embedded as just `X`.
+    :param topic: Restrict results to this topic, or several
+        comma-separated topics (case-insensitive exact match by default).
+    :param start_letter: Restrict results to terms starting with this letter.
+    :param language: Restrict results to this glossary language edition
+        (e.g. `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+    :param limit: Maximum number of results. `None` for unlimited (every
+        embedded term, ranked).
+    :param fuzzy: If `True`, tolerate minor misspellings/partial names in
+        `topic` by resolving it against locally stored topic names first.
+        Has no effect if `topic` is falsy.
+    :param exclude: URLs and/or term names to leave out of the results
+        entirely.
     :return: `(result, similarity)` pairs, most similar first.
+        `similarity` is a cosine similarity, in `[-1.0, 1.0]` in theory
+        and close to `[0.0, 1.0]` in practice for real text. This is not
+        the `[0.0, 1.0]`-calibrated score `lexical_search`/`hybrid_search` return.
+    :raises DatabaseError: If `sqlite-vec` isn't installed, or its
+        extension can't be loaded.
+    :raises EmbeddingError: If `model2vec` isn't installed, or the
+        embedding model's output size doesn't match `constants.embedding_dim`.
     """
-    sql = """
-        SELECT terms.*, vectors.embedding FROM vectors
-        JOIN terms ON terms.url = vectors.url
-        WHERE vectors.model = ?
-    """
-    scored: list[tuple[SearchResult, float]] = []
-    async with db.connection.execute(sql, (model,)) as cursor:
-        async for row in cursor:
-            stored_embedding = _unpack(row["embedding"])
-            similarity = _cosine_similarity(query_embedding, stored_embedding)
-            if similarity >= min_similarity:
-                scored.append((_row_to_result(row), similarity))
+    await ensure_table(db)
+    started_at = time.monotonic()
 
-    scored.sort(key=lambda pair: pair[1], reverse=True)
-    return scored[:limit]
+    from slb_glossary.local.api import _apply_exclude, _row_to_result, resolve_topic
+
+    normalized_query = clean_query(query)
+    query_vector = embed([normalized_query])[0].astype("float32").tobytes()
+    resolved_topic = await resolve_topic(db, topic, fuzzy, language=language)
+
+    pool = limit if limit else constants.hybrid_candidate_pool
+    k = pool * OVERFETCH_FACTOR
+
+    sql = f"""
+        WITH matches AS (
+            SELECT url, distance FROM {VECTOR_TABLE}
+            WHERE embedding MATCH ? AND k = ?
+            ORDER BY distance
+        )
+        SELECT terms.*, matches.distance AS distance
+        FROM matches JOIN terms ON terms.url = matches.url
+        WHERE 1 = 1
+    """
+    params: list[typing.Any] = [query_vector, k]
+
+    if resolved_topic:
+        topics = [name.strip() for name in resolved_topic.split(",") if name.strip()]
+        if topics:
+            placeholders = ", ".join("?" for _ in topics)
+            sql += f" AND terms.topic COLLATE NOCASE IN ({placeholders})"
+            params.extend(topics)
+
+    if start_letter:
+        sql += " AND terms.term COLLATE NOCASE LIKE ?"
+        params.append(f"{start_letter}%")
+
+    if language:
+        sql += " AND terms.language = ?"
+        params.append(language)
+
+    sql = _apply_exclude(sql, params, exclude, url_column="terms.url", term_column="terms.term")
+
+    sql += " ORDER BY matches.distance ASC"
+    if limit:
+        sql += " LIMIT ?"
+        params.append(limit)
+
+    async with db.connection.execute(sql, params) as cursor:
+        rows = await cursor.fetchall()
+
+    scored = [(_row_to_result(row), 1.0 - row["distance"]) for row in rows]
+
+    elapsed = time.monotonic() - started_at
+    logger.debug(
+        "Local `vector_search` for %r yielded %d candidate(s) in %.3fs",
+        normalized_query,
+        len(scored),
+        elapsed,
+    )
+    return scored

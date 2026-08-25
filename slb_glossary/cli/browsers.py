@@ -192,8 +192,8 @@ def install_browsers(
         sets `PLAYWRIGHT_DOWNLOAD_HOST` for this run only. Useful if the
         default CDN is slow or unreachable from your network - point this
         at a mirror, or a caching proxy you control.
-    :param retry: Retry policy for a failed download - see
-        `DEFAULT_INSTALL_RETRY_POLICY`. Pass `None` to try exactly once
+    :param retry: Retry policy for a failed download (see
+        `DEFAULT_INSTALL_RETRY_POLICY`). Pass `None` to try exactly once
         (the previous behavior), or `RetryPolicy(attempts=1)` explicitly.
     :raises BrowserInstallError: If the install fails for any reason,
         including patchright not being installed.

@@ -72,22 +72,12 @@ CREATE_FTS_TRIGGERS = [
     """,
 ]
 
-CREATE_VECTORS_TABLE = """
-CREATE TABLE IF NOT EXISTS vectors (
-    url TEXT NOT NULL REFERENCES terms(url) ON DELETE CASCADE,
-    model TEXT NOT NULL,
-    dim INTEGER NOT NULL,
-    embedding BLOB NOT NULL,
-    PRIMARY KEY (url, model)
-)
-"""
-
 
 async def initialize(connection: aiosqlite.Connection) -> None:
     """
     Create every table, index, and trigger the local database needs, if missing.
 
-    Safe to call every time a database is opened: every statement here is
+    Safe to call every time a database is opened as every statement here is
     `IF NOT EXISTS`, so this is a no-op on an already-initialized database.
 
     :param connection: An open `aiosqlite` connection.
@@ -111,5 +101,4 @@ async def initialize(connection: aiosqlite.Connection) -> None:
     for statement in CREATE_FTS_TRIGGERS:
         await connection.execute(statement)
 
-    await connection.execute(CREATE_VECTORS_TABLE)
     await connection.commit()

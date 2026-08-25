@@ -1,4 +1,4 @@
-"""Functional query API for the local search database."""
+"""API for the local database search."""
 
 import datetime
 import json
@@ -11,8 +11,10 @@ from difflib import get_close_matches
 import aiosqlite
 
 from slb_glossary.constants import constants
-from slb_glossary.local.types import Database
-from slb_glossary.natural_language import clean_query
+from slb_glossary.local.hybrid import hybrid_search
+from slb_glossary.local.lexical import lexical_search
+from slb_glossary.local.types import Database, SearchMode
+from slb_glossary.local.vectors import vector_search
 from slb_glossary.types import RelatedTerm, SearchResult
 from slb_glossary.utils import as_async_iterator, split_exclude
 
@@ -22,7 +24,6 @@ __all__ = [
     "upsert_results",
     "upsert_results_incrementally",
     "search",
-    "scored_search",
     "get_terms_on",
     "get_term",
     "get_random_term",
@@ -31,21 +32,6 @@ __all__ = [
     "fuzzy_match_topics",
     "count",
 ]
-
-FTS_COLUMN_WEIGHTS: tuple[float, float, float] = (10.0, 1.0, 3.0)
-"""
-bm25() column weights for `terms_fts`'s `(term, definition, topic)` columns,
-in that order. FTS5's default is `1.0` for every column, which lets a
-result whose definition happens to repeat the query outrank one whose
-term name actually matches it.
-
-Weighting `term` well above the others still doesn't fully fix this,
-since bm25 also rewards a column for how often the query appears in it,
-so a term whose definition just says the query word a lot can still
-out-score the term actually named that. `scored_search` sidesteps this
-with an exact/prefix name-match tier computed directly in SQL, ahead of
-bm25 entirely (see its docstring).
-"""
 
 
 def _dump_related(related: tuple[RelatedTerm, ...] | None) -> str | None:
@@ -302,31 +288,6 @@ async def upsert_results_incrementally(
             stats["batches"] = batches_written
 
 
-def _to_fts_query(query: str) -> str:
-    """
-        Turn free text into a safe FTS5 MATCH query: quoted, prefix-matched tokens ANDed together.
-
-        Quoting each token sidesteps FTS5's own query syntax (so punctuation
-        in `query` can't be misread as an FTS operator), and the trailing `*`
-        makes each token a prefix match, so `"poros"` finds `"porosity"`.
-
-        :param query: Free-text search input.
-        :return: An FTS5 `MATCH` query string equivalent to "every token,
-            as a prefix, in any batch_size: int = DEFAULT_UPSERT_BATCH_SIZE,
-    batch_size: int = DEFAULT_UPSERT_BATCH_SIZE,
-    batch_size: int = DEFAULT_UPSERT_BATCH_SIZE,order".
-    """
-    tokens = query.strip().split()
-    if not tokens:
-        return '""'
-    return " AND ".join(f'"{token}"*' for token in tokens)
-
-
-def _normalize(text: str) -> str:
-    """Lowercase `text` and collapse its whitespace, for the exact/prefix-match SQL params."""
-    return " ".join(text.strip().lower().split())
-
-
 def _apply_exclude(
     sql: str,
     params: list[typing.Any],
@@ -436,212 +397,12 @@ async def resolve_topic(
     if not fuzzy:
         return topic
 
-    stored_topics = await get_topics(db)
+    stored_topics = await get_topics(db, language=language)
     return fuzzy_match_topics(stored_topics, topic) or None
 
 
-async def scored_search(
-    db: Database,
-    query: str,
-    *,
-    topic: str | None = None,
-    start_letter: str | None = None,
-    language: str | None = None,
-    limit: int | None = 20,
-    fuzzy: bool = False,
-    exclude: Collection[str] | None = None,
-) -> list[tuple[SearchResult, float]]:
-    """
-    Full-text search the local database for `query`, ranked, scored, best match first.
-
-    Ranking happens entirely in SQL, in two tiers:
-
-    1. An exact (case/whitespace-insensitive) match against `term` scores
-       `constants.exact_match_score`; `term` starting with `query` scores
-       `constants.prefix_match_score`. Computed directly against `terms.term`, so
-       this tier is never affected by how often `query` happens to appear
-       elsewhere.
-    2. Everything else is ordered by `bm25()`, weighted toward the `term`
-       column (see `FTS_COLUMN_WEIGHTS`), and scored by normalizing that
-       result set's own bm25 spread into `(0.0, constants.content_match_score_cap]`,
-       worst match to best. bm25 isn't comparable across different
-       queries, only within one, which is exactly what this needs it for.
-
-    Tier 1 is always ordered ahead of tier 2, so a term named after the
-    query is never outranked by an unrelated term whose definition just
-    happens to mention it a lot. For example, searching "mud" surfacing
-    "Drilling fluid" ahead of "Mud" itself, because "mud" is repeated
-    throughout that definition, is the failure mode a purely
-    bm25/word-count-driven ranking is prone to. Tier 2's score is also
-    capped below `constants.relevance_threshold` (see
-    `constants.content_match_score_cap`), so a query that only ever matches by
-    content, never an actual term name, reads as unconfident by default.
-    A real name match should generally be trusted over content overlap alone.
-
-    These are the same tiers and the same `constants.content_match_score_cap`
-    `slb_glossary.relevance.score_result` uses to score a live result, so a
-    local score and a live score mean roughly the same thing.
-
-    Before any of that, `query` is passed through
-    `slb_glossary.natural_language.clean_query`, which reduces a
-    plain-English question like "what is X" or "define X" down to just
-    `X`. Local matching works against actual term names and words, not
-    conversational phrasing, so this is what lets a question like "what
-    is porosity" find "Porosity" via the exact-match tier, the same as
-    searching "porosity" directly would. Unstripped, the extra words
-    would usually just make the FTS match come back empty.
-
-    `search` is a thin wrapper around this. Pass `scored=True` to it
-    instead if you want results and scores together without a second call.
-    Reach for this function directly when you only need the scores. For
-    example, `slb_glossary.query.search`'s `Source.AUTO` uses it to decide
-    whether the local database's results are good enough to serve alone,
-    or worth augmenting with a live search.
-
-    :param db: The local database to search.
-    :param query: Free-text query, matched against term, definition, and
-        topic, or, for a recognized natural-language phrasing, matched
-        against the term-like phrase extracted from it.
-    :param topic: Restrict results to this topic, or several
-        comma-separated topics (case-insensitive exact match by default).
-    :param start_letter: Restrict results to terms starting with this letter.
-    :param language: Restrict results to this glossary language edition
-        (e.g. `"en"`/`"es"`), matched exactly against each stored result's
-        `.language`. `None` (the default) doesn't filter by language.
-    :param limit: Maximum number of results to return. `None` for unlimited.
-    :param fuzzy: If `True`, tolerate minor misspellings/partial names in
-        `topic` by resolving it against locally stored topic names first.
-        Has no effect if `topic` is falsy.
-    :param exclude: URLs and/or term names to leave out of the results
-        entirely, e.g. ones already handled elsewhere in the same run. An
-        entry is treated as a URL if it starts with `"http://"`/`"https://"`,
-        and as a term name (matched case/whitespace-insensitively)
-        otherwise - see `slb_glossary.utils.split_exclude`. Filtered in
-        SQL before `limit` is applied, so an excluded match doesn't use up
-        part of `limit`'s budget the way a plain post-filter would. Note
-        that a very large `exclude` (thousands of entries) does cost one
-        SQL parameter each, so keep it to a reasonable, bounded size.
-        `None` (the default) excludes nothing.
-    :return: `(result, score)` pairs, best match first. `score` is in `[0.0, 1.0]`.
-    """
-    normalized_query = clean_query(query)
-    logger.debug(
-        "Local `search` (scored): query=%r (normalized=%r) topic=%r start_letter=%r "
-        "language=%r limit=%r fuzzy=%r exclude=%d entr(ies)",
-        query,
-        normalized_query,
-        topic,
-        start_letter,
-        language,
-        limit,
-        fuzzy,
-        len(exclude) if exclude else 0,
-    )
-    started_at = time.monotonic()
-    query_norm = _normalize(normalized_query)
-    weights = ", ".join(str(weight) for weight in FTS_COLUMN_WEIGHTS)
-    sql = f"""
-        SELECT terms.*,
-            (LOWER(terms.term) = ?) AS is_exact,
-            (? != '' AND LOWER(terms.term) LIKE ? || '%') AS is_prefix,
-            bm25(terms_fts, {weights}) AS bm25_score
-        FROM terms
-        JOIN terms_fts ON terms.rowid = terms_fts.rowid
-        WHERE terms_fts MATCH ?
-    """
-    params: list[typing.Any] = [
-        query_norm,
-        query_norm,
-        query_norm,
-        _to_fts_query(normalized_query),
-    ]
-
-    resolved_topic = await resolve_topic(db, topic, fuzzy, language=language)
-    if resolved_topic:
-        topics = [name.strip() for name in resolved_topic.split(",") if name.strip()]
-        if topics:
-            placeholders = ", ".join("?" for _ in topics)
-            sql += f" AND terms.topic COLLATE NOCASE IN ({placeholders})"
-            params.extend(topics)
-
-    if start_letter:
-        sql += " AND terms.term COLLATE NOCASE LIKE ?"
-        params.append(f"{start_letter}%")
-
-    if language:
-        sql += " AND terms.language = ?"
-        params.append(language)
-
-    sql = _apply_exclude(sql, params, exclude, url_column="terms.url", term_column="terms.term")
-
-    sql += " ORDER BY is_exact DESC, is_prefix DESC, bm25_score ASC"
-    if limit:
-        sql += " LIMIT ?"
-        params.append(limit)
-
-    async with db.connection.execute(sql, params) as cursor:
-        rows = await cursor.fetchall()
-
-    # Rows already come back best-first (exact, then prefix, then bm25); no
-    # further sorting needed, we only need to turn that order into `[0.0, 1.0]` scores.
-    others_bm25 = [
-        row["bm25_score"] for row in rows if not row["is_exact"] and not row["is_prefix"]
-    ]
-    worst = max(others_bm25, default=0.0)  # bm25 is negative-is-better; less negative is worse.
-    best = min(others_bm25, default=0.0)
-    spread = (worst - best) or 1.0
-
-    scored: list[tuple[SearchResult, float]] = []
-    for row in rows:
-        if row["is_exact"]:
-            score = constants.exact_match_score
-        elif row["is_prefix"]:
-            score = constants.prefix_match_score
-        else:
-            score = round(
-                constants.content_match_score_cap * (worst - row["bm25_score"]) / spread, 4
-            )
-        scored.append((_row_to_result(row), score))
-
-    elapsed = time.monotonic() - started_at
-    logger.debug(
-        "Local `search` (scored) for %r yielded %d candidate(s) in %.3fs (best score %.3f)",
-        normalized_query,
-        len(scored),
-        elapsed,
-        scored[0][1] if scored else 0.0,
-    )
-    return scored
-
-
-async def _search(
-    db: Database,
-    query: str,
-    *,
-    topic: str | None,
-    start_letter: str | None,
-    language: str | None,
-    limit: int | None,
-    fuzzy: bool,
-    scored: bool,
-    exclude: Collection[str] | None,
-) -> typing.AsyncIterator[typing.Any]:
-    results = await scored_search(
-        db,
-        query,
-        topic=topic,
-        start_letter=start_letter,
-        language=language,
-        limit=limit,
-        fuzzy=fuzzy,
-        exclude=exclude,
-    )
-    for result, score in results:
-        yield (result, score) if scored else result
-
-
 @typing.overload
-def search(
+async def search(
     db: Database,
     query: str,
     *,
@@ -650,13 +411,12 @@ def search(
     language: str | None = None,
     limit: int | None = 20,
     fuzzy: bool = False,
+    mode: SearchMode | str = "lexical",
     scored: typing.Literal[False] = False,
     exclude: Collection[str] | None = None,
-) -> typing.AsyncIterator[SearchResult]: ...
-
-
+) -> list[SearchResult]: ...
 @typing.overload
-def search(
+async def search(
     db: Database,
     query: str,
     *,
@@ -665,12 +425,13 @@ def search(
     language: str | None = None,
     limit: int | None = 20,
     fuzzy: bool = False,
+    mode: SearchMode | str = "lexical",
     scored: typing.Literal[True],
     exclude: Collection[str] | None = None,
-) -> typing.AsyncIterator[tuple[SearchResult, float]]: ...
+) -> list[tuple[SearchResult, float]]: ...
 
 
-def search(
+async def search(
     db: Database,
     query: str,
     *,
@@ -679,18 +440,36 @@ def search(
     language: str | None = None,
     limit: int | None = 20,
     fuzzy: bool = False,
+    mode: SearchMode | str = "lexical",
     scored: bool = False,
     exclude: Collection[str] | None = None,
-) -> typing.AsyncIterator[SearchResult] | typing.AsyncIterator[tuple[SearchResult, float]]:
+) -> list[SearchResult] | list[tuple[SearchResult, float]]:
     """
-    Full-text search the local database for `query`, best match first.
+    Search the local database for `query`, best match first.
 
-    Built on `scored_search`. Pass `scored=True` to get each result's
-    `[0.0, 1.0]` relevance score alongside it, as `(result, score)` pairs,
-    instead of calling `scored_search` separately.
+    The entrypoint for all three ranking strategies, chosen via `mode`:
+
+    - `"lexical"` (the default): `slb_glossary.local.lexical_search`,
+      bm25 full-text ranking. Needs nothing beyond the base install.
+    - `"semantic"`: `slb_glossary.local.vector_search`, embedding
+      similarity ranking. Needs the `semantic` extra installed, and
+      terms already embedded via `slb_glossary.local.embed_terms`.
+    - `"hybrid"`: `slb_glossary.local.hybrid_search`, both, fused. Same
+      extra/embedding requirement as `"semantic"`.
+
+    The default stays `"lexical"` rather than `"hybrid"` so that plain
+    `search(db, query)` keeps working on a database that's never had
+    `embed_terms` run on it, and without forcing the `semantic` extra on
+    every install. Pass `mode="hybrid"` explicitly once you've embedded
+    your terms; it generally ranks better than `"lexical"` alone.
+
+    Pass `scored=True` to get each result's `[0.0, 1.0]`-ish relevance
+    score alongside it, as `(result, score)` pairs, instead of calling
+    the mode's underlying function separately.
 
     Unlike `slb_glossary.live.search`, this never touches the live
-    glossary site; results are only as fresh as the last sync or import.
+    glossary site; results are only as fresh as the last sync, import,
+    or (for `"semantic"`/`"hybrid"`) `embed_terms` call.
 
     :param db: The local database to search.
     :param query: Free-text query, matched against term, definition, and topic.
@@ -703,25 +482,57 @@ def search(
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
         Has no effect if `topic` is falsy.
+    :param mode: Which ranking strategy to use: `"lexical"` (the
+        default), `"semantic"`, or `"hybrid"`, or the matching
+        `slb_glossary.local.types.SearchMode` member.
     :param scored: If `True`, yield `(result, score)` pairs instead of
-        bare results. See `scored_search`.
+        bare results.
     :param exclude: URLs and/or term names to leave out of the results
         entirely. See `slb_glossary.utils.split_exclude` for how an entry
         is told apart as a URL vs. a term name.
-    :yield: Matching `SearchResult`s, or `(SearchResult, float)` pairs if
+    :return: Matching `SearchResult`s, or `(SearchResult, float)` pairs if
         `scored=True`, best match first either way.
+    :raises DatabaseError: With `mode="semantic"`/`"hybrid"`, if
+        `sqlite-vec` isn't installed, or its extension can't be loaded.
+    :raises EmbeddingError: With `mode="semantic"`/`"hybrid"`, if
+        `model2vec` isn't installed, or the embedding model's output size
+        doesn't match `constants.embedding_dim`.
     """
-    return _search(
-        db,
-        query,
-        topic=topic,
-        start_letter=start_letter,
-        language=language,
-        limit=limit,
-        fuzzy=fuzzy,
-        scored=scored,
-        exclude=exclude,
-    )
+    search_mode = SearchMode(mode)
+    if search_mode is SearchMode.LEXICAL:
+        results = await lexical_search(
+            db,
+            query,
+            topic=topic,
+            start_letter=start_letter,
+            language=language,
+            limit=limit,
+            fuzzy=fuzzy,
+            exclude=exclude,
+        )
+    elif search_mode is SearchMode.SEMANTIC:
+        results = await vector_search(
+            db,
+            query,
+            topic=topic,
+            start_letter=start_letter,
+            language=language,
+            limit=limit,
+            fuzzy=fuzzy,
+            exclude=exclude,
+        )
+    else:
+        results = await hybrid_search(
+            db,
+            query,
+            topic=topic,
+            start_letter=start_letter,
+            language=language,
+            limit=limit,
+            fuzzy=fuzzy,
+            exclude=exclude,
+        )
+    return results if scored else [result for result, _ in results]
 
 
 async def get_terms_on(
@@ -733,9 +544,9 @@ async def get_terms_on(
     limit: int | None = None,
     fuzzy: bool = False,
     exclude: Collection[str] | None = None,
-) -> typing.AsyncIterator[SearchResult]:
+) -> list[SearchResult]:
     """
-    Yield every locally stored term filed under `topic`.
+    Return every locally stored term filed under `topic`.
 
     By default, `topic` must match a topic name already stored in the
     local database exactly (case-insensitively). Pass `fuzzy=True` to
@@ -759,7 +570,7 @@ async def get_terms_on(
         entirely, filtered in SQL before `limit` is applied. See
         `slb_glossary.utils.split_exclude` for how an entry is told apart
         as a URL vs. a term name.
-    :yield: `SearchResult`s filed under `topic`, ordered by term name.
+    :return: `SearchResult`s filed under `topic`, ordered by term name.
     """
     logger.debug(
         "Local `get_terms_on`: topic=%r start_letter=%r language=%r limit=%r fuzzy=%r "
@@ -775,11 +586,11 @@ async def get_terms_on(
     resolved_topic = await resolve_topic(db, topic, fuzzy, language=language)
     if not resolved_topic:
         logger.debug("No local topic resolved for %r, yielding nothing", topic)
-        return
+        return []
 
     topics = [name.strip() for name in resolved_topic.split(",") if name.strip()]
     if not topics:
-        return
+        return []
 
     placeholders = ", ".join("?" for _ in topics)
     sql = f"SELECT * FROM terms WHERE topic COLLATE NOCASE IN ({placeholders})"
@@ -800,15 +611,12 @@ async def get_terms_on(
     async with db.connection.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
 
-    count_yielded = 0
-    for row in rows:
-        count_yielded += 1
-        yield _row_to_result(row)
-
+    results = [_row_to_result(row) for row in rows]
     elapsed = time.monotonic() - started_at
     logger.debug(
-        "Local `get_terms_on(%r)` yielded %d term(s) in %.3fs", topic, count_yielded, elapsed
+        "Local `get_terms_on(%r)` returned %d term(s) in %.3fs", topic, len(results), elapsed
     )
+    return results
 
 
 @typing.overload
@@ -821,8 +629,6 @@ async def get_term(
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
 ) -> SearchResult | None: ...
-
-
 @typing.overload
 async def get_term(
     db: Database,
@@ -854,12 +660,12 @@ async def get_term(
         the alternatives search) to this glossary language edition (e.g.
         `"en"`/`"es"`). `None` (the default) doesn't filter by language.
     :param with_similar: If `True`, also search for up to `max_similar_terms`
-        other locally stored results, via `scored_search` on `term_or_url`
+        other locally stored results, via `lexical_search` on `term_or_url`
         itself, best match first, the exact match (if any) excluded. Each
-        paired with its own relevance score, the same shape `scored_search`
+        paired with its own relevance score, the same shape `lexical_search`
         itself returns. Handy for a "did you mean" prompt when the exact
         match turns out to be `None`, or just to see what else is nearby.
-    :param similar_pool_size: Candidates `scored_search` pulls before
+    :param similar_pool_size: Candidates `lexical_search` pulls before
         alternatives are drawn from them. Only used when `with_similar=True`.
         `None` (the default) uses
         `constants.similar_terms_pool_size`,
@@ -896,7 +702,10 @@ async def get_term(
     resolved_max_similar = (
         max_similar_terms if max_similar_terms is not None else constants.max_similar_terms
     )
-    scored = await scored_search(db, term_or_url, language=language, limit=resolved_pool_size)
+    # Imported here, not at module level: see the comment in `_search`.
+    from slb_glossary.local.lexical import lexical_search
+
+    scored = await lexical_search(db, term_or_url, language=language, limit=resolved_pool_size)
     similar = [
         (candidate, score)
         for candidate, score in scored
@@ -987,9 +796,9 @@ async def get_terms_urls(
     limit: int | None = None,
     fuzzy: bool = False,
     exclude: Collection[str] | None = None,
-) -> typing.AsyncIterator[str]:
+) -> list[str]:
     """
-    Yield locally stored term URLs matching the given filters.
+    Return locally stored term URLs matching the given filters.
 
     :param db: The local database to read from.
     :param query: If given, restrict to (and rank by) an FTS5 match on
@@ -1006,7 +815,7 @@ async def get_terms_urls(
         entirely, filtered before `limit` is applied. See
         `slb_glossary.utils.split_exclude` for how an entry is told apart
         as a URL vs. a term name.
-    :yield: Matching term URLs.
+    :return: Matching term URLs.
     """
     logger.debug(
         "Local `get_terms_urls`: query=%r topic=%r start_letter=%r language=%r limit=%r "
@@ -1019,30 +828,29 @@ async def get_terms_urls(
         len(exclude) if exclude else 0,
     )
     started_at = time.monotonic()
-    yielded = 0
 
     if query:
-        async for result in search(
-            db,
-            query,
-            topic=topic,
-            start_letter=start_letter,
-            language=language,
-            limit=limit,
-            fuzzy=fuzzy,
-            exclude=exclude,
-        ):
-            if url := result.url:
-                yielded += 1
-                yield url
-
+        results = [
+            result.url
+            for result in await search(
+                db,
+                query,
+                topic=topic,
+                start_letter=start_letter,
+                language=language,
+                limit=limit,
+                fuzzy=fuzzy,
+                exclude=exclude,
+            )
+            if result.url
+        ]
         logger.debug(
-            "Local `get_terms_urls(query=%r)` yielded %d url(s) in %.3fs",
+            "Local `get_terms_urls(query=%r)` returned %d url(s) in %.3fs",
             query,
-            yielded,
+            len(results),
             time.monotonic() - started_at,
         )
-        return
+        return results
 
     resolved_topic = await resolve_topic(db, topic, fuzzy, language=language)
     sql = "SELECT url FROM terms WHERE 1=1"
@@ -1071,14 +879,14 @@ async def get_terms_urls(
 
     async with db.connection.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
-    for row in rows:
-        if url := row["url"]:
-            yielded += 1
-            yield url
 
+    results = [row["url"] for row in rows if row["url"]]
     logger.debug(
-        "Local `get_terms_urls` yielded %d url(s) in %.3fs", yielded, time.monotonic() - started_at
+        "Local `get_terms_urls` returned %d url(s) in %.3fs",
+        len(results),
+        time.monotonic() - started_at,
     )
+    return results
 
 
 async def get_topics(db: Database, *, language: str | None = None) -> dict[str, int]:

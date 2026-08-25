@@ -274,6 +274,81 @@ class Constants:
     See `slb_glossary.relevance`.
     """
 
+    embedding_model = Constant(
+        "minishlab/potion-retrieval-32M",
+        env_var="SLB_GLOSSARY_EMBEDDING_MODEL",
+    )
+    """
+    Hugging Face repo id of the `model2vec` model used to embed terms for
+    semantic search (`slb_glossary.local.embed_terms`/`vector_search`/
+    `hybrid_search`). Downloaded once and cached locally on first use;
+    no network call is made per query.
+
+    Changing this requires re-embedding every locally stored term
+    (`embed_terms(db, only_missing=False)`), and, if the new model's
+    output size differs, also updating `embedding_dim` and clearing the
+    old vectors (`slb_glossary.local.delete_embeddings`) first.
+    """
+
+    embedding_dim = Constant(
+        512,
+        env_var="SLB_GLOSSARY_EMBEDDING_DIM",
+        validator=lambda v: v > 0,
+    )
+    """
+    Output size of `embedding_model`'s vectors. Must match that model
+    exactly, since the local vector table is created with this fixed
+    dimension. Only change this alongside `embedding_model`.
+    """
+
+    rrf_k = Constant(
+        60,
+        env_var="SLB_GLOSSARY_RRF_K",
+        validator=lambda v: v > 0,
+    )
+    """
+    The `k` constant in reciprocal rank fusion (`weight / (k + rank)`),
+    used by `slb_glossary.local.hybrid_search` to combine lexical and
+    semantic result rankings. 60 is the standard default from the
+    original RRF paper, and what most hybrid search implementations
+    ship with. Lower weighs top ranks more heavily; higher flattens the
+    difference between them.
+    """
+
+    lexical_weight = Constant(
+        1.0,
+        env_var="SLB_GLOSSARY_LEXICAL_WEIGHT",
+        validator=lambda v: v >= 0.0,
+    )
+    """Weight given to the bm25 ranking in `slb_glossary.local.hybrid_search`'s RRF combination."""
+
+    semantic_weight = Constant(
+        1.0,
+        env_var="SLB_GLOSSARY_SEMANTIC_WEIGHT",
+        validator=lambda v: v >= 0.0,
+    )
+    """Weight given to the vector ranking in `slb_glossary.local.hybrid_search`'s RRF combination."""
+
+    hybrid_candidate_pool = Constant(
+        50,
+        env_var="SLB_GLOSSARY_HYBRID_CANDIDATE_POOL",
+        validator=lambda v: v >= 1,
+    )
+    """
+    Candidates pulled from each of the lexical and semantic rankers
+    before `slb_glossary.local.hybrid_search` fuses and truncates them
+    to the caller's actual `limit`. Higher lets a result ranked outside
+    the top few by one ranker still surface if the other ranks it
+    highly, at the cost of more work per search.
+    """
+
+    embed_batch_size = Constant(
+        64,
+        env_var="SLB_GLOSSARY_EMBED_BATCH_SIZE",
+        validator=lambda v: v >= 1,
+    )
+    """Terms embedded per model call in `slb_glossary.local.embed_terms`."""
+
 
 constants = Constants()
 """

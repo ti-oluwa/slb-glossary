@@ -2,6 +2,7 @@
 
 import logging
 
+from slb_glossary.local import vectors
 from slb_glossary.local.types import Database, Metadata
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ async def flush(db: Database) -> None:
 
     :param db: The local database to clear.
     """
-    await db.connection.execute("DELETE FROM vectors")
+    await vectors.clear(db)
     await db.connection.execute("DELETE FROM terms")
     await db.connection.commit()
     await db.connection.execute("VACUUM")
@@ -37,8 +38,7 @@ async def reset(db: Database) -> None:
     """
     Flush the local database and reset its `metadata.json` (sync history) to defaults.
 
-    Includes everything `flush` does, including the `-wal`/`-shm`
-    checkpoint/truncate.
+    Includes everything `flush` does, including the `-wal`/`-shm` checkpoint/truncate.
 
     :param db: The local database to reset.
     """

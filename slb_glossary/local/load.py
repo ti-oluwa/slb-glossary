@@ -1,6 +1,5 @@
-"""Import user-provided CSV/JSON/XLSX data into the local database (and, optionally, its vector store)."""
+"""Import externally provided CSV/JSON/XLSX data into the local database."""
 
-import json
 import logging
 import pathlib
 import typing
@@ -9,7 +8,6 @@ from slb_glossary.constants import constants
 from slb_glossary.errors import DatabaseError
 from slb_glossary.local.api import upsert_results
 from slb_glossary.local.types import Database
-from slb_glossary.local.vectors import upsert_vector
 from slb_glossary.readers import READERS, read_rows
 from slb_glossary.types import SearchResult
 
@@ -68,37 +66,6 @@ def _record_to_result(
     )
 
 
-def _parse_embedding(raw: typing.Any) -> list[float] | None:
-    """Parse an embedding cell/value into a list of floats, or `None` if empty/unparsable."""
-    if raw is None or raw == "":
-        return None
-    if isinstance(raw, list):
-        try:
-            return [float(x) for x in raw]
-        except (TypeError, ValueError):
-            return None
-
-    text = str(raw).strip()
-    if not text:
-        return None
-    if text.startswith("["):
-        try:
-            return [float(x) for x in json.loads(text)]
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return None
-
-    for delimiter in (",", ";"):
-        if delimiter in text:
-            parts = text.split(delimiter)
-            break
-    else:
-        parts = text.split()
-    try:
-        return [float(part.strip()) for part in parts if part.strip()]
-    except ValueError:
-        return None
-
-
 async def load_file(
     db: Database,
     path: str | pathlib.Path,
@@ -111,8 +78,6 @@ async def load_file(
     grammatical_label_field: str | None = "grammatical_label",
     language_field: str | None = "language",
     default_language: str = "en",
-    embedding_field: str | None = None,
-    embedding_model: str = "custom",
     source: str = "user",
     batch_size: int | None = None,
 ) -> int:
@@ -146,13 +111,6 @@ async def load_file(
         back to `default_language`.
     :param default_language: Language stored for a row with no usable
         `language_field` value.
-    :param embedding_field: Column/key holding a precomputed embedding
-        vector for each row, either a JSON array, or a delimiter-separated
-        (comma, semicolon, or whitespace) string of numbers. If given, a
-        vector is stored for every row that has one (see
-        `slb_glossary.local.vectors.upsert_vector`).
-    :param embedding_model: Model label to store `embedding_field` vectors
-        under. Only meaningful when `embedding_field` is given.
     :param source: Provenance tag stored on every imported row (see
         `slb_glossary.local.api.upsert_results`). Defaults to `"user"`
         so imported data can be told apart from live `"glossary"` rows.
@@ -163,7 +121,9 @@ async def load_file(
         something interrupts the import before the next flush. `None`
         (the default) uses `constants.import_batch_size`, resolved fresh
         on this call.
-    :return: Number of rows imported.
+    :return: Number of rows imported. Run `slb_glossary.local.embed_terms`
+        afterward to make imported terms searchable via
+        `slb_glossary.local.vector_search`/`hybrid_search`.
     :raises DatabaseError: If `format` (or `path`'s extension) is
         unsupported, `path` isn't a well-formed file of that format, or
         `.xlsx` support isn't installed.
@@ -205,11 +165,9 @@ async def load_file(
     try:
         while True:
             # Isolate errors actually raised while *reading* the next row
-            # (a malformed CSV line, a JSON decode error, a missing
-            # `openpyxl`) from errors raised while *processing* one
-            # already read (e.g. a database error from `upsert_vector`),
-            # so only the former gets rewrapped as a `DatabaseError` about
-            # the source file.
+            # from errors raised while *processing* one already read, so
+            # only the error that occurred while processing gets rewrapped as a
+            # `DatabaseError` about the source file.
             try:
                 row = next(row_iter)
             except StopIteration:
@@ -234,11 +192,6 @@ async def load_file(
             if result is None or not result.url:
                 continue
             buffer.append(result)
-
-            if embedding_field:
-                parsed_embedding = _parse_embedding(_get_field(row, embedding_field))
-                if parsed_embedding:
-                    await upsert_vector(db, result.url, parsed_embedding, model=embedding_model)
 
             if len(buffer) >= resolved_batch_size:
                 await _flush()

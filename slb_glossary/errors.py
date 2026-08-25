@@ -38,6 +38,10 @@ class DatabaseError(SLBGlossaryError):
     """Raised when `slb_glossary.local` fails to open, query, or write the local database."""
 
 
+class EmbeddingError(SLBGlossaryError):
+    """Raised when `slb_glossary.local` can't compute a text embedding for semantic search."""
+
+
 class QueryError(SLBGlossaryError):
     """Raised when `slb_glossary.query` can't satisfy a lookup with the source(s) it was given."""
 

@@ -21,7 +21,7 @@ from slb_glossary.cli.source_options import (
 )
 from slb_glossary.cli.tui import launch_tui
 from slb_glossary.constants import constants
-from slb_glossary.local import scored_search as scored_search
+from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
 from slb_glossary.query import LookupResult, Source
 from slb_glossary.types import SearchResult
@@ -105,13 +105,14 @@ async def auto_search_stream(
                 yield lookup  # noqa: ASYNC119
         return
 
-    scored = await scored_search(
+    scored = await local.search(
         db,
         query,
         topic=params["topic"],
         start_letter=params["start_letter"],
         limit=limit,
         fuzzy=params["fuzzy"],
+        scored=True,
     )
     best_score = scored[0][1] if scored else 0.0
     if scored and best_score >= relevance_threshold:

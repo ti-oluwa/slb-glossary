@@ -34,7 +34,8 @@ xlsx = ["openpyxl>=3.1"]
 tui = ["trogon>=0.6.0", "textual>=0.58"]
 config = ["tomlkit>=0.12", "pyyaml>=6.0"]
 mcp = ["fastmcp>=2.9,<4", "typing-extensions>=4.6; python_version < '3.11'"]
-all = ["slb-glossary[xlsx,tui,config,mcp]"]
+semantic = ["model2vec>=0.4,<1", "sqlite-vec>=0.1.3,<1"]
+all = ["slb-glossary[xlsx,tui,config,mcp,semantic]"]
 
 [project.scripts]
 slb-glossary = "slb_glossary.cli.main:main"
@@ -104,5 +105,7 @@ module = [
     "fastmcp.*",
     "tomlkit.*",
     "yaml.*",
+    "model2vec.*",
+    "sqlite_vec.*",
 ]
 ignore_missing_imports = true

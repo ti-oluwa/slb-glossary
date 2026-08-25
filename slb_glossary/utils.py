@@ -236,6 +236,11 @@ def split_exclude(
     return frozenset(urls), frozenset(names)
 
 
+def normalize_text(text: str) -> str:
+    """Lowercase `text` and collapse its whitespace."""
+    return " ".join(text.strip().lower().split())
+
+
 def as_async_iterator(
     results: typing.Iterable[T] | typing.AsyncIterable[T],
 ) -> typing.AsyncIterator[T]:

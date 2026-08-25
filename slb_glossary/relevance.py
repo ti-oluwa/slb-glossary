@@ -1,7 +1,7 @@
 """
 Shared relevance-scoring building blocks for search results, local or live.
 
-`slb_glossary.local.scored_search` computes its scores in SQL (bm25 plus
+`slb_glossary.local.lexical_search` computes its scores in SQL (bm25 plus
 an exact/prefix name-match tier). A live search has no database to run
 that kind of query against, so `slb_glossary.query` scores live results
 here instead, using the same tiers and the same `constants.content_match_score_cap`
@@ -10,13 +10,9 @@ so a local score and a live score mean roughly the same thing to a caller compar
 
 from slb_glossary.constants import constants
 from slb_glossary.types import SearchResult
+from slb_glossary.utils import normalize_text
 
 __all__ = ["score_name_match", "score_content_overlap", "score_result"]
-
-
-def _normalize(text: str) -> str:
-    """Lowercase `text` and collapse its whitespace, for name-match comparisons."""
-    return " ".join(text.strip().lower().split())
 
 
 def score_name_match(query: str, term: str) -> float | None:
@@ -30,8 +26,8 @@ def score_name_match(query: str, term: str) -> float | None:
         tells the caller to fall back to `score_content_overlap`, or an
         equivalent bm25 pass.
     """
-    query_norm = _normalize(query)
-    term_norm = _normalize(term)
+    query_norm = normalize_text(query)
+    term_norm = normalize_text(term)
     if not query_norm or not term_norm:
         return None
     if term_norm == query_norm:
@@ -59,11 +55,11 @@ def score_content_overlap(query: str, *texts: str) -> float:
         itself. Use `score_name_match` for that.
     :return: A score in `[0.0, constants.content_match_score_cap]`.
     """
-    query_tokens = _normalize(query).split()
+    query_tokens = normalize_text(query).split()
     if not query_tokens:
         return 0.0
 
-    haystack = " ".join(_normalize(text) for text in texts if text)
+    haystack = " ".join(normalize_text(text) for text in texts if text)
     if not haystack:
         return 0.0
 
