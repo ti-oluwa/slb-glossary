@@ -266,15 +266,12 @@ class Constants:
         validator=lambda v: 0.0 <= v <= 1.0,
     )
     """
-    Upper bound on a result's score when it only matched by content
-    (definition/topic text), never the term name. 
-    
-    Kept below `relevance_threshold` (0.45 by default), so a content-only 
-    match is never, by default, mistaken for a confident name match. 
-    Without this cap, a query that happens to line up well with one term's 
-    definition (but isn't actually about that term) could otherwise look confident
-    enough to end a search right there, on the strength of word overlap alone. 
-    See `slb_glossary.relevance`.
+    Upper bound `slb_glossary.local.lexical_search` gives a result that
+    only matched by content (definition/topic text), never the term
+    name, kept below `relevance_threshold` so that kind of match never
+    reads as confident as an actual name match. Only applies to lexical
+    scoring; `vector_search`/`hybrid_search` scores aren't capped by
+    this. See `slb_glossary.relevance`.
     """
 
     embedding_model = Constant(
@@ -282,15 +279,15 @@ class Constants:
         env_var="SLB_GLOSSARY_EMBEDDING_MODEL",
     )
     """
-    Hugging Face repo id of the `model2vec` model used to embed terms for
+    Hugging Face repo id of the `model2vec` model that embeds terms for
     semantic search (`slb_glossary.local.embed_terms`/`vector_search`/
-    `hybrid_search`). Downloaded once and cached locally on first use;
-    no network call is made per query.
+    `hybrid_search`). Downloaded once, then cached locally; no network
+    call happens per query.
 
-    Changing this requires re-embedding every locally stored term
-    (`embed_terms(db, only_missing=False)`), and, if the new model's
-    output size differs, also updating `embedding_dim` and clearing the
-    old vectors (`slb_glossary.local.delete_embeddings`) first.
+    Changing this needs a re-embed of every locally stored term
+    (`embed_terms(db, only_missing=False)`), and, if the model's output
+    size differs, `embedding_dim` updated to match and every old vector
+    cleared first (`slb_glossary.local.delete_embeddings`).
     """
 
     embedding_dim = Constant(
@@ -298,11 +295,7 @@ class Constants:
         env_var="SLB_GLOSSARY_EMBEDDING_DIM",
         validator=lambda v: v > 0,
     )
-    """
-    Output size of `embedding_model`'s vectors. Must match that model
-    exactly, since the local vector table is created with this fixed
-    dimension. Only change this alongside `embedding_model`.
-    """
+    """Output size of `embedding_model`'s vectors. Keep this matched to that model exactly."""
 
     rrf_k = Constant(
         60,
@@ -312,10 +305,9 @@ class Constants:
     """
     The `k` constant in reciprocal rank fusion (`weight / (k + rank)`),
     used by `slb_glossary.local.hybrid_search` to combine lexical and
-    semantic result rankings. 60 is the standard default from the
-    original RRF paper, and what most hybrid search implementations
-    ship with. Lower weighs top ranks more heavily; higher flattens the
-    difference between them.
+    semantic result rankings. 60 is the standard default most hybrid
+    search implementations use. Lower weighs top ranks more heavily;
+    higher flattens the difference between them.
     """
 
     lexical_weight = Constant(
@@ -345,6 +337,20 @@ class Constants:
     highly, at the cost of more work per search.
     """
 
+    hybrid_overfetch_factor = Constant(
+        4,
+        env_var="SLB_GLOSSARY_HYBRID_OVERFETCH_FACTOR",
+        validator=lambda v: v >= 1,
+    )
+    """
+    Multiplier `slb_glossary.local.vector_search` applies to its nearest-
+    neighbor request before filtering by topic/language/exclude, since
+    the vector database applies its own result cap before those filters
+    can run, and asking for exactly as many neighbors as needed can come
+    up short once they're applied. Raise this if a `vector_search` result
+    that should be findable is going missing under a topic/language filter.
+    """
+
     embed_batch_size = Constant(
         64,
         env_var="SLB_GLOSSARY_EMBED_BATCH_SIZE",
@@ -358,16 +364,15 @@ class Constants:
         validator=lambda v: v in SEARCH_MODES,
     )
     """
-    Default `mode` for `slb_glossary.local.search`/the `search` CLI command
-    when the caller doesn't pass one explicitly. One of `"lexical"` (the
-    default), `"semantic"`, or `"hybrid"`; see
+    Default `mode` for `slb_glossary.local.search`/the `search` CLI
+    command when the caller doesn't pass one explicitly. One of
+    `"lexical"` (the default), `"semantic"`, or `"hybrid"`; see
     `slb_glossary.local.types.SearchMode`.
 
-    Stays `"lexical"` by default so a bare `search(db, query)` (or the CLI
-    with no `--mode`) keeps working on a database that's never had
-    `slb_glossary.local.embed_terms` run on it, without forcing the
-    `semantic` extra on every install. Set this to `"hybrid"` once your
-    terms are embedded; it generally ranks better than `"lexical"` alone.
+    `"lexical"` needs nothing beyond the base install. `"semantic"`/`"hybrid"`
+    need the `semantic` extra installed and terms already embedded
+    (`slb_glossary.local.embed_terms`); set this to one of those once a
+    database is embedded, it generally ranks better.
     """
 
 

@@ -32,15 +32,6 @@ __all__ = ["embed_terms", "delete_embeddings", "vector_search"]
 
 VECTOR_TABLE = "terms_vec"
 
-OVERFETCH_FACTOR = 4
-"""
-`vec0` applies its `k` nearest-neighbor cutoff before the SQL join below
-can filter by topic/language/exclude, so asking it for exactly as many
-neighbors as the caller wants can come up short once those filters are
-applied. Asking for this many times more compensates, at the cost of a
-slightly larger scan.
-"""
-
 
 async def load_extension(db: Database) -> typing.Any:
     """
@@ -320,7 +311,7 @@ async def vector_search(
     resolved_topic = await resolve_topic(db, topic, fuzzy, language=language)
 
     pool = limit if limit else constants.hybrid_candidate_pool
-    k = pool * OVERFETCH_FACTOR
+    k = pool * constants.hybrid_overfetch_factor
 
     sql = f"""
         WITH matches AS (

@@ -99,11 +99,13 @@ async def hybrid_search(
         Raise this if a result that should be findable by one ranker, but
         ranks outside its top few there, is going missing from the fused
         results; lower it to search faster at the cost of that.
-    :return: `(result, score)` pairs, best match first. `score` is on the
-        same `[0.0, 1.0]` scale `lexical_search` uses: `1.0`/`0.9` for the
-        exact/prefix name tier, everything else is scaled below
-        `constants.relevance_threshold` via `constants.content_match_score_cap`,
-        the same way a bm25-only match is capped there.
+    :return: `(result, score)` pairs, best match first. `score` is `1.0`/`0.9`
+        for the exact/prefix name tier, same as `lexical_search`; everything
+        else is the fused ranking, min-max normalized against its own
+        result set into `[0.0, 1.0]` - not capped the way `lexical_search`'s
+        own bm25-only score is, since a fused rank already reflects a
+        genuine signal from two independent rankers rather than word
+        overlap alone.
     :raises DatabaseError: If `sqlite-vec` isn't installed, or its
         extension can't be loaded.
     :raises EmbeddingError: If `model2vec` isn't installed, or the
@@ -170,7 +172,7 @@ async def hybrid_search(
     fused_tier: list[tuple[SearchResult, float]] = [
         (
             results_by_url[url],
-            round(constants.content_match_score_cap * (fused_scores[url] - worst) / spread, 4),
+            round((fused_scores[url] - worst) / spread, 4),
         )
         for url in ranked_urls
         if url in results_by_url
