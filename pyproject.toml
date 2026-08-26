@@ -68,6 +68,7 @@ select = [
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
     "ASYNC", # flake8-async
+    "RUF"
 ]
 ignore = ["E501"]
 

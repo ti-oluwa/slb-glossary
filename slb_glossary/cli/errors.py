@@ -24,7 +24,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-__all__ = ["cli_command", "EXIT_CODES"]
+__all__ = ["EXIT_CODES", "cli_command"]
 
 
 P = typing.ParamSpec("P")

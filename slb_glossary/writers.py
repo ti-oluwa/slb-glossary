@@ -21,14 +21,14 @@ __all__ = [
     "field_names",
     "humanize_field",
     "records_to_dicts",
+    "save",
+    "supported_formats",
     "write_csv",
     "write_json",
     "write_jsonl",
     "write_txt",
     "write_xlsx",
     "writer",
-    "save",
-    "supported_formats",
 ]
 
 
@@ -227,7 +227,7 @@ async def write_xlsx(records: Sequence[RecordLike], destination: pathlib.Path) -
         `uv add openpyxl` or `pip install openpyxl`.
     """
     try:
-        import openpyxl  # noqa: F401
+        import openpyxl
     except ImportError as exc:
         raise ImportError(
             '"openpyxl" is required to save .xlsx files. '

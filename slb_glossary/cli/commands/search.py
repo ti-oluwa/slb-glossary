@@ -102,7 +102,7 @@ async def auto_search_stream(
                 concurrency=concurrency,
                 **persist_kwargs(params),
             ):
-                yield lookup  # noqa: ASYNC119
+                yield lookup
         return
 
     scored = await local.search(
@@ -136,7 +136,7 @@ async def auto_search_stream(
             relevance_threshold=relevance_threshold,
             **persist_kwargs(params),
         ):
-            yield lookup  # noqa: ASYNC119
+            yield lookup
 
 
 @click.command("search")

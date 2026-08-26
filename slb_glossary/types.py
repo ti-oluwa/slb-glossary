@@ -6,13 +6,13 @@ import typing
 from collections.abc import AsyncIterable, Iterable, Sequence
 
 __all__ = [
-    "RecordLike",
-    "materialize_records",
     "Language",
+    "RecordLike",
     "RelatedTerm",
-    "SearchResult",
     "SearchMode",
+    "SearchResult",
     "Updatable",
+    "materialize_records",
 ]
 
 

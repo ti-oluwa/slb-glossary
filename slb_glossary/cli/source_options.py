@@ -27,17 +27,17 @@ from slb_glossary.paths import get_data_dir
 from slb_glossary.query import LookupResult, Source
 
 __all__ = [
-    "source_options",
-    "resolve_source",
     "database_option",
-    "resolve_db_path",
+    "get_loaded_config",
+    "live_session",
     "local_storage_enabled",
     "open_configured_db",
-    "live_session",
-    "resolve_lookup",
-    "resolve_stream",
-    "get_loaded_config",
     "persist_kwargs",
+    "resolve_db_path",
+    "resolve_lookup",
+    "resolve_source",
+    "resolve_stream",
+    "source_options",
 ]
 
 
@@ -361,7 +361,7 @@ async def resolve_stream(
                 # anything. Safe because every caller consumes `resolve_stream`
                 # through `output_results`, which wraps it in `contextlib.aclosing`
                 # so the session is still closed promptly on an early break/cancel.
-                yield item  # noqa: ASYNC119
+                yield item
         return
 
     # Source.AUTO: a local hit never opens a browser.
@@ -374,4 +374,4 @@ async def resolve_stream(
 
     async with live_session(ctx, params) as session:
         async for item in live_call(session):
-            yield item  # noqa: ASYNC119
+            yield item

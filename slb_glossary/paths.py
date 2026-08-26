@@ -16,15 +16,15 @@ import pathlib
 import platformdirs
 
 __all__ = [
-    "APP_NAME",
     "APP_AUTHOR",
-    "DATA_DIR_ENV_VAR",
+    "APP_NAME",
     "CONFIG_DIR_ENV_VAR",
-    "get_data_dir",
-    "get_config_dir",
+    "DATA_DIR_ENV_VAR",
     "default_config_path",
     "default_db_path",
     "default_metadata_path",
+    "get_config_dir",
+    "get_data_dir",
 ]
 
 APP_NAME = "slb-glossary"

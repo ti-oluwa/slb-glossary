@@ -28,11 +28,11 @@ else:
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "BrowserSessionOptions",
     "Config",
     "DatabaseOptions",
     "OutputOptions",
     "RetryOptions",
-    "BrowserSessionOptions",
 ]
 
 
@@ -322,7 +322,7 @@ def _read_config_file(path: pathlib.Path) -> dict[str, typing.Any]:
 
     if suffix == "toml":
         try:
-            import tomlkit  # noqa: F401
+            import tomlkit
         except ImportError as exc:
             raise ConfigError(
                 "Reading a .toml config requires the 'tomlkit' package. "
@@ -332,7 +332,7 @@ def _read_config_file(path: pathlib.Path) -> dict[str, typing.Any]:
 
     if suffix in ("yaml", "yml"):
         try:
-            import yaml  # noqa: F401
+            import yaml
         except ImportError as exc:
             raise ConfigError(
                 "Reading a .yaml config requires the 'pyyaml' package. "
@@ -387,7 +387,7 @@ def _write_config_file(data: dict[str, typing.Any], path: pathlib.Path, format: 
 
     if format == "toml":
         try:
-            import tomlkit  # noqa: F401
+            import tomlkit
         except ImportError as exc:
             raise ConfigError(
                 "Writing a .toml config requires the 'tomlkit' package. "
@@ -399,7 +399,7 @@ def _write_config_file(data: dict[str, typing.Any], path: pathlib.Path, format: 
 
     if format in ("yaml", "yml"):
         try:
-            import yaml  # noqa: F401
+            import yaml
         except ImportError as exc:
             raise ConfigError(
                 "Writing a .yaml config requires the 'pyyaml' package. "

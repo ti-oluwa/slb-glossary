@@ -22,12 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
+    "browser_session",
     "close_session",
-    "session",
-    "session_from_config",
     "open_session",
     "open_session_from_config",
-    "browser_session",
+    "session",
+    "session_from_config",
 ]
 
 

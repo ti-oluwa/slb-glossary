@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "ensure_initialized",
-    "get_terms_on",
     "get_results_from_url",
     "get_results_from_urls",
+    "get_terms_on",
     "get_terms_urls",
     "search",
 ]

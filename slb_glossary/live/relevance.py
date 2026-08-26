@@ -7,7 +7,7 @@ from slb_glossary.embeddings import build_embed_text, cosine_similarity, embed
 from slb_glossary.types import SearchMode, SearchResult
 from slb_glossary.utils import normalize_text
 
-__all__ = ["score_name_match", "score_content_overlap", "score_result"]
+__all__ = ["score_content_overlap", "score_name_match", "score_result"]
 
 if typing.TYPE_CHECKING:
     import numpy as np

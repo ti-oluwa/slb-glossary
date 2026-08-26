@@ -45,19 +45,19 @@ from rich.logging import RichHandler
 from slb_glossary.constants import constants
 
 __all__ = [
-    "LogSink",
     "ConsoleSink",
-    "StdoutSink",
-    "StderrSink",
     "FileSink",
-    "SinkHandler",
+    "LogSink",
     "SinkFilter",
+    "SinkHandler",
     "SinkSpec",
     "SinksSpec",
+    "StderrSink",
+    "StdoutSink",
+    "configure_logging",
     "import_sink",
     "resolve_sink",
     "resolve_sinks",
-    "configure_logging",
     "set_log_level",
 ]
 

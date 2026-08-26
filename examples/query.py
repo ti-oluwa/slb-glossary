@@ -16,6 +16,8 @@ async def main() -> None:
         # A repeat call for the same query is now served from `db` alone.
         async for result in slb.search("clathrates", db=db):
             print("(cached)", result.value.term)
+        
+        print(await slb.query.get_random_term(db=db))
 
 
 if __name__ == "__main__":

@@ -9,12 +9,12 @@ from slb_glossary.mcp.auth import Principal
 from slb_glossary.query import Source
 
 __all__ = [
-    "NamedComponent",
-    "ToolRunContext",
-    "BeforeToolHook",
     "AfterToolHook",
-    "ToolErrorHook",
+    "BeforeToolHook",
     "LifecycleHook",
+    "NamedComponent",
+    "ToolErrorHook",
+    "ToolRunContext",
 ]
 
 

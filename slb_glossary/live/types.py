@@ -16,10 +16,10 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    "ResourceType",
     "BrowserType",
     "PageHandle",
     "Pages",
+    "ResourceType",
     "Session",
 ]
 

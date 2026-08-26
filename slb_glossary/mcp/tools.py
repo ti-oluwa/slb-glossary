@@ -14,19 +14,19 @@ from slb_glossary.query import LookupResult, Source
 from slb_glossary.types import SearchResult
 
 __all__ = [
-    "ToolSpec",
-    "ProgressReporter",
-    "SearchArgs",
+    "DEFAULT_INSTRUCTIONS",
+    "CompareArgs",
     "GetTermArgs",
+    "ProgressReporter",
+    "RandomTermArgs",
+    "RelatedTermsArgs",
+    "SearchArgs",
+    "SyncArgs",
     "TermsOnArgs",
     "TermsUrlsArgs",
+    "ToolSpec",
     "TopicsArgs",
-    "RelatedTermsArgs",
-    "RandomTermArgs",
-    "CompareArgs",
-    "SyncArgs",
     "build_tool_specs",
-    "DEFAULT_INSTRUCTIONS",
 ]
 
 ProgressReporter = Callable[[int, int | None], Awaitable[None]]

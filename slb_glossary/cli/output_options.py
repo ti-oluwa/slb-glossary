@@ -168,9 +168,9 @@ async def output_results(
         (the table as extra columns, JSON as extra keys). `save_paths`
         output is unaffected either way, see `save_paths` above.
     :return: The total number of results collected.
-    :raises slb_glossary.UnsupportedFormatError: If a save path (or
+    :raises UnsupportedFormatError: If a save path (or
         `format`) resolves to a file format with no registered writer.
-    :raises slb_glossary.WriterError: If writing to a save path fails.
+    :raises WriterError: If writing to a save path fails.
     """
     started_at = time.monotonic()
     async with contextlib.aclosing(results) as results:  # type: ignore[type-var]

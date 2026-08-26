@@ -100,7 +100,7 @@ def compare(
                 )
                 if lookup.value is not None:
                     sources_seen.add(lookup.source.value)
-                    yield lookup.value  # noqa: ASYNC119
+                    yield lookup.value
 
                 elif not params["quiet"]:
                     click.secho(f"Not found: {term!r}", fg="yellow", err=True)

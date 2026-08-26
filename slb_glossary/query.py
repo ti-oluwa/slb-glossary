@@ -62,6 +62,7 @@ from collections.abc import Collection
 
 from slb_glossary import live
 from slb_glossary.constants import constants
+from slb_glossary.embeddings import embed
 from slb_glossary.errors import QueryError
 from slb_glossary.live.browser import Session
 from slb_glossary.local import api as local
@@ -72,17 +73,17 @@ from slb_glossary.types import RelatedTerm, SearchMode, SearchResult
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "Source",
     "LookupResult",
     "SimilarResult",
-    "search",
+    "Source",
+    "compare",
+    "get_random_term",
+    "get_term",
     "get_terms_on",
     "get_terms_urls",
     "get_topics",
-    "get_term",
     "related_terms",
-    "get_random_term",
-    "compare",
+    "search",
 ]
 
 
@@ -204,7 +205,7 @@ def validate_language(session: Session | None, language: str | None) -> None:
     :param session: The live session about to be used, or `None` if this
         call has none (e.g. a local-only read).
     :param language: The language requested for this call, if any.
-    :raises slb_glossary.QueryError: If `session` and `language` are both
+    :raises QueryError: If `session` and `language` are both
         given and don't match.
     """
     if session is None or language is None:
@@ -232,7 +233,7 @@ def _build_live_scorer(query: str, mode: SearchMode) -> typing.Callable[[SearchR
     :param query: The free-text query results are being scored against.
     :param mode: `SearchMode.LEXICAL` or `SearchMode.SEMANTIC`.
     :return: A function taking one `SearchResult` and returning its score.
-    :raises slb_glossary.QueryError: If `mode` is `SearchMode.HYBRID`.
+    :raises QueryError: If `mode` is `SearchMode.HYBRID`.
     :raises EmbeddingError: With `mode=SearchMode.SEMANTIC`, if the
         `semantic` extra isn't installed, or the embedding model's
         output size doesn't match `constants.embedding_dim`.
@@ -246,8 +247,6 @@ def _build_live_scorer(query: str, mode: SearchMode) -> typing.Callable[[SearchR
             "mode='lexical' or mode='semantic' for live results instead."
         )
     if mode is SearchMode.SEMANTIC:
-        from slb_glossary.embeddings import embed
-
         query_vector = embed([query])[0]
         return lambda result: live.score_result(query_vector, result, mode=SearchMode.SEMANTIC)
     return lambda result: live.score_result(query, result, mode=SearchMode.LEXICAL)
@@ -351,7 +350,7 @@ async def search(
     With `source=Source.AUTO` (the default when both `db` and `session`
     are given), the local database is searched first and scored.
     If its best result meets `relevance_threshold`, those local results
-    are served alone. Otherwise the live glossary is queried too - and
+    are served alone. Otherwise the live glossary is queried too, and
     queried *first*, ahead of the (unconfident) local results, on the
     theory that a live result is generally more trustworthy than a local
     match that wasn't confident enough to stand alone. Local results
@@ -431,7 +430,7 @@ async def search(
         that's never guaranteed, so passing `auto_initialize=False` with
         an uninitialized `session` doesn't raise unless local results
         turn out to be needed.
-    :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
+    :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
     :raises SessionNotInitializedError: If a live fetch happens, `session`
@@ -476,7 +475,7 @@ async def search(
     if resolved is Source.LIVE or source is not Source.AUTO:
         assert session is not None
         score_live_result = _build_live_scorer(normalized_query, resolved_mode)
-        live_stream = live.search(
+        stream = live.search(
             session,
             normalized_query,
             topic=topic,
@@ -488,7 +487,7 @@ async def search(
         )
         async for result in persist_incrementally(
             db,
-            live_stream,
+            stream,
             persist=persist,
             language=session.language.value,
             batch_size=persist_batch_size,
@@ -560,7 +559,7 @@ async def search(
     seen_terms: set[str] = set()
     live_count = 0
     score_live_result = _build_live_scorer(normalized_query, resolved_mode)
-    live_stream = live.search(
+    stream = live.search(
         session,
         normalized_query,
         topic=topic,
@@ -572,7 +571,7 @@ async def search(
     )
     async for result in persist_incrementally(
         db,
-        live_stream,
+        stream,
         persist=persist,
         language=session.language.value,
         batch_size=persist_batch_size,
@@ -688,7 +687,7 @@ async def get_terms_on(
     :param auto_initialize: If a live fetch happens and `session` isn't
         initialized yet, initialize it automatically (the default) or
         raise. See `slb_glossary.live.ensure_initialized`.
-    :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
+    :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
     :raises SessionNotInitializedError: If a live fetch happens, `session`
@@ -722,7 +721,7 @@ async def get_terms_on(
 
     if resolved is Source.LIVE or source is not Source.AUTO:
         assert session is not None
-        live_stream = live.get_terms_on(
+        stream = live.get_terms_on(
             session,
             topic,
             start_letter=start_letter,
@@ -734,7 +733,7 @@ async def get_terms_on(
         count = 0
         async for result in persist_incrementally(
             db,
-            live_stream,
+            stream,
             persist=persist,
             language=session.language.value,
             batch_size=persist_batch_size,
@@ -781,7 +780,7 @@ async def get_terms_on(
     logger.debug(
         "Local database had nothing for topic %r; falling back to the live glossary", topic
     )
-    live_stream = live.get_terms_on(
+    stream = live.get_terms_on(
         session,
         topic,
         start_letter=start_letter,
@@ -793,7 +792,7 @@ async def get_terms_on(
     live_count = 0
     async for result in persist_incrementally(
         db,
-        live_stream,
+        stream,
         persist=persist,
         language=session.language.value,
         batch_size=persist_batch_size,
@@ -860,7 +859,7 @@ async def get_terms_urls(
     :param auto_initialize: If a live fetch happens and `session` isn't
         initialized yet, initialize it automatically (the default) or
         raise. See `slb_glossary.live.ensure_initialized`.
-    :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
+    :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
     :raises SessionNotInitializedError: If a live fetch happens, `session`
@@ -973,7 +972,7 @@ async def get_topics(
         initialized yet, initialize it automatically (the default) or
         raise. See `slb_glossary.live.ensure_initialized`.
     :return: Topic name to term count.
-    :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
+    :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
     :raises SessionNotInitializedError: If a live read happens, `session`
@@ -1015,8 +1014,6 @@ async def get_term(
     max_similar_terms: int | None = None,
     auto_initialize: bool = True,
 ) -> LookupResult[SearchResult | None]: ...
-
-
 @typing.overload
 async def get_term(
     term_or_url: str,
@@ -1088,7 +1085,7 @@ async def get_term(
     :param auto_initialize: If a live fetch happens and `session` isn't
         initialized yet, initialize it automatically (the default) or
         raise. See `slb_glossary.live.ensure_initialized`.
-    :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
+    :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
     :raises SessionNotInitializedError: If a live fetch happens, `session`
@@ -1204,7 +1201,7 @@ async def _lookup_local_term(
 async def _finalize_live_term_lookup(
     db: Database | None,
     session: Session,
-    fetched: LookupResult[SearchResult] | None | SimilarResult,
+    fetched: LookupResult[SearchResult] | SimilarResult | None,
     *,
     with_similar: bool,
     persist: bool,
@@ -1235,7 +1232,7 @@ async def _finalize_live_term_lookup(
 
 
 def _flatten_results(
-    fetched: LookupResult[SearchResult] | None | SimilarResult, *, with_similar: bool
+    fetched: LookupResult[SearchResult] | SimilarResult | None, *, with_similar: bool
 ) -> list[SearchResult]:
     """Flatten a `_lookup_live_term` result into the `SearchResult`(s) `_maybe_persist` should cache."""
     if not with_similar:
@@ -1257,8 +1254,6 @@ async def _lookup_live_term(
     max_similar_terms: int | None = None,
     auto_initialize: bool = True,
 ) -> LookupResult[SearchResult] | None: ...
-
-
 @typing.overload
 async def _lookup_live_term(
     session: Session,
@@ -1279,7 +1274,7 @@ async def _lookup_live_term(
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
     auto_initialize: bool = True,
-) -> LookupResult[SearchResult] | None | SimilarResult:
+) -> LookupResult[SearchResult] | SimilarResult | None:
     """
     Resolve `term_or_url` against the live glossary: a URL fetches directly, else it's searched.
 
@@ -1419,7 +1414,7 @@ async def related_terms(
         raise. See `slb_glossary.live.ensure_initialized`.
     :return: A `LookupResult` wrapping the related terms found (empty if
         `term_or_url` wasn't found, or was found but links to nothing).
-    :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
+    :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, or `language`
         doesn't match `session`'s own language.
     :raises SessionNotInitializedError: If a live fetch happens, `session`
@@ -1471,7 +1466,7 @@ async def get_random_term(
         unconditionally, so this has no effect on them.
     :return: A `LookupResult` wrapping the picked `SearchResult`, or `None` if
         nothing matched (empty local database/topic, or no live match found).
-    :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
+    :raises QueryError: If neither `db` nor `session` is given,
         or the requested `source` needs one that wasn't given.
     """
     resolved = resolve_source(db, session, source)
@@ -1557,8 +1552,6 @@ async def compare(
     concurrency: int | None = None,
     with_similar: typing.Literal[False] = False,
 ) -> dict[str, LookupResult[SearchResult | None]]: ...
-
-
 @typing.overload
 async def compare(
     terms: typing.Sequence[str],
@@ -1615,7 +1608,7 @@ async def compare(
     :return: `{term_or_url: LookupResult}`, in the order `terms` was given.
         A `LookupResult.value` of `None` (or, with `with_similar=True`, a
         falsy `SimilarResult`) means that term wasn't found by the resolved source(s).
-    :raises slb_glossary.QueryError: If neither `db` nor `session` is given,
+    :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that wasn't given, `terms` is
         empty, or `language` doesn't match `session`'s own language.
     :raises ValueError: If `concurrency` is given and is less than 1.

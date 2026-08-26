@@ -17,9 +17,9 @@ __all__ = [
     "Reader",
     "read_csv_rows",
     "read_json_rows",
+    "read_rows",
     "read_xlsx_rows",
     "reader",
-    "read_rows",
     "supported_formats",
 ]
 
@@ -107,7 +107,7 @@ def read_xlsx_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]
     :raises ImportError: If the optional `openpyxl` dependency isn't installed.
     """
     try:
-        import openpyxl  # noqa: F401
+        import openpyxl
     except ImportError as exc:
         raise ImportError(
             "Reading a .xlsx file requires the 'openpyxl' package. "

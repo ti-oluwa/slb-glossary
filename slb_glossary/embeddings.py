@@ -22,7 +22,7 @@ from slb_glossary.errors import EmbeddingError
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["embed", "embedding_dim", "build_embed_text", "cosine_similarity"]
+__all__ = ["build_embed_text", "cosine_similarity", "embed", "embedding_dim"]
 
 if typing.TYPE_CHECKING:
     import numpy as np  # type: ignore[import]

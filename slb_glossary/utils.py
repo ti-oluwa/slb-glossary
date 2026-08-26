@@ -17,13 +17,13 @@ from rich.table import Table
 from slb_glossary.types import RecordLike, SearchResult
 
 __all__ = [
-    "parse_int",
-    "print_records",
-    "print_async_records",
-    "log_timed_yields",
-    "env",
     "EnvVarError",
     "Lookup",
+    "env",
+    "log_timed_yields",
+    "parse_int",
+    "print_async_records",
+    "print_records",
     "split_exclude",
 ]
 

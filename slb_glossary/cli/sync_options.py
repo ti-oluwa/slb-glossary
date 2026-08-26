@@ -10,10 +10,10 @@ from slb_glossary.local.sync import SyncSummary
 from slb_glossary.local.types import Database
 
 __all__ = [
+    "print_sync_summary",
+    "run_configured_sync",
     "sync_filter_options",
     "validate_sync_filters",
-    "run_configured_sync",
-    "print_sync_summary",
 ]
 
 

@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "SyncSummary",
-    "sync_topics",
+    "sync_all",
+    "sync_letter",
     "sync_query",
     "sync_topic",
-    "sync_letter",
-    "sync_all",
+    "sync_topics",
 ]
 
 

@@ -13,7 +13,7 @@ from slb_glossary.paths import default_db_path, default_metadata_path
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["open_db", "close_db", "database"]
+__all__ = ["close_db", "database", "open_db"]
 
 
 def _resolve_metadata_path(

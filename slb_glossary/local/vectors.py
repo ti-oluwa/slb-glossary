@@ -28,7 +28,7 @@ from slb_glossary.types import SearchResult
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["embed_terms", "delete_embeddings", "vector_search"]
+__all__ = ["delete_embeddings", "embed_terms", "vector_search"]
 
 VECTOR_TABLE = "terms_vec"
 

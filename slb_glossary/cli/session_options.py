@@ -14,11 +14,11 @@ from slb_glossary.types import Language
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "session_options",
     "config_option",
     "load_named_config",
-    "resolve_session_kwargs",
     "log_level_option",
+    "resolve_session_kwargs",
+    "session_options",
 ]
 
 DEFAULT_CONFIG_SENTINEL = "default"

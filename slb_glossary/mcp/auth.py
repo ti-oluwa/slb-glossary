@@ -29,12 +29,12 @@ import typing
 from collections.abc import Mapping
 
 __all__ = [
-    "Principal",
-    "AuthRequest",
-    "AuthBackend",
-    "StaticTokenAuth",
-    "NullAuth",
     "ANONYMOUS",
+    "AuthBackend",
+    "AuthRequest",
+    "NullAuth",
+    "Principal",
+    "StaticTokenAuth",
     "import_backend",
 ]
 

@@ -3,9 +3,9 @@
 from slb_glossary.errors import SLBGlossaryError
 
 __all__ = [
-    "MCPError",
-    "MCPConfigError",
     "AuthenticationError",
+    "MCPConfigError",
+    "MCPError",
     "RateLimitExceededError",
 ]
 

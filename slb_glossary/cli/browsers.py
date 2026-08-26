@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
+    "KNOWN_BROWSERS",
     "BrowserInstallError",
     "InstalledBrowser",
-    "KNOWN_BROWSERS",
     "install_browsers",
     "list_installed_browsers",
     "remove_browsers",

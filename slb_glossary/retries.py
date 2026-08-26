@@ -20,7 +20,7 @@ T = typing.TypeVar("T")
 logger = logging.getLogger(__name__)
 
 
-__all__ = ["DEFAULT_RETRY_POLICY", "RetryPolicy", "BackoffType", "retry"]
+__all__ = ["DEFAULT_RETRY_POLICY", "BackoffType", "RetryPolicy", "retry"]
 
 
 class BackoffType(enum.Enum):

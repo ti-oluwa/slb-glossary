@@ -110,7 +110,7 @@ def random_term(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
                     # `output_results` (the only consumer) wraps this generator
                     # in `contextlib.aclosing`, so the db still closes promptly
                     # on an early break/cancel.
-                    yield lookup.value  # noqa: ASYNC119
+                    yield lookup.value
 
     async def run() -> int:
         return await output_results(

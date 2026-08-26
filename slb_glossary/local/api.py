@@ -21,17 +21,17 @@ from slb_glossary.utils import as_async_iterator, split_exclude
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "upsert_results",
-    "upsert_results_incrementally",
-    "search",
-    "get_terms_on",
+    "count",
+    "fuzzy_match_topics",
+    "get_random_term",
     "get_term",
     "get_term_definitions",
-    "get_random_term",
+    "get_terms_on",
     "get_terms_urls",
     "get_topics",
-    "fuzzy_match_topics",
-    "count",
+    "search",
+    "upsert_results",
+    "upsert_results_incrementally",
 ]
 
 
@@ -658,18 +658,16 @@ async def get_term(
     with_similar: bool = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
-) -> SearchResult | None | tuple[SearchResult | None, list[tuple[SearchResult, float]]]:
+) -> SearchResult | tuple[SearchResult | None, list[tuple[SearchResult, float]]] | None:
     """
     Look up a single locally stored term by exact URL or exact term name.
 
     A glossary page can carry several definitions of the same term, one
-    per topic it's filed under (see
-    `slb_glossary.live.parsers.TERM_SECTION_SELECTOR`), all sharing the
-    same URL. Pass `topic` to pick a specific one; without it, and more
-    than one is stored, which one comes back is only deterministic (by
-    topic name, alphabetically), not meaningful - use
-    `get_term_definitions` instead if you want all of them, or need to
-    pick by some other criterion.
+    per topic it's filed under, all sharing the same URL. Pass `topic` 
+    to pick a specific one; without it, and more than one is stored, 
+    which one comes back is only deterministic (by topic name, alphabetically), 
+    not meaningful. Use `get_term_definitions` instead if you want all of them, 
+    or need to pick by some other criterion.
 
     :param db: The local database to read from.
     :param term_or_url: A glossary term detail-page URL, or an exact
@@ -727,9 +725,6 @@ async def get_term(
     resolved_max_similar = (
         max_similar_terms if max_similar_terms is not None else constants.max_similar_terms
     )
-    # Imported here, not at module level: see the comment in `_search`.
-    from slb_glossary.local.lexical import lexical_search
-
     scored = await lexical_search(db, term_or_url, language=language, limit=resolved_pool_size)
     similar = [
         (candidate, score)
@@ -749,8 +744,7 @@ async def get_term_definitions(
     Return every locally stored definition of a term, one per topic it's filed under.
 
     A glossary page can carry several definitions of the same term, one
-    per topic (see `slb_glossary.live.parsers.TERM_SECTION_SELECTOR`), all
-    sharing the same URL - `get_term` only ever returns one of them,
+    per topic, all sharing the same URL. `get_term` only ever returns one of them,
     picked by `topic` if given. Use this instead when you want all of
     them, e.g. to show every sense of a term across disciplines.
 

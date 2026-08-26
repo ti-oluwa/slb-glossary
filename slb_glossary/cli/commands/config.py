@@ -126,7 +126,7 @@ def show(ctx: click.Context, output_format: str) -> None:
         return
     if output_format == "toml":
         try:
-            import tomlkit  # noqa: F401
+            import tomlkit
 
             click.echo(tomlkit.dumps(data), nl=False)
             return
@@ -134,7 +134,7 @@ def show(ctx: click.Context, output_format: str) -> None:
             pass
     if output_format == "yaml":
         try:
-            import yaml  # noqa: F401
+            import yaml
 
             click.echo(yaml.safe_dump(data, sort_keys=False), nl=False)
             return

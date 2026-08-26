@@ -8,7 +8,7 @@ import re
 
 __all__ = ["clean_query"]
 
-_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
         r"^what\s+does\s+(?P<term>.+?)\s+mean\s*\??$",
@@ -47,7 +47,7 @@ def clean_query(query: str) -> str:
         was recognized.
     """
     stripped = query.strip()
-    for pattern in _PATTERNS:
+    for pattern in PATTERNS:
         match = pattern.match(stripped)
         if match:
             term = match.group("term").strip()
