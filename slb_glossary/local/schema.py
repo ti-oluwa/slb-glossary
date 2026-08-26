@@ -8,9 +8,11 @@ __all__ = ["SCHEMA_VERSION", "initialize"]
 
 SCHEMA_VERSION = 1
 """
-Local database schema version. Bumped (by developer) alongside any DDL change below
-that isn't purely additive, so `slb_glossary.local.types.Metadata` can eventually 
-gate migrations on it.
+Local database schema version. Bumped alongside any DDL change below
+that isn't purely additive. `slb_glossary.local.open_db` compares this
+against a database's stored `slb_glossary.local.types.Metadata.schema_version`
+and discards/recreates it on a mismatch, since there's no migration
+path between versions.
 """
 
 CREATE_TERMS_TABLE = """

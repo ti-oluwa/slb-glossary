@@ -1,5 +1,6 @@
 """Import externally provided CSV/JSON/XLSX data into the local database."""
 
+import json
 import logging
 import pathlib
 import typing
@@ -9,7 +10,7 @@ from slb_glossary.errors import DatabaseError
 from slb_glossary.local.api import upsert_results
 from slb_glossary.local.types import Database
 from slb_glossary.readers import READERS, read_rows
-from slb_glossary.types import SearchResult
+from slb_glossary.types import RelatedTerm, SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,45 @@ def _get_field(row: typing.Mapping[str, typing.Any], name: str | None) -> typing
     return None
 
 
+def _parse_related(raw: typing.Any) -> tuple[RelatedTerm, ...] | None:
+    """
+    Parse a related-terms cell/value into a tuple of `RelatedTerm`.
+
+    Accepts a native list (as a JSON reader would already give one) or a
+    JSON array string (as a CSV/XLSX cell would hold one as text), either
+    of `{"term": ..., "url": ...}` objects or `[term, url]` pairs.
+    Anything else is treated as unparsable.
+
+    :param raw: The raw cell/field value.
+    :return: The parsed related terms, or `None` if empty/unparsable.
+    """
+    if raw is None or raw == "":
+        return None
+
+    items = raw
+    if isinstance(raw, str):
+        try:
+            items = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+
+    if not isinstance(items, list):
+        return None
+
+    related: list[RelatedTerm] = []
+    for item in items:
+        if isinstance(item, typing.Mapping):
+            term, url = item.get("term"), item.get("url")
+        elif isinstance(item, (list, tuple)) and len(item) == 2:
+            term, url = item
+        else:
+            continue
+        if term and url:
+            related.append(RelatedTerm(term=str(term), url=str(url)))
+
+    return tuple(related) if related else None
+
+
 def _record_to_result(
     row: typing.Mapping[str, typing.Any],
     *,
@@ -35,6 +75,9 @@ def _record_to_result(
     url_field: str | None,
     grammatical_label_field: str | None,
     language_field: str | None,
+    image_field: str | None,
+    image_caption_field: str | None,
+    related_field: str | None,
     default_language: str,
 ) -> SearchResult | None:
     """Build a `SearchResult` from one imported row, or `None` if it has no term."""
@@ -55,6 +98,9 @@ def _record_to_result(
     grammatical_label = _get_field(row, grammatical_label_field)
     topic = _get_field(row, topic_field)
     language = _get_field(row, language_field)
+    image = _get_field(row, image_field)
+    image_caption = _get_field(row, image_caption_field)
+    related = _parse_related(_get_field(row, related_field))
 
     return SearchResult(
         term=str(term),
@@ -62,6 +108,9 @@ def _record_to_result(
         grammatical_label=str(grammatical_label) if grammatical_label is not None else None,
         topic=str(topic) if topic is not None else None,
         url=str(url),
+        image=str(image) if image is not None else None,
+        image_caption=str(image_caption) if image_caption is not None else None,
+        related=related,
         language=str(language) if language is not None else default_language,
     )
 
@@ -77,6 +126,9 @@ async def load_file(
     url_field: str | None = "url",
     grammatical_label_field: str | None = "grammatical_label",
     language_field: str | None = "language",
+    image_field: str | None = "image",
+    image_caption_field: str | None = "image_caption",
+    related_field: str | None = "related",
     default_language: str = "en",
     source: str = "user",
     batch_size: int | None = None,
@@ -110,6 +162,16 @@ async def load_file(
         (e.g. `"en"`/`"es"`), or `None` to always use `default_language`
         instead. A row with this column present but empty still falls
         back to `default_language`.
+    :param image_field: Column/key holding each row's image URL, or
+        `None` to leave every imported row's image unset.
+    :param image_caption_field: Column/key holding each row's image
+        caption, or `None` to leave it unset.
+    :param related_field: Column/key holding each row's related terms, or
+        `None` to leave every imported row's related terms unset. The
+        value itself needs to be a list (from a JSON source) or a JSON
+        array string (any format) of `{"term": ..., "url": ...}` objects
+        or `[term, url]` pairs; anything else is treated as unset for
+        that row rather than raising.
     :param default_language: Language stored for a row with no usable
         `language_field` value.
     :param source: Provenance tag stored on every imported row (see
@@ -188,6 +250,9 @@ async def load_file(
                 url_field=url_field,
                 grammatical_label_field=grammatical_label_field,
                 language_field=language_field,
+                image_field=image_field,
+                image_caption_field=image_caption_field,
+                related_field=related_field,
                 default_language=default_language,
             )
             if result is None or not result.url:

@@ -7,7 +7,7 @@ import typing
 
 import aiosqlite
 
-from slb_glossary.local.schema import initialize
+from slb_glossary.local.schema import SCHEMA_VERSION, initialize
 from slb_glossary.local.types import Database, Metadata
 from slb_glossary.paths import default_db_path, default_metadata_path
 
@@ -60,6 +60,46 @@ async def _enable_wal(connection: aiosqlite.Connection) -> str:
     return mode
 
 
+def _discard_on_mismatch(db_path: pathlib.Path, metadata_path: pathlib.Path) -> Metadata | None:
+    """
+    Delete an existing database/metadata pair if its schema version doesn't
+    match the current one.
+
+    There's currently no migration path between schema versions, so a mismatch
+    means the stored terms and embeddings aren't safely readable under
+    the current code. The local database is a disposable cache of
+    glossary content (see `slb_glossary.local`'s own module docstring),
+    so the fix is to discard it and let it get recreated fresh, not to
+    fail outright. Its sync history is lost along with it; run a sync
+    again afterward to repopulate it.
+
+    :param db_path: Path to the database file.
+    :param metadata_path: Path to its `metadata.json`.
+    :return: The metadata that was loaded (and, if mismatched, just
+        discarded), or `None` if there was no existing metadata file to check.
+    """
+    if not metadata_path.exists():
+        return None
+
+    metadata = Metadata.load(metadata_path)
+    if metadata.schema_version == SCHEMA_VERSION:
+        return metadata
+
+    logger.warning(
+        "Local database at %s uses schema version %d; the current version "
+        "is %d, and there's no migration path between them. Discarding its "
+        "stored terms and embeddings and recreating it fresh. Sync again "
+        "to repopulate it.",
+        db_path,
+        metadata.schema_version,
+        SCHEMA_VERSION,
+    )
+    for suffix in ("", "-wal", "-shm"):
+        db_path.with_name(db_path.name + suffix).unlink(missing_ok=True)
+    metadata_path.unlink(missing_ok=True)
+    return None
+
+
 async def open_db(
     path: str | pathlib.Path | None = None,
     *,
@@ -86,6 +126,11 @@ async def open_db(
     WAL back into the main file and removes the sidecar files itself once
     the last connection to it closes.
 
+    An existing database built under an older schema version is
+    discarded and recreated fresh, its stored terms/embeddings gone with
+    it (sync again to repopulate it). There's no currently migration path
+    between schema versions.
+
     :param path: Path to the SQLite database file. Defaults to
         `slb_glossary.paths.default_db_path()` (the OS-appropriate user
         data directory. See `slb_glossary.paths`).
@@ -104,6 +149,7 @@ async def open_db(
         metadata_path=metadata_path,
         db_path_was_given=path is not None,
     )
+    _discard_on_mismatch(resolved_db_path, resolved_metadata_path)
 
     connection = await aiosqlite.connect(resolved_db_path)
     connection.row_factory = aiosqlite.Row
@@ -114,9 +160,7 @@ async def open_db(
         Metadata().save(resolved_metadata_path)
 
     logger.info(
-        "Opened local glossary database at %s (journal_mode=%s)",
-        resolved_db_path,
-        journal_mode,
+        "Opened local glossary database at %s (journal_mode=%s)", resolved_db_path, journal_mode
     )
     return Database(
         connection=connection,

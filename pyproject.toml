@@ -94,9 +94,7 @@ disallow_incomplete_defs = true
 
 [[tool.mypy.overrides]]
 # Optional-extra and vendored dependencies that may not ship inline types
-# or a py.typed marker. Harmless to list a module here even if it turns
-# out to be fully typed. This only suppresses the "missing stubs" error,
-# it doesn't turn off checking against whatever types *are* found.
+# or a py.typed marker.
 module = [
     "patchright.*",
     "playwright_stealth.*",
