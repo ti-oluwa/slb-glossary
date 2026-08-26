@@ -13,9 +13,9 @@ import aiosqlite
 from slb_glossary.constants import constants
 from slb_glossary.local.hybrid import hybrid_search
 from slb_glossary.local.lexical import lexical_search
-from slb_glossary.local.types import Database, SearchMode
+from slb_glossary.local.types import Database
 from slb_glossary.local.vectors import vector_search
-from slb_glossary.types import RelatedTerm, SearchResult
+from slb_glossary.types import RelatedTerm, SearchMode, SearchResult
 from slb_glossary.utils import as_async_iterator, split_exclude
 
 logger = logging.getLogger(__name__)
@@ -488,7 +488,7 @@ async def search(
         `topic` by resolving it against locally stored topic names first.
         Has no effect if `topic` is falsy.
     :param mode: Which ranking strategy to use: `"lexical"`, `"semantic"`,
-        or `"hybrid"`, or the matching `slb_glossary.local.types.SearchMode`
+        or `"hybrid"`, or the matching `slb_glossary.types.SearchMode`
         member. `None` (the default) uses `constants.default_search_mode`,
         resolved fresh on this call.
     :param scored: If `True`, yield `(result, score)` pairs instead of

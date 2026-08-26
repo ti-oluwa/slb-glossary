@@ -20,8 +20,8 @@ import typing
 from collections.abc import Collection
 
 from slb_glossary.constants import constants
+from slb_glossary.embeddings import build_embed_text, embed, embedding_dim
 from slb_glossary.errors import DatabaseError
-from slb_glossary.local.embeddings import embed, embedding_dim
 from slb_glossary.local.types import Database
 from slb_glossary.natural_language import clean_query
 from slb_glossary.types import SearchResult
@@ -129,12 +129,6 @@ async def clear(db: Database) -> None:
     await db.connection.commit()
 
 
-def _build_embed_text(term: str, definition: str | None, topic: str | None) -> str:
-    """Build the text a term is embedded from, joining whichever of its fields are present."""
-    parts = [part for part in (term, definition, topic) if part]
-    return ". ".join(parts)
-
-
 async def embed_terms(
     db: Database,
     *,
@@ -192,7 +186,7 @@ async def embed_terms(
     embedded = 0
     for start in range(0, len(rows), resolved_batch_size):
         batch = rows[start : start + resolved_batch_size]
-        texts = [_build_embed_text(row["term"], row["definition"], row["topic"]) for row in batch]
+        texts = [build_embed_text(row["term"], row["definition"], row["topic"]) for row in batch]
         vectors = embed(texts)
         rowids = [row["rowid"] for row in batch]
         # `vec0` doesn't support `ON CONFLICT`/`INSERT OR REPLACE` as an

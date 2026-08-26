@@ -1,10 +1,10 @@
 """
-Local text embedding for semantic search.
+Text embedding, for semantic scoring/search over glossary terms, local or live.
 
 Wraps a single, package-managed `model2vec` static embedding model (see
-`constants.embedding_model`), so `slb_glossary.local.embed_terms`/
-`vector_search`/`hybrid_search` all embed text the same way without
-every caller needing to bring their own model.
+`constants.embedding_model`), so `slb_glossary.local`'s semantic search
+and `slb_glossary.live`'s semantic result scoring embed text the same
+way, without either needing its own model.
 
 The model is downloaded once from Hugging Face and cached locally by
 `model2vec` itself; nothing here makes a network call at query time.
@@ -22,7 +22,7 @@ from slb_glossary.errors import EmbeddingError
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["embed", "embedding_dim"]
+__all__ = ["embed", "embedding_dim", "build_embed_text", "cosine_similarity"]
 
 if typing.TYPE_CHECKING:
     import numpy as np  # type: ignore[import]
@@ -71,12 +71,42 @@ def embed(texts: typing.Sequence[str]) -> "np.ndarray":
     """
     Embed `texts` with the package's embedding model.
 
-    :param texts: Text to embed. `slb_glossary.local.embed_terms` embeds
-        each term's name, definition, and topic joined together; a
-        search query is just embedded as-is.
+    :param texts: Text to embed. `build_embed_text` gives the standard
+        text for a term (name, definition, and topic); a search query is
+        just embedded as-is.
     :return: A `(len(texts), constants.embedding_dim)` array of `float32` vectors.
     :raises EmbeddingError: If the `semantic` extra isn't installed, or
         the model's real output size doesn't match `constants.embedding_dim`.
     """
     model = load_model()
     return model.encode(list(texts))
+
+
+def build_embed_text(term: str, definition: str | None, topic: str | None) -> str:
+    """
+    Build the text a term is embedded from, for a consistent embedding across local and live results.
+
+    :param term: The term's name.
+    :param definition: The term's definition, if any.
+    :param topic: The term's topic, if any.
+    :return: `term`, `definition`, and `topic`, joined, skipping any that are empty.
+    """
+    parts = [part for part in (term, definition, topic) if part]
+    return ". ".join(parts)
+
+
+def cosine_similarity(a: "np.ndarray", b: "np.ndarray") -> float:
+    """
+    Cosine similarity between two embedding vectors.
+
+    :param a: One embedding vector.
+    :param b: Another embedding vector, the same size as `a`.
+    :return: A similarity in `[-1.0, 1.0]`, in practice close to
+        `[0.0, 1.0]` for real text, `1.0` being identical direction.
+    """
+    import numpy as np
+
+    denominator = float(np.linalg.norm(a) * np.linalg.norm(b))
+    if denominator == 0.0:
+        return 0.0
+    return float(np.dot(a, b) / denominator)

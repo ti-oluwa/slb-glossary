@@ -22,9 +22,9 @@ from slb_glossary.cli.source_options import (
 from slb_glossary.cli.tui import launch_tui
 from slb_glossary.constants import constants
 from slb_glossary.local import api as local
-from slb_glossary.local.types import Database, SearchMode
+from slb_glossary.local.types import Database
 from slb_glossary.query import LookupResult, Source
-from slb_glossary.types import SearchResult
+from slb_glossary.types import SearchMode, SearchResult
 
 __all__ = ["search"]
 
@@ -248,7 +248,7 @@ async def auto_search_stream(
     "-m",
     type=click.Choice([mode.value for mode in SearchMode], case_sensitive=False),
     default=None,
-    show_default="the SLB_GLOSSARY_DEFAULT_SEARCH_MODE / default_search_mode setting",
+    show_default="the `SLB_GLOSSARY_DEFAULT_SEARCH_MODE` / default_search_mode setting",
     help=(
         "Local ranking strategy: 'lexical' (bm25 full-text, works out of "
         "the box), 'semantic' (embedding similarity), or 'hybrid' (both, "

@@ -1,7 +1,6 @@
 """Data structures for the local search database."""
 
 import dataclasses
-import enum
 import json
 import pathlib
 import sys
@@ -13,26 +12,7 @@ if sys.version_info >= (3, 11):
 else:
     from typing_extensions import Self
 
-__all__ = ["Database", "Metadata", "SearchMode"]
-
-
-class SearchMode(enum.StrEnum):
-    """
-    Ranking strategy for local search API.
-
-    `LEXICAL` (the default) needs nothing beyond the base install.
-    `SEMANTIC`/`HYBRID` need the `semantic` extra installed, and terms
-    already embedded via `slb_glossary.local.embed_terms`.
-    """
-
-    LEXICAL = "lexical"
-    """Bm25 full-text ranking only. See `slb_glossary.local.lexical_search`."""
-
-    SEMANTIC = "semantic"
-    """Embedding similarity ranking only. See `slb_glossary.local.vector_search`."""
-
-    HYBRID = "hybrid"
-    """Lexical and semantic ranking, fused. See `slb_glossary.local.hybrid_search`."""
+__all__ = ["Database", "Metadata"]
 
 
 @dataclasses.dataclass(slots=True, kw_only=True)

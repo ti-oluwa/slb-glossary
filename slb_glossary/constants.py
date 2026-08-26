@@ -250,7 +250,8 @@ class Constants:
     )
     """
     Score for a query that exactly matches a result's term name (case/
-    whitespace-insensitive). See `slb_glossary.relevance`.
+    whitespace-insensitive). Used by both `slb_glossary.local.lexical_search`
+    and `slb_glossary.live.relevance`.
     """
 
     prefix_match_score = Constant(
@@ -258,7 +259,10 @@ class Constants:
         env_var="SLB_GLOSSARY_PREFIX_MATCH_SCORE",
         validator=lambda v: 0.0 <= v <= 1.0,
     )
-    """Score for a result's term name starting with the query. See `slb_glossary.relevance`."""
+    """
+    Score for a result's term name starting with the query. Used by both
+    `slb_glossary.local.lexical_search` and `slb_glossary.live.relevance`.
+    """
 
     content_match_score_cap = Constant(
         0.40,
@@ -266,12 +270,12 @@ class Constants:
         validator=lambda v: 0.0 <= v <= 1.0,
     )
     """
-    Upper bound `slb_glossary.local.lexical_search` gives a result that
-    only matched by content (definition/topic text), never the term
-    name, kept below `relevance_threshold` so that kind of match never
-    reads as confident as an actual name match. Only applies to lexical
-    scoring; `vector_search`/`hybrid_search` scores aren't capped by
-    this. See `slb_glossary.relevance`.
+    Upper bound on a result's score when it only matched by content
+    (definition/topic text), never the term name, kept below
+    `relevance_threshold` so that kind of match never reads as confident
+    as an actual name match. Used by `slb_glossary.local.lexical_search`
+    and `slb_glossary.live.relevance`'s lexical scoring; not applied to
+    semantic or hybrid scoring, which have their own natural scale.
     """
 
     embedding_model = Constant(
@@ -367,7 +371,7 @@ class Constants:
     Default `mode` for `slb_glossary.local.search`/the `search` CLI
     command when the caller doesn't pass one explicitly. One of
     `"lexical"` (the default), `"semantic"`, or `"hybrid"`; see
-    `slb_glossary.local.types.SearchMode`.
+    `slb_glossary.types.SearchMode`.
 
     `"lexical"` needs nothing beyond the base install. `"semantic"`/`"hybrid"`
     need the `semantic` extra installed and terms already embedded

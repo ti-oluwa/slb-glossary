@@ -40,8 +40,9 @@ from slb_glossary.local.sync import (
     sync_topic,
     sync_topics,
 )
-from slb_glossary.local.types import Database, Metadata, SearchMode
+from slb_glossary.local.types import Database, Metadata
 from slb_glossary.local.vectors import delete_embeddings, embed_terms, vector_search
+from slb_glossary.types import SearchMode
 
 __all__ = [
     "Database",

@@ -65,10 +65,9 @@ from slb_glossary.constants import constants
 from slb_glossary.errors import QueryError
 from slb_glossary.live.browser import Session
 from slb_glossary.local import api as local
-from slb_glossary.local.types import Database, SearchMode
+from slb_glossary.local.types import Database
 from slb_glossary.natural_language import clean_query
-from slb_glossary.relevance import score_result
-from slb_glossary.types import RelatedTerm, SearchResult
+from slb_glossary.types import RelatedTerm, SearchMode, SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +217,42 @@ def validate_language(session: Session | None, language: str | None) -> None:
         )
 
 
+def _build_live_scorer(query: str, mode: SearchMode) -> typing.Callable[[SearchResult], float]:
+    """
+    Build a function that scores one live result at a time, for `mode`.
+
+    `SearchMode.LEXICAL`/`SearchMode.SEMANTIC` both score a result
+    independent of any other, so a live search can score results as
+    they stream in, without waiting for the rest. `SearchMode.HYBRID`
+    needs every result's rank relative to the others to fuse a ranking,
+    which would mean collecting a live search's entire result set before
+    returning anything - live search doesn't do that, so hybrid scoring
+    isn't available for it.
+
+    :param query: The free-text query results are being scored against.
+    :param mode: `SearchMode.LEXICAL` or `SearchMode.SEMANTIC`.
+    :return: A function taking one `SearchResult` and returning its score.
+    :raises slb_glossary.QueryError: If `mode` is `SearchMode.HYBRID`.
+    :raises EmbeddingError: With `mode=SearchMode.SEMANTIC`, if the
+        `semantic` extra isn't installed, or the embedding model's
+        output size doesn't match `constants.embedding_dim`.
+    """
+    if mode is SearchMode.HYBRID:
+        raise QueryError(
+            "Live results can't be scored with mode='hybrid': combining a "
+            "lexical and a semantic ranking needs every result's rank "
+            "relative to the others up front, which live search can't "
+            "provide without collecting its entire result set first. Use "
+            "mode='lexical' or mode='semantic' for live results instead."
+        )
+    if mode is SearchMode.SEMANTIC:
+        from slb_glossary.embeddings import embed
+
+        query_vector = embed([query])[0]
+        return lambda result: live.score_result(query_vector, result, mode=SearchMode.SEMANTIC)
+    return lambda result: live.score_result(query, result, mode=SearchMode.LEXICAL)
+
+
 async def _maybe_persist(
     db: Database | None, results: typing.Sequence[SearchResult], *, persist: bool, language: str
 ) -> bool:
@@ -321,7 +356,7 @@ async def search(
     theory that a live result is generally more trustworthy than a local
     match that wasn't confident enough to stand alone. Local results
     aren't thrown away, they still fill out any of `limit` that live
-    couldn't, just no longer shown ahead of the live ones once local
+    couldn't, just not shown ahead of the live ones once local
     itself wasn't confident.
 
     :param query: Free-text query.
@@ -359,17 +394,20 @@ async def search(
         or `Source.AUTO`'s local-first attempt) tolerates minor
         misspellings/partial names in `topic`. Live reads already
         fuzzy-match topics unconditionally, so this has no effect on them.
-    :param mode: Which local ranking strategy to use - `"lexical"`,
+    :param mode: Which ranking strategy to score results with `"lexical"`,
         `"semantic"`, or `"hybrid"`, or the matching
-        `slb_glossary.local.types.SearchMode` member. Only affects a
-        local read (`Source.LOCAL`, or `Source.AUTO`'s local-first
-        attempt); has no effect on `Source.LIVE`, which has no notion of
-        ranking mode. `None` (the default) uses `constants.default_search_mode`.
-        Note that `"semantic"`'s score is a raw cosine similarity, not
-        the calibrated `[0.0, 1.0]` scale `"lexical"`/`"hybrid"` use, so
-        pairing `mode="semantic"` with `source=Source.AUTO` means
-        `relevance_threshold` is compared against that uncalibrated
-        scale instead - `"hybrid"` is generally the better pairing.
+        `slb_glossary.types.SearchMode` member. `None` (the
+        default) uses `constants.default_search_mode`. Affects both a
+        local read and a live one, with one restriction: a live read
+        (`Source.LIVE`, or `Source.AUTO`'s live fallback) can't be scored
+        with `"hybrid"`, since that needs a whole result set's ranks up
+        front and live results stream in one at a time. Use `"lexical"`
+        or `"semantic"` for those. Note that `"semantic"`'s score isn't
+        on the same calibrated `[0.0, 1.0]` scale `"lexical"`/`"hybrid"`
+        use, so pairing `mode="semantic"` with `source=Source.AUTO` means
+        `relevance_threshold` is compared against an uncalibrated cosine
+        similarity instead. `"hybrid"` is generally the better pairing
+        for a local read there.
     :param relevance_threshold: Only used by `Source.AUTO`. The local
         database's best-scoring result must meet this (`0.0`-`1.0`, see
         `slb_glossary.local.lexical_search`) for its results to be served
@@ -401,6 +439,9 @@ async def search(
     """
     validate_language(session, language)
     normalized_query = clean_query(query)
+    resolved_mode = (
+        SearchMode(mode) if mode is not None else SearchMode(constants.default_search_mode)
+    )
     resolved_relevance_threshold = (
         relevance_threshold if relevance_threshold is not None else constants.relevance_threshold
     )
@@ -417,7 +458,7 @@ async def search(
             language=language,
             limit=limit,
             fuzzy=fuzzy,
-            mode=mode,
+            mode=resolved_mode,
             scored=True,
             exclude=exclude,
         ):
@@ -434,6 +475,7 @@ async def search(
 
     if resolved is Source.LIVE or source is not Source.AUTO:
         assert session is not None
+        score_live_result = _build_live_scorer(normalized_query, resolved_mode)
         live_stream = live.search(
             session,
             normalized_query,
@@ -453,7 +495,7 @@ async def search(
             persist_on_error=persist_on_error,
         ):
             count += 1
-            score = score_result(normalized_query, result)
+            score = score_live_result(result)
             yield LookupResult(value=result, source=Source.LIVE, persisted=persist, score=score)
 
         logger.debug(
@@ -474,7 +516,7 @@ async def search(
         language=language,
         limit=limit,
         fuzzy=fuzzy,
-        mode=mode,
+        mode=resolved_mode,
         exclude=exclude,
         scored=True,
     )
@@ -517,6 +559,7 @@ async def search(
     seen_urls: set[str] = set()
     seen_terms: set[str] = set()
     live_count = 0
+    score_live_result = _build_live_scorer(normalized_query, resolved_mode)
     live_stream = live.search(
         session,
         normalized_query,
@@ -539,7 +582,7 @@ async def search(
         seen_terms.add((result.term or "").strip().lower())
         live_count += 1
         count += 1
-        score = score_result(normalized_query, result)
+        score = score_live_result(result)
         yield LookupResult(value=result, source=Source.LIVE, persisted=persist, score=score)
 
     remaining = None if limit is None else max(limit - live_count, 0)
@@ -1308,7 +1351,7 @@ async def _lookup_live_term(
         # No exact (case-insensitive) match among the top results;
         # fall back to whatever ranked first, if anything did.
         async for result in live.search(session, term, limit=1):
-            score = score_result(term, result)
+            score = live.score_result(term, result)
             return LookupResult(value=result, source=Source.LIVE, persisted=False, score=score)
         return None
 
@@ -1336,7 +1379,10 @@ async def _lookup_live_term(
     ]
     similar = tuple(
         LookupResult(
-            value=result, source=Source.LIVE, persisted=False, score=score_result(term, result)
+            value=result,
+            source=Source.LIVE,
+            persisted=False,
+            score=live.score_result(term, result),
         )
         for result in similar_results
     )
@@ -1421,7 +1467,7 @@ async def get_random_term(
     :param persist: If `True`, and a live pick happens, cache it into `db`.
         A single-value lookup, so batching doesn't apply.
     :param fuzzy: If `True`, a local pick tolerates minor misspellings/
-        partial names in `topic`. Live picks already fuzzy-match topics 
+        partial names in `topic`. Live picks already fuzzy-match topics
         unconditionally, so this has no effect on them.
     :return: A `LookupResult` wrapping the picked `SearchResult`, or `None` if
         nothing matched (empty local database/topic, or no live match found).

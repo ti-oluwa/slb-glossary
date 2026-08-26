@@ -28,6 +28,7 @@ from .browser import (
     session,
     session_from_config,
 )
+from .relevance import score_content_overlap, score_name_match, score_result
 from .topics import refresh_topics
 from .types import BrowserType, PageHandle, Pages, ResourceType, Session
 
@@ -50,4 +51,7 @@ __all__ = [
     "PageHandle",
     "browser_session",
     "refresh_topics",
+    "score_result",
+    "score_name_match",
+    "score_content_overlap",
 ]
