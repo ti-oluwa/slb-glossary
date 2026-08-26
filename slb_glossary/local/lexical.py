@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["lexical_search"]
 
-FTS_COLUMN_WEIGHTS: tuple[float, float, float] = (10.0, 1.0, 3.0)
+
+FTS_COLUMN_WEIGHTS: tuple[float, float, float] = (10.0, 1.5, 3.0)
 """
 bm25() column weights for `terms_fts`'s `(term, definition, topic)` columns,
 in that order. 

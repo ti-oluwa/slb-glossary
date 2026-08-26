@@ -663,10 +663,10 @@ async def get_term(
     Look up a single locally stored term by exact URL or exact term name.
 
     A glossary page can carry several definitions of the same term, one
-    per topic it's filed under, all sharing the same URL. Pass `topic` 
-    to pick a specific one; without it, and more than one is stored, 
-    which one comes back is only deterministic (by topic name, alphabetically), 
-    not meaningful. Use `get_term_definitions` instead if you want all of them, 
+    per topic it's filed under, all sharing the same URL. Pass `topic`
+    to pick a specific one; without it, and more than one is stored,
+    which one comes back is only deterministic (by topic name, alphabetically),
+    not meaningful. Use `get_term_definitions` instead if you want all of them,
     or need to pick by some other criterion.
 
     :param db: The local database to read from.
