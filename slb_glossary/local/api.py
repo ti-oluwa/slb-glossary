@@ -14,7 +14,7 @@ from slb_glossary.constants import constants
 from slb_glossary.local.hybrid import hybrid_search
 from slb_glossary.local.lexical import lexical_search
 from slb_glossary.local.types import Database
-from slb_glossary.local.vectors import vector_search
+from slb_glossary.local.vector import vector_search
 from slb_glossary.types import RelatedTerm, SearchMode, SearchResult
 from slb_glossary.utils import as_async_iterator, split_exclude
 
@@ -96,7 +96,7 @@ async def upsert_results(
     database's primary key and there's nothing stable to upsert it
     against. A page with several definitions (one per topic it's filed
     under) upserts as that many distinct rows, all sharing the same
-    `url` - keying on `url` alone would let the second definition
+    `url`. Keying on `url` alone would let the second definition
     silently overwrite the first.
 
     This writes everything in `results` in one go, only once `results` is
@@ -106,14 +106,14 @@ async def upsert_results(
     losing everything if the fetch is interrupted before this is called.
 
     :param db: The local database to write to.
-    :param results: Results to store - a plain or async iterable of
+    :param results: Results to store. A plain or async iterable of
         `SearchResult`, e.g. from `slb_glossary.live.search`,
         `slb_glossary.live.get_terms_on`, or `slb_glossary.local.loaders`.
     :param language: If given, force-store every result under this
         language, overriding each result's own `.language`. Left as
         `None` (the default), each result is stored under its own
-        `.language` instead - the normal case, since a `SearchResult`
-        already knows which glossary edition it came from.
+        `.language` instead, since a `SearchResult` already knows
+        which glossary edition it came from.
     :param source: Provenance tag stored alongside each row: `"glossary"`
         for results fetched live from the site (the default), or a
         caller-chosen value such as `"user"` for imported data.
@@ -161,7 +161,7 @@ async def upsert_results(
 
     if not rows:
         logger.debug(
-            "upsert_results: nothing to write (0 rows in %.3fs)", time.monotonic() - started_at
+            "`upsert_results`: nothing to write (0 rows in %.3fs)", time.monotonic() - started_at
         )
         return 0
 
@@ -224,7 +224,7 @@ async def upsert_results_incrementally(
         are unaffected either way).
     :param stats: If given, populated in place with `"written"` (total
         rows written) and `"batches"` (number of upsert calls made) once
-        this generator is exhausted (normally or via error) - since an
+        this generator is exhausted (normally or via error), since an
         async generator can't hand back a return value the way a plain
         function can. Callers that only want the final count and don't
         need each result passed through (e.g. `slb_glossary.local.sync`)
@@ -301,7 +301,8 @@ def _apply_exclude(
     term_column: str = "term",
 ) -> str:
     """
-    Append `AND <url_column> NOT IN (...)`/`AND LOWER(TRIM(<term_column>)) NOT IN (...)` for `exclude`.
+    Append `AND <url_column> NOT IN (...)`/`AND LOWER(TRIM(<term_column>)) NOT IN (...)`
+    for `exclude`.
 
     `exclude` can hold URLs, term names, or a mix of both (see
     `slb_glossary.utils.split_exclude`); this appends whichever clauses
@@ -336,7 +337,8 @@ def fuzzy_match_topics(
     cutoff: float = 0.6,
 ) -> str:
     """
-    Resolve a user-supplied topic name to its closest match(es) among locally stored topics.
+    Resolve a user-supplied topic name to its closest match(es) among locally
+    stored topics.
 
     Same difflib-based approach as `slb_glossary.utils.get_topic_match`
     uses for the live glossary's topic list, applied to whatever's actually
@@ -384,7 +386,8 @@ async def resolve_topic(
     db: Database, topic: str | None, fuzzy: bool, *, language: str | None = None
 ) -> str | None:
     """
-    Resolve a caller-supplied topic filter, optionally fuzzily, against the local database.
+    Resolve a caller-supplied topic filter, optionally fuzzily, against the
+    local database.
 
     :param db: The local database to read stored topic names from, only
         queried when `fuzzy` is `True`.
@@ -461,7 +464,7 @@ async def search(
     - `"hybrid"`: `slb_glossary.local.hybrid_search`, both, fused. Same
       extra/embedding requirement as `"semantic"`.
 
-    `constants.default_search_mode` stays `"lexical"` rather than
+    `constants.default_search_mode` is `"lexical"` rather than
     `"hybrid"` out of the box, so that plain `search(db, query)` keeps
     working on a database that's never had `embed_terms` run on it, and
     without forcing the `semantic` extra on every install. Set that
@@ -687,18 +690,16 @@ async def get_term(
         match turns out to be `None`, or just to see what else is nearby.
     :param similar_pool_size: Candidates `lexical_search` pulls before
         alternatives are drawn from them. Only used when `with_similar=True`.
-        `None` (the default) uses
-        `constants.similar_terms_pool_size`,
+        `None` (the default) uses `constants.similar_terms_pool_size`,
         resolved fresh on this call.
     :param max_similar_terms: Max alternatives returned. Only used when
-        `with_similar=True`. `None` (the default) uses
-        `constants.max_similar_terms`, resolved
-        fresh on this call.
+        `with_similar=True`. `None` (the default) uses `constants.max_similar_terms`,
+        resolved fresh on this call.
     :return: The stored `SearchResult`, or `None` if not found locally.
         With `with_similar=True`, a `(result, similar)` pair instead,
         `similar` being `(alternative, score)` pairs.
     """
-    logger.debug("Local get_term: %r (language=%r topic=%r)", term_or_url, language, topic)
+    logger.debug("Local `get_term`: %r (language=%r topic=%r)", term_or_url, language, topic)
     sql = "SELECT * FROM terms WHERE (url = ? OR term = ? COLLATE NOCASE)"
     params: list[typing.Any] = [term_or_url, term_or_url]
     if language:
@@ -955,7 +956,7 @@ async def get_topics(db: Database, *, language: str | None = None) -> dict[str, 
         `"en"`/`"es"`). Topic names are language-specific (the glossary's
         Spanish edition uses different topic names than its English one),
         so counting across both without filtering can double-count the
-        "same" topic under its two different names. `None` (the default)
+        same topic under its two different names. `None` (the default)
         doesn't filter, and counts every stored term regardless of language.
     :return: Topic name to term count, for topics that have at least one
         locally stored term (matching `language`, if given).

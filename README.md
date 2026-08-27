@@ -435,7 +435,7 @@ At least one of `db` or `session` must be given to every function here - there's
 
 When only one of `db`/`session` is given, `AUTO` simply behaves like whichever of `LOCAL`/`LIVE` that one supports. The available functions mirror `slb_glossary.live`/`slb_glossary.local`'s own shapes: `search`, `get_terms_on`, `get_terms_urls`, and `get_topics` stream/return several results; `get_term`, `related_terms`, and `get_random_term` return one; `compare` looks up several terms at once. Each accepts a `fuzzy=True` flag that, for any local read, tolerates minor misspellings/partial names in `topic` (see [Fuzzy topic matching](#fuzzy-topic-matching) - live reads already fuzzy-match topics unconditionally).
 
-`get_term`, `related_terms`, and `get_random_term` return a `LookupResult(value, source, persisted)`, so callers can tell where a result actually came from and whether it was written back to `db`.
+`get_term`, `related_terms`, and `get_random_term` return a `QueryResult(value, source, persisted)`, so callers can tell where a result actually came from and whether it was written back to `db`.
 
 ## Configuration: `slb_glossary.config`
 

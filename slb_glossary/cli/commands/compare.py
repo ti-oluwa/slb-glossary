@@ -7,7 +7,7 @@ import click
 from slb_glossary import query
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
-from slb_glossary.cli.runtime import run_async
+from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,

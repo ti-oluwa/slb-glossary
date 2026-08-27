@@ -23,7 +23,7 @@ class Database:
     Obtain one with `slb_glossary.local.open_db`/`database`.
 
     Runs in WAL journal mode, so while open it has two sidecar files next
-    to `db_path`: `<db_path>-wal` and `<db_path>-shm`. Moving or copying
+    to `db_path`; `<db_path>-wal` and `<db_path>-shm`. Moving or copying
     `db_path` by hand (rather than through `slb_glossary.local`) means
     moving those two along with it, and `metadata_path` too.
     """

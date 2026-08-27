@@ -11,7 +11,7 @@ from slb_glossary.cli.commands.sync import sync as sync_command
 from slb_glossary.cli.commands.update import update as update_command
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
-from slb_glossary.cli.runtime import run_async
+from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, log_level_option
 from slb_glossary.cli.source_options import database_option, get_loaded_config, resolve_db_path
 from slb_glossary.local.types import Metadata
@@ -182,7 +182,7 @@ def local_search(query: str, **params: typing.Any) -> None:
                 db, query, topic=params["topic"], limit=limit, fuzzy=params["fuzzy"]
             )
             return await output_results(
-                results,
+                results,  # type: ignore[arg-type]
                 title=title,
                 save_paths=params["save_paths"],
                 format=params["format"],
@@ -408,8 +408,6 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
                 grammatical_label_field=params["grammatical_label_field"],
                 language_field=params["language_field"],
                 default_language=params["default_language"],
-                embedding_field=params["embedding_field"],
-                embedding_model=params["embedding_model"],
                 source=params["source_tag"],
                 batch_size=params["batch_size"],
             )

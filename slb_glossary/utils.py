@@ -212,7 +212,7 @@ def split_exclude(
     An entry is treated as a URL if it looks like one (starts with
     `"http://"`/`"https://"`); everything else is treated as a
     term name, matched case-insensitively/whitespace-insensitively via
-    `_normalize`-style folding, so `"Porosity"` and `" porosity "` both
+    `normalize_text`-style folding, so `"Porosity"` and `" porosity "` both
     exclude the same term.
 
     :param exclude: URLs and/or term names to exclude, or `None`.
@@ -360,7 +360,7 @@ def _format_result_row(
         whatever `_make_result_table` was built with.
     :param origin: Text for the "Origin" cell, e.g. `"local"`/`"live"`.
         Rendered as `"-"` if `None`. Ignored unless `show_origin=True`.
-    :param score: Value for the "Score" cell, e.g. a `LookupResult.score`.
+    :param score: Value for the "Score" cell, e.g. a `QueryResult.score`.
         Rendered as `"-"` if `None` (expected for a result with no
         comparable score, e.g. most live ones). Ignored unless `show_score=True`.
     """
@@ -437,7 +437,7 @@ RecordT = typing.TypeVar("RecordT", bound=RecordLike)
 class _Lookup(typing.Protocol[RecordT]):
     """
     Structural shape `annotate=True` table/JSON output needs from each
-    item: satisfied by `slb_glossary.query.LookupResult`, without
+    item: satisfied by `slb_glossary.query.QueryResult`, without
     importing that class directly (`slb_glossary.query` itself depends
     on this module, so importing it back here would be circular).
     """
@@ -451,7 +451,7 @@ class _Lookup(typing.Protocol[RecordT]):
 Lookup = _Lookup
 """
 Public name for `_Lookup`, for other modules that need to type-annotate an `annotate=True` caller's input without a
-circular import on `slb_glossary.query.LookupResult` itself.
+circular import on `slb_glossary.query.QueryResult` itself.
 """
 
 
@@ -476,7 +476,7 @@ def _make_table_and_formatter(
 
     :param sample: The first record to be printed, used only to pick a
         layout. With `annotate=True`, this is a `_Lookup`-shaped item
-        (e.g. a `slb_glossary.query.LookupResult`), not the bare record itself.
+        (e.g. a `slb_glossary.query.QueryResult`), not the bare record itself.
     :param title: Table/section title to use instead of the type-based
         default (`"Search Results"` for `SearchResult`s, `"Results"`
         otherwise). `None` keeps that default.
@@ -559,7 +559,7 @@ def print_records(
     including lazily produced generators.
 
     :param results: The records to print. May be empty. With
-        `annotate=True`, each item is a `slb_glossary.query.LookupResult`
+        `annotate=True`, each item is a `slb_glossary.query.QueryResult`
         (or anything else `_Lookup`-shaped) wrapping the record, rather
         than the bare record itself.
     :param title: Title shown above the table, e.g. `"Terms under Drilling"`.

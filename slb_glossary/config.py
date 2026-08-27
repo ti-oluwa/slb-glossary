@@ -376,7 +376,7 @@ def _strip_none(data: typing.Any) -> typing.Any:
     return data
 
 
-def _write_config_file(data: dict[str, typing.Any], path: pathlib.Path, format: str) -> None:
+def write_config_file(data: dict[str, typing.Any], path: pathlib.Path, format: str) -> None:
     """
     Serialize `data` to `path` using the parser for `format`.
 
@@ -510,7 +510,7 @@ class Config(Updatable):
         path = pathlib.Path(path)
         resolved_format = (format or path.suffix.lstrip(".") or "toml").lower()
         path.parent.mkdir(parents=True, exist_ok=True)
-        _write_config_file(self.to_dict(), path, resolved_format)
+        write_config_file(self.to_dict(), path, resolved_format)
         logger.info("Saved config to %s (%s)", path, resolved_format)
 
     def session_kwargs(self) -> dict[str, typing.Any]:

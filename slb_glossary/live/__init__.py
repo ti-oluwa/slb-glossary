@@ -2,7 +2,7 @@
 Live search API. Crawls the live SLB glossary site directly, so results
 are always current, at the cost of a network round trip per call.
 
-**Disclaimer**: the data returned here is still SLB's - see the package
+**Disclaimer**: the data returned here is still SLB's. See the package
 docstring for the full notice.
 
 Use this responsibly: rate-limit your own calls, avoid tight loops or

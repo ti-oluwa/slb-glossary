@@ -87,8 +87,6 @@ async def output_results(
     show_related: bool = False,
     annotate: typing.Literal[False] = False,
 ) -> int: ...
-
-
 @typing.overload
 async def output_results(
     results: typing.AsyncIterable[Lookup[RecordT]] | typing.AsyncIterator[Lookup[RecordT]],
@@ -136,7 +134,7 @@ async def output_results(
     for saving, not about delaying output until the stream ends.
 
     :param results: The async stream of records to consume. With
-        `annotate=True`, each item is a `slb_glossary.query.LookupResult`
+        `annotate=True`, each item is a `slb_glossary.query.QueryResult`
         rather than a bare record.
     :param title: Title shown above the printed table, e.g.
         `f"Terms under {topic}"`. Passed straight through to
@@ -163,7 +161,7 @@ async def output_results(
     :param show_image: For `SearchResult`s, whether to print the image URL column.
     :param show_related: For `SearchResult`s, whether to print the related-terms column.
     :param annotate: If `True`, `results` is a stream of
-        `slb_glossary.query.LookupResult`s, and both the table and JSON
+        `slb_glossary.query.QueryResult`s, and both the table and JSON
         output get "source"/"score" alongside each record's own fields
         (the table as extra columns, JSON as extra keys). `save_paths`
         output is unaffected either way, see `save_paths` above.

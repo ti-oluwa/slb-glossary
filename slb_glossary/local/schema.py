@@ -9,13 +9,14 @@ __all__ = ["SCHEMA_VERSION", "initialize"]
 SCHEMA_VERSION = 1
 """
 Local database schema version. Bumped alongside any DDL change below
-that isn't purely additive. `slb_glossary.local.open_db` compares this
-against a database's stored `slb_glossary.local.types.Metadata.schema_version`
-and discards/recreates it on a mismatch, since there's no migration
-path between versions.
+that isn't purely additive. 
+
+`slb_glossary.local.open_db` compares this against a database's stored 
+`slb_glossary.local.types.Metadata.schema_version` and discards/recreates 
+it on a mismatch, since there's currently no migration path between versions.
 """
 
-CREATE_TERMS_TABLE = """
+TERMS_TABLE_CREATE_STATEMENT = """
 CREATE TABLE IF NOT EXISTS terms (
     url TEXT NOT NULL,
     term TEXT NOT NULL,
@@ -33,29 +34,27 @@ CREATE TABLE IF NOT EXISTS terms (
 """
 """
 A glossary page can hold several definitions of the same term, one per
-topic it's filed under (see `slb_glossary.live.parsers.TERM_SECTION_SELECTOR`),
-all at the same `url`. Keying on `url` alone would let the second
+topic it's filed under all at the same `url`. Keying on `url` alone would let the second
 definition upserted silently overwrite the first, so `url` and `topic`
 together are the real identity of one definition.
 
 `topic` is `NOT NULL DEFAULT ''` rather than nullable so two untopicked
 definitions at the same `url` (a page with only one, topic-less section)
-still collide correctly on upsert instead of comparing unequal - SQLite
+still collide correctly on upsert instead of comparing unequal as SQLite
 (like standard SQL) never considers `NULL = NULL` true, so two `NULL`
 topics in a composite primary key wouldn't conflict with each other at
 all and would just accumulate as duplicate rows on every re-sync. The
-empty string is mapped back to `None` at the Python boundary (see
-`slb_glossary.local.api._row_to_result`), so `SearchResult.topic` still
-reads as `None` for a topic-less definition.
+empty string is mapped back to `None` at the Python boundary, so 
+`SearchResult.topic` still reads as `None` for a topic-less definition.
 """
 
-CREATE_TERMS_INDEXES = [
+TERMS_INDEXES_CREATE_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_terms_term ON terms(term)",
     "CREATE INDEX IF NOT EXISTS idx_terms_topic ON terms(topic)",
     "CREATE INDEX IF NOT EXISTS idx_terms_language ON terms(language)",
 ]
 
-CREATE_FTS_TABLE = """
+FTS_TABLE_CREATE_STATEMENT = """
 CREATE VIRTUAL TABLE IF NOT EXISTS terms_fts USING fts5(
     term,
     definition,
@@ -65,11 +64,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS terms_fts USING fts5(
 )
 """
 
-# Standard FTS5 "external content" sync triggers: terms_fts stores no text
+# Standard FTS5 external-content sync triggers. `terms_fts` stores no text
 # of its own, so every write to `terms` is mirrored into it by rowid. The
 # 'delete' sentinel row on UPDATE/DELETE is FTS5's own convention for
 # removing an indexed row from an external-content table.
-CREATE_FTS_TRIGGERS = [
+FTS_TRIGGERS_CREATE_STATEMENTS = [
     """
     CREATE TRIGGER IF NOT EXISTS terms_ai AFTER INSERT ON terms BEGIN
         INSERT INTO terms_fts(rowid, term, definition, topic)
@@ -105,12 +104,12 @@ async def initialize(connection: aiosqlite.Connection) -> None:
         extension, which `slb_glossary.local.api.search` requires.
     """
     await connection.execute("PRAGMA foreign_keys = ON")
-    await connection.execute(CREATE_TERMS_TABLE)
-    for statement in CREATE_TERMS_INDEXES:
+    await connection.execute(TERMS_TABLE_CREATE_STATEMENT)
+    for statement in TERMS_INDEXES_CREATE_STATEMENTS:
         await connection.execute(statement)
 
     try:
-        await connection.execute(CREATE_FTS_TABLE)
+        await connection.execute(FTS_TABLE_CREATE_STATEMENT)
     except aiosqlite.OperationalError as exc:
         raise DatabaseError(
             "The installed SQLite build has no FTS5 extension, which "
@@ -118,7 +117,7 @@ async def initialize(connection: aiosqlite.Connection) -> None:
             "Python's `sqlite3` module against a SQLite build with FTS5 enabled."
         ) from exc
 
-    for statement in CREATE_FTS_TRIGGERS:
+    for statement in FTS_TRIGGERS_CREATE_STATEMENTS:
         await connection.execute(statement)
 
     await connection.commit()

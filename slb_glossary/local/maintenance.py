@@ -2,7 +2,7 @@
 
 import logging
 
-from slb_glossary.local import vectors
+from slb_glossary.local import vector
 from slb_glossary.local.types import Database, Metadata
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ async def flush(db: Database) -> None:
 
     :param db: The local database to clear.
     """
-    await vectors.clear(db)
+    await vector.clear(db)
     await db.connection.execute("DELETE FROM terms")
     await db.connection.commit()
     await db.connection.execute("VACUUM")

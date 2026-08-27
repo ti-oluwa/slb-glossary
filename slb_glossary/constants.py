@@ -284,7 +284,7 @@ class Constants:
     )
     """
     Hugging Face repo id of the `model2vec` model that embeds terms for
-    semantic search (`slb_glossary.local.embed_terms`/`vector_search`/
+    semantic search (`slb_glossary.local.embeembeddedd_terms`/`vector_search`/
     `hybrid_search`). Downloaded once, then cached locally; no network
     call happens per query.
 

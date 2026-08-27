@@ -8,7 +8,7 @@ import click
 from slb_glossary import query
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
-from slb_glossary.cli.runtime import run_async
+from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
@@ -19,7 +19,7 @@ from slb_glossary.cli.source_options import (
     source_options,
 )
 from slb_glossary.cli.tui import launch_tui
-from slb_glossary.query import SimilarResult, Source
+from slb_glossary.query import QueryResult, SimilarResult, Source
 from slb_glossary.types import SearchResult
 
 __all__ = ["define"]
@@ -98,7 +98,7 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
 
     suggest_similar = params["suggest_similar"]
 
-    async def run() -> tuple[int, tuple[SearchResult, ...]]:
+    async def run() -> tuple[int, tuple[QueryResult[SearchResult], ...]]:
         async with open_configured_db(config, db_path_override=params["db_path"]) as db:
             lookup = await resolve_lookup(
                 ctx,
@@ -167,7 +167,7 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
 
 
 def _show_similar_prompt(
-    term: str, similar: typing.Sequence["query.LookupResult[SearchResult]"]
+    term: str, similar: typing.Sequence["query.QueryResult[SearchResult]"]
 ) -> None:
     """
     Print `similar` as a "Did you mean" list and let the user interactively view one.
@@ -177,7 +177,7 @@ def _show_similar_prompt(
 
     :param term: The originally looked-up term, only used for messaging.
     :param similar: Similarly-named live results to offer as alternatives,
-        each already wrapped in its own `LookupResult` (with its own
+        each already wrapped in its own `QueryResult` (with its own
         score), best match first.
     """
     click.echo(f'No exact definition found for "{term}".')

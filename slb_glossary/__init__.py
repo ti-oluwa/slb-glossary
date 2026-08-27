@@ -47,7 +47,7 @@ from .live.browser import (
 )
 from .live.topics import refresh_topics
 from .query import (
-    LookupResult,
+    QueryResult,
     Source,
     compare,
     get_random_term,
@@ -86,10 +86,10 @@ __all__ = [
     "EmbeddingError",
     "Language",
     "LoggingError",
-    "LookupResult",
     "NetworkError",
     "ParsingError",
     "QueryError",
+    "QueryResult",
     "RecordLike",
     "RelatedTerm",
     "ResourceType",

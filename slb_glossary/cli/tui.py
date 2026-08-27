@@ -116,20 +116,20 @@ def _find_node(node: typing.Any, path: typing.Sequence[str]) -> typing.Any:
     return None
 
 
-def _tree_start_node(tree_root: typing.Any) -> typing.Any:
+def _find_tree_start_node(tree_root: typing.Any) -> typing.Any:
     """
     Resolve where `command_path` should start being matched from.
 
-    trogon's `CommandTree` doesn't put the CLI's own top-level commands
+    `trogon`'s `CommandTree` doesn't put the CLI's own top-level commands
     directly under the tree's (invisible) root - it wraps them all under
     one extra node named after the root click command (`"root"` for a
-    root group named e.g. `slb-glossary`, since trogon looks up the group
+    root group named e.g. `slb-glossary`, since `trogon` looks up the group
     by its click-internal name rather than `info_name`). `command_path`
     is written relative to the CLI's own top-level commands (e.g.
     `("search",)`), so that wrapper needs to be stepped over first.
 
     :param tree_root: The command tree's actual root `TreeNode`.
-    :return: The node `command_path` should be matched against - the
+    :return: The node `command_path` should be matched against. The
         wrapper's child if there is exactly one such wrapper, otherwise
         `tree_root` itself unchanged.
     """
@@ -148,7 +148,7 @@ def _prefilling_screen_factory(
     """
     Build a `command_builder_cls` (trogon's `CommandBuilder`) subclass that,
     once mounted, preselects `command_path`'s node in the command tree and
-    prefills its form from `ctx.params` - instead of opening on the tree
+    prefills its form from `ctx.params`, instead of opening on the tree
     root with nothing selected, which is all trogon does on its own.
 
     A factory returning a *subclass*, not an instance, since
@@ -172,7 +172,7 @@ def _prefilling_screen_factory(
         def _preselect_and_prefill(self) -> None:
             try:
                 tree = self.query_one(command_tree_cls)
-                start = _tree_start_node(tree.root)
+                start = _find_tree_start_node(tree.root)
                 target = _find_node(start, command_path)
                 if target is None or target.data is None:
                     logger.debug(

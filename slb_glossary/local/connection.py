@@ -69,14 +69,15 @@ def _discard_on_mismatch(db_path: pathlib.Path, metadata_path: pathlib.Path) -> 
     means the stored terms and embeddings aren't safely readable under
     the current code. The local database is a disposable cache of
     glossary content (see `slb_glossary.local`'s own module docstring),
-    so the fix is to discard it and let it get recreated fresh, not to
+    so we just discard it and let it get recreated fresh, not to
     fail outright. Its sync history is lost along with it; run a sync
     again afterward to repopulate it.
 
     :param db_path: Path to the database file.
     :param metadata_path: Path to its `metadata.json`.
     :return: The metadata that was loaded (and, if mismatched, just
-        discarded), or `None` if there was no existing metadata file to check.
+        discarded), or `None` if there was no existing metadata file
+        to check.
     """
     if not metadata_path.exists():
         return None

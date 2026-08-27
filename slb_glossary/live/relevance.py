@@ -38,7 +38,7 @@ def score_content_overlap(query: str, *texts: str) -> float:
     """
     Score `query` against `texts` by token overlap, capped at `constants.content_match_score_cap`.
 
-    Measures coverage: how many of `query`'s own tokens turn up
+    Measures coverage, that is, how many of `query`'s own tokens turn up
     somewhere in `texts`, not how long `texts` are or how often each
     token repeats. A short exact phrase match and a long one both score
     about as well, so a longer definition doesn't win purely for
@@ -77,6 +77,8 @@ def score_result(
     *,
     mode: typing.Literal[SearchMode.SEMANTIC],
 ) -> float: ...
+
+
 def score_result(
     query: "str | np.ndarray",
     result: SearchResult,
@@ -110,7 +112,7 @@ def score_result(
     """
     if mode is SearchMode.HYBRID:
         raise ValueError(
-            "score_result doesn't support mode=SearchMode.HYBRID: it scores "
+            "`score_result` doesn't support `mode=SearchMode.HYBRID`. It scores "
             "one result at a time, but a fused ranking needs every result's "
             "rank relative to the others first."
         )

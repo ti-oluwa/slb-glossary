@@ -21,8 +21,9 @@ class SearchMode(enum.StrEnum):
     Ranking strategy for searching or scoring glossary terms, local or live.
 
     `LEXICAL` (the default) needs nothing beyond the base install.
-    `SEMANTIC`/`HYBRID` need the `semantic` extra installed - `HYBRID`
-    also needs a local database with terms already embedded via
+    `SEMANTIC`/`HYBRID` need the `semantic` extra installed.
+
+    `HYBRID` also needs a local database with terms already embedded via
     `slb_glossary.local.embed_terms`, and isn't available for live
     results at all (see `slb_glossary.live.score_result`).
     """

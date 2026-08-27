@@ -34,7 +34,7 @@ bm25 entirely (see its docstring).
 """
 
 
-def _build_fts_query(query: str) -> str:
+def build_fts_query(query: str) -> str:
     """
     Turn free text into a safe FTS5 MATCH query.
     Quoted, prefix-matched tokens "ANDed" together.
@@ -70,7 +70,7 @@ async def lexical_search(
     Ranking happens entirely in SQL, in two tiers:
 
     1. An exact (case/whitespace-insensitive) match against `term` scores
-       `constants.exact_match_score`; `term` starting with `query` scores
+       `constants.exact_match_score`; and a `term` starting with `query` scores
        `constants.prefix_match_score`. Computed directly against `terms.term`, so
        this tier is never affected by how often `query` happens to appear
        elsewhere.
@@ -163,7 +163,7 @@ async def lexical_search(
         query_norm,
         query_norm,
         query_norm,
-        _build_fts_query(normalized_query),
+        build_fts_query(normalized_query),
     ]
 
     resolved_topic = await resolve_topic(db, topic, fuzzy, language=language)
@@ -192,7 +192,7 @@ async def lexical_search(
     async with db.connection.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
 
-    # Rows already come back best-first (exact, then prefix, then bm25); no
+    # Rows already come back best-first (exact, then prefix, then bm25), so no
     # further sorting needed, we only need to turn that order into `[0.0, 1.0]` scores.
     others_bm25 = [
         row["bm25_score"] for row in rows if not row["is_exact"] and not row["is_prefix"]

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["load_file"]
 
 
-def _get_field(row: typing.Mapping[str, typing.Any], name: str | None) -> typing.Any:
+def get_field(row: typing.Mapping[str, typing.Any], name: str | None) -> typing.Any:
     """Return `row[name]` matched case-insensitively, or `None` if absent/empty/unset."""
     if not name:
         return None
@@ -66,7 +66,7 @@ def _parse_related(raw: typing.Any) -> tuple[RelatedTerm, ...] | None:
     return tuple(related) if related else None
 
 
-def _record_to_result(
+def record_to_result(
     row: typing.Mapping[str, typing.Any],
     *,
     term_field: str,
@@ -81,11 +81,11 @@ def _record_to_result(
     default_language: str,
 ) -> SearchResult | None:
     """Build a `SearchResult` from one imported row, or `None` if it has no term."""
-    term = _get_field(row, term_field)
+    term = get_field(row, term_field)
     if not term:
         return None
 
-    url = _get_field(row, url_field)
+    url = get_field(row, url_field)
     if not url:
         # url is half of the local database's primary key (url, topic);
         # synthesize a stable one from the term itself so rows without a
@@ -94,13 +94,13 @@ def _record_to_result(
         slug = "-".join(str(term).strip().lower().split())
         url = f"local://imported/{slug}"
 
-    definition = _get_field(row, definition_field)
-    grammatical_label = _get_field(row, grammatical_label_field)
-    topic = _get_field(row, topic_field)
-    language = _get_field(row, language_field)
-    image = _get_field(row, image_field)
-    image_caption = _get_field(row, image_caption_field)
-    related = _parse_related(_get_field(row, related_field))
+    definition = get_field(row, definition_field)
+    grammatical_label = get_field(row, grammatical_label_field)
+    topic = get_field(row, topic_field)
+    language = get_field(row, language_field)
+    image = get_field(row, image_field)
+    image_caption = get_field(row, image_caption_field)
+    related = _parse_related(get_field(row, related_field))
 
     return SearchResult(
         term=str(term),
@@ -242,7 +242,7 @@ async def load_file(
                     f"Could not read {resolved_path!s} as {resolved_format}: {exc}"
                 ) from exc
 
-            result = _record_to_result(
+            result = record_to_result(
                 row,
                 term_field=term_field,
                 definition_field=definition_field,

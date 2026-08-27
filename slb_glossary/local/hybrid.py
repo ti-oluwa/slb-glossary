@@ -7,7 +7,7 @@ from collections.abc import Collection, Sequence
 from slb_glossary.constants import constants
 from slb_glossary.local.lexical import lexical_search
 from slb_glossary.local.types import Database
-from slb_glossary.local.vectors import vector_search
+from slb_glossary.local.vector import vector_search
 from slb_glossary.types import SearchResult
 
 logger = logging.getLogger(__name__)
@@ -15,9 +15,10 @@ logger = logging.getLogger(__name__)
 __all__ = ["hybrid_search"]
 
 
-def _result_key(result: SearchResult) -> tuple[str, str] | None:
+def get_result_key(result: SearchResult) -> tuple[str, str] | None:
     """
-    A result's identity for ranking/dedup purposes: `(url, topic)`, not `url` alone.
+    A result's identity for ranking/deduplication purposes.
+    Returned as `(url, topic)`, not `url` alone.
 
     :param result: The result to key.
     :return: `(result.url, result.topic or "")`, or `None` if `result` has no `url`.
@@ -33,7 +34,7 @@ def _compute_rrf_scores(
     """
     Score every result appearing in any of `rankings` by weighted reciprocal rank fusion.
 
-    :param rankings: One ranked sequence of `_result_key`s (best first)
+    :param rankings: One ranked sequence of `get_result_key`s (best first)
         per ranker. A key missing from a given ranking just doesn't get
         that ranker's term added to its score, rather than being
         penalized explicitly.
@@ -72,18 +73,20 @@ async def hybrid_search(
     ranked ahead of everything else, exactly like `lexical_search`, so a
     semantically related but differently named term never outranks the
     term actually named that. Everything else is ranked by reciprocal
-    rank fusion between the lexical (bm25) and semantic (embedding)
+    rank fusion (RFF) between the lexical (bm25) and semantic (embedding)
     result orderings.
 
     RRF is the standard way to combine rankers whose raw scores aren't on
-    comparable scales, which is exactly the situation here: bm25 is
+    comparable scales, which is exactly the situation here. bm25 is
     unbounded and corpus-dependent, cosine similarity is bounded but has its
     own distribution per embedding model, and any fixed formula over their
     raw scores tends to be tuned to one dataset and misbehave on another.
     RRF sidesteps that by only looking at each candidate's *rank* in each
     list, not its raw score:
 
-        score = sum(weight / (k + rank), over every ranker that found it)
+    ```
+    score = sum(weight / (k + rank), over every ranker that found it)
+    ```
 
     which needs no calibration between the two rankers at all. See
     `constants.rrf_k`/`lexical_weight`/`semantic_weight` to tune it.
@@ -117,24 +120,24 @@ async def hybrid_search(
         own bm25-only score is, since a fused rank already reflects a
         genuine signal from two independent rankers rather than word
         overlap alone.
-    :raises DatabaseError: If `sqlite-vec` isn't installed, or its
-        extension can't be loaded.
+    :raises DatabaseError: If `sqlite-vec` isn't installed, or its extension
+        can't be loaded.
     :raises EmbeddingError: If `model2vec` isn't installed, or the
         embedding model's output size doesn't match `constants.embedding_dim`.
     """
     started_at = time.monotonic()
     pool = candidate_pool if candidate_pool is not None else constants.hybrid_candidate_pool
 
+    from slb_glossary.local.api import resolve_topic
+
     # Resolved once here rather than once each inside `lexical_search`/
-    # `vector_search`: with `fuzzy=True`, resolving a topic reads every
+    # `vector_search`. With `fuzzy=True`, resolving a topic reads every
     # locally stored topic name (`slb_glossary.local.api.get_topics`) to
     # fuzzy-match against, and both sub-searches would otherwise redo
     # that same read for the same `topic`/`language`. Passing the
-    # already-resolved topic through with `fuzzy=False` also means
-    # `get_topics` runs at most once per `hybrid_search` call, on any
-    # database size, not twice.
-    from slb_glossary.local.api import resolve_topic
-
+    # already-resolved topic through with `fuzzy=False` means that
+    # `get_topics` only runs at most once per `hybrid_search` call, on any
+    # database size.
     resolved_topic = await resolve_topic(db, topic, fuzzy, language=language)
 
     lexical = await lexical_search(
@@ -161,15 +164,17 @@ async def hybrid_search(
     name_tier = [
         (result, score) for result, score in lexical if score >= constants.prefix_match_score
     ]
-    name_tier_keys = {key for result, _ in name_tier if (key := _result_key(result))}
+    name_tier_keys = {key for result, _ in name_tier if (key := get_result_key(result))}
 
     lexical_ranking = [
         key
         for result, score in lexical
-        if score < constants.prefix_match_score and (key := _result_key(result))
+        if score < constants.prefix_match_score and (key := get_result_key(result))
     ]
     semantic_ranking = [
-        key for result, _ in semantic if (key := _result_key(result)) and key not in name_tier_keys
+        key
+        for result, _ in semantic
+        if (key := get_result_key(result)) and key not in name_tier_keys
     ]
 
     fused_scores = _compute_rrf_scores(
@@ -181,10 +186,10 @@ async def hybrid_search(
 
     results_by_key: dict[tuple[str, str], SearchResult] = {}
     for result, _ in lexical:
-        if key := _result_key(result):
+        if key := get_result_key(result):
             results_by_key[key] = result
     for result, _ in semantic:
-        if key := _result_key(result):
+        if key := get_result_key(result):
             results_by_key.setdefault(key, result)
 
     ranked_keys = sorted(fused_scores, key=lambda key: fused_scores[key], reverse=True)

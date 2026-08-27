@@ -24,7 +24,7 @@ from slb_glossary.live.browser import session as browser_session
 from slb_glossary.local.connection import database
 from slb_glossary.local.types import Database
 from slb_glossary.paths import get_data_dir
-from slb_glossary.query import LookupResult, Source
+from slb_glossary.query import QueryResult, Source
 
 __all__ = [
     "database_option",
@@ -325,15 +325,15 @@ async def resolve_lookup(
     db: Database | None,
     *,
     source: Source,
-    local_call: typing.Callable[[Database], typing.Awaitable[LookupResult[T]]],
-    live_call: typing.Callable[[Session], typing.Awaitable[LookupResult[T]]],
-) -> LookupResult[T]:
+    local_call: typing.Callable[[Database], typing.Awaitable[QueryResult[T]]],
+    live_call: typing.Callable[[Session], typing.Awaitable[QueryResult[T]]],
+) -> QueryResult[T]:
     """
     Run a single-value `slb_glossary.query` lookup, opening a live session only if actually needed.
 
     For `Source.AUTO`, `local_call` is tried first (no browser
     launched); a live session is opened via `live_call` only if that came
-    back empty (`LookupResult.value` falsy).
+    back empty (`QueryResult.value` falsy).
 
     :param ctx: The current click context.
     :param params: The command's parsed parameters (for `live_session`).
@@ -345,7 +345,7 @@ async def resolve_lookup(
     :param live_call: Awaitable-returning callable given an opened
         `Session`, e.g. `lambda s: query.get_term(term, db=db,
         session=s, source=Source.LIVE, persist=cache_results)`.
-    :return: The resolved `LookupResult`.
+    :return: The resolved `QueryResult`.
     :raises click.UsageError: If `source` is `Source.LOCAL` but `db` is `None`.
     """
     if source is Source.LOCAL:
@@ -386,7 +386,7 @@ async def resolve_stream(
 
     The streaming counterpart to `resolve_lookup`, for commands built on a
     `slb_glossary.query` function that yields several results (`search`,
-    `get_terms_on`, `get_terms_urls`) rather than a single `LookupResult`.
+    `get_terms_on`, `get_terms_urls`) rather than a single `QueryResult`.
 
     For `Source.AUTO`, `local_call` is fully drained first (no
     browser launched); a live session is opened via `live_call` only if

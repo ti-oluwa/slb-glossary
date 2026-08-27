@@ -285,7 +285,7 @@ async def save(
         built-in choices.
     :raises UnsupportedFormatError: If no writer is registered for the
         resolved format.
-    :raises WriterError: If the resolved writer raises while writing -
+    :raises WriterError: If the resolved writer raises while writing,
         commonly a permissions error or a full disk. The original
         exception is chained as `__cause__`.
     """

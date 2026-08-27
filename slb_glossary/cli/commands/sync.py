@@ -11,7 +11,7 @@ from slb_glossary.cli.browsers import (
     list_installed_browsers,
 )
 from slb_glossary.cli.errors import cli_command
-from slb_glossary.cli.runtime import run_async
+from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, resolve_session_kwargs, session_options
 from slb_glossary.cli.source_options import database_option, get_loaded_config, resolve_db_path
 from slb_glossary.cli.sync_options import (

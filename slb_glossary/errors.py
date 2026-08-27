@@ -55,15 +55,7 @@ class UnsupportedFormatError(ValueError, SLBGlossaryError):
 
 
 class WriterError(OSError, SLBGlossaryError):
-    """
-    Raised when a registered writer fails while writing `records`.
-
-    Wraps whatever the writer itself raised (typically an `OSError` from
-    the filesystem, but any exception is caught) with the destination path
-    and resolved format attached, so callers get useful context without
-    needing to inspect the writer's internals. The original exception is
-    always available via `__cause__`.
-    """
+    """Raised when a registered writer fails while writing `records`."""
 
     def __init__(self, message: str, *, destination: pathlib.Path, format: str) -> None:
         super().__init__(message)

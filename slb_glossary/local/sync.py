@@ -110,7 +110,7 @@ async def _record_sync(
     )
 
 
-async def _drain_and_upsert(
+async def drain_and_upsert(
     db: Database,
     results: typing.AsyncIterable[SearchResult],
     *,
@@ -157,7 +157,7 @@ async def sync_topics(db: Database, session: Session) -> SyncSummary:
     """
     Refresh the local database's recorded topic list from `session`, without fetching terms.
 
-    Cheap relative to the other sync functions: it only records
+    Cheap relative to the other sync functions as it only records
     `session.topics`, the counts already captured when the session opened
     (or last refreshed via `slb_glossary.topics.refresh_topics`) and does no
     additional requests to the glossary site.
@@ -235,7 +235,7 @@ async def sync_query(
         concurrency=concurrency,
         exclude=exclude,
     )
-    written, interrupted = await _drain_and_upsert(
+    written, interrupted = await drain_and_upsert(
         db,
         results,
         language=session.language.value,
@@ -303,7 +303,7 @@ async def sync_topic(
         else None
     )
     results = get_terms_on(session, topic, limit=limit, concurrency=concurrency, exclude=exclude)
-    written, interrupted = await _drain_and_upsert(
+    written, interrupted = await drain_and_upsert(
         db,
         results,
         language=session.language.value,
@@ -338,7 +338,8 @@ async def sync_letter(
     skip_existing: bool = True,
 ) -> SyncSummary:
     """
-    Fetch every term starting with `start_letter` from the live glossary and store them locally.
+    Fetch every term starting with `start_letter` from the live glossary and
+    store them locally.
 
     Useful for incremental updates keyed by the alphabet instead of by
     topic, e.g. syncing by start-letter "a" through "z" over several
@@ -389,7 +390,7 @@ async def sync_letter(
         first_only=True,
         exclude=exclude,
     )
-    written, interrupted = await _drain_and_upsert(
+    written, interrupted = await drain_and_upsert(
         db,
         results,
         language=session.language.value,
@@ -476,7 +477,7 @@ async def sync_all(
                 else None
             )
             results = get_terms_on(session, topic_name, concurrency=concurrency, exclude=exclude)
-            written, _ = await _drain_and_upsert(
+            written, _ = await drain_and_upsert(
                 db,
                 results,
                 language=session.language.value,

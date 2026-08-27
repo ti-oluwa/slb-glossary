@@ -90,7 +90,7 @@ async def ensure_table(db: Database) -> None:
     """
     await load_extension(db)
     dim = embedding_dim()
-    # Keyed by `rowid`, matching `terms.rowid`, not by `url`: a page with
+    # Keyed by `rowid`, matching `terms.rowid`, not by `url`. A page with
     # several definitions (one per topic) shares one `url` across several
     # `terms` rows, so `url` alone can't identify which row's embedding
     # this is. `vec0` (like every SQLite table) already has an implicit
@@ -114,8 +114,7 @@ async def clear(db: Database) -> None:
     :param db: The local database to clear.
     """
     try:
-        exists_before_load = await check_table_exists(db)
-        if not exists_before_load:
+        if not await check_table_exists(db):
             return
         await load_extension(db)
     except DatabaseError:
@@ -137,7 +136,8 @@ async def embed_terms(
     batch_size: int | None = None,
 ) -> int:
     """
-    Compute and store embeddings for locally stored terms, for `vector_search`/`hybrid_search`.
+    Compute and store embeddings for locally stored terms, for
+    `vector_search`/`hybrid_search`.
 
     A term with several stored definitions (one per topic, all sharing
     one URL, see `slb_glossary.local.upsert_results`) gets one embedding
@@ -190,8 +190,8 @@ async def embed_terms(
         vectors = embed(texts)
         rowids = [row["rowid"] for row in batch]
         # `vec0` doesn't support `ON CONFLICT`/`INSERT OR REPLACE` as an
-        # upsert; delete first so a re-embedded row doesn't just fail to
-        # insert on top of its old vector.
+        # upsert. We need to delete first so a re-embedded row doesn't just
+        # fail to insert on top of its old vector.
         placeholders = ", ".join("?" for _ in rowids)
         await db.connection.execute(
             f"DELETE FROM {VECTOR_TABLE} WHERE rowid IN ({placeholders})", rowids
@@ -217,7 +217,7 @@ async def delete_embeddings(db: Database, *, urls: Collection[str] | None = None
     """
     Delete stored embeddings, optionally scoped to `urls`.
 
-    A no-op if no embeddings have ever been stored (`embed_terms` was
+    A no-op if no embeddings have ever been stored (i.e `embed_terms` was
     never called), so this is always safe to call speculatively.
 
     :param db: The local database to write to.
@@ -258,11 +258,12 @@ async def vector_search(
     """
     Rank locally stored, embedded terms by semantic similarity to `query`.
 
-    Purely semantic: a paraphrase or a related concept can outrank a
+    Purely semantic. A paraphrase or a related concept can outrank a
     result that shares no words with `query` at all, which lexical
     search (`slb_glossary.local.search`) can never do. It also has no
     equivalent of lexical search's exact/prefix name tier, so a term
     named exactly what you searched for isn't guaranteed to rank first.
+
     Prefer `slb_glossary.local.hybrid_search` unless you specifically
     want ranking with no lexical signal mixed in.
 

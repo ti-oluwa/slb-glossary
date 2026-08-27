@@ -2,7 +2,7 @@
 Local search database. A SQLite (FTS5 + `sqlite-vec`) cache of glossary
 terms, so repeat lookups don't have to keep re-visiting the live site.
 
-**Disclaimer**: the data stored here is still SLB's - see the
+**Disclaimer**: the data stored here is still SLB's. See the
 the package docstring for the full notice. Enabling this
 module means keeping a local copy of glossary content on your own
 machine; you are solely responsible for that copy's lifecycle (how long
@@ -41,7 +41,7 @@ from slb_glossary.local.sync import (
     sync_topics,
 )
 from slb_glossary.local.types import Database, Metadata
-from slb_glossary.local.vectors import delete_embeddings, embed_terms, vector_search
+from slb_glossary.local.vector import delete_embeddings, embed_terms, vector_search
 from slb_glossary.types import SearchMode
 
 __all__ = [

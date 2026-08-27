@@ -92,7 +92,8 @@ def read_json_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]
 
 def read_xlsx_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
     """
-    Lazily read `path`'s first worksheet, yielding one `{header: value}` row at a time.
+    Lazily read `path`'s first worksheet, yielding one `{header: value}`
+    row at a time.
 
     Opens the workbook in `openpyxl`'s `read_only` mode, which itself
     streams rows from the underlying XML rather than loading the whole

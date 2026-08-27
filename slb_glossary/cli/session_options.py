@@ -104,7 +104,7 @@ def _apply_log_level(ctx: click.Context, param: click.Parameter, value: str | No
     """
     Eager `--log-level` callback: apply the override immediately if given.
 
-    Runs as this command's own options are processed - after the root
+    Runs as this command's own options are processed, after the root
     `slb-glossary --log-level` group option has already set its default
     (`WARNING` unless overridden there), so a per-command `--log-level`
     reliably wins for the duration of this command. Leaves the level

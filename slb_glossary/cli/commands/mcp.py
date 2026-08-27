@@ -6,7 +6,7 @@ import typing
 import click
 
 from slb_glossary.cli.errors import cli_command
-from slb_glossary.cli.runtime import run_async
+from slb_glossary.cli.runner import run_async
 from slb_glossary.config import Config
 from slb_glossary.query import Source
 from slb_glossary.types import Language

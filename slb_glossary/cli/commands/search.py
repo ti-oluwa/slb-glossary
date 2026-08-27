@@ -7,7 +7,7 @@ import click
 from slb_glossary import query as query_api
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
-from slb_glossary.cli.runtime import run_async
+from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
@@ -25,7 +25,7 @@ from slb_glossary.cli.tui import launch_tui
 from slb_glossary.constants import constants
 from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
-from slb_glossary.query import LookupResult, Source
+from slb_glossary.query import QueryResult, Source
 from slb_glossary.types import SearchMode, SearchResult
 
 __all__ = ["search"]
@@ -70,7 +70,7 @@ async def auto_search_stream(
     concurrency: int,
     relevance_threshold: float,
     exclude: tuple[str, ...] | None,
-) -> typing.AsyncIterator[LookupResult[SearchResult]]:
+) -> typing.AsyncIterator[QueryResult[SearchResult]]:
     """
     Stream `Source.AUTO` results for the `search` command, opening a live
     session only if the local database doesn't have a confident match.
@@ -93,7 +93,7 @@ async def auto_search_stream(
     :param relevance_threshold: See `slb_glossary.query.search`'s parameter of the same name.
     :param exclude: URLs and/or term names to leave out of the results
         entirely. See `slb_glossary.cli.source_options.exclude_option`.
-    :yield: `LookupResult[SearchResult]`s, local results first if a live fetch also happens.
+    :yield: `QueryResult[SearchResult]`s, local results first if a live fetch also happens.
     """
     if db is None:
         async with live_session(ctx, params) as session:
@@ -124,7 +124,7 @@ async def auto_search_stream(
     best_score = scored[0][1] if scored else 0.0
     if scored and best_score >= relevance_threshold:
         for result, score in scored:
-            yield LookupResult(value=result, source=Source.LOCAL, persisted=False, score=score)
+            yield QueryResult(value=result, source=Source.LOCAL, persisted=False, score=score)
         return
 
     async with live_session(ctx, params) as session:

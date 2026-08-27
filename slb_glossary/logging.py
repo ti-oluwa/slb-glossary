@@ -13,7 +13,7 @@ from slb_glossary.logging import FileSink, configure_logging
 configure_logging(sinks=FileSink("slb-glossary.log"), level="DEBUG")
 ```
 
-Sinks can also be routed selectively: pass a `{filter: sink}` mapping
+Sinks can also be routed selectively. Pass a `{filter: sink}` mapping
 instead of a single sink/list, and each record only goes to the sink(s)
 whose filter matches it.
 
@@ -67,8 +67,8 @@ class LogSink(typing.Protocol):
     """
     Protocol for a destination formatted log lines can be written to.
 
-    Implement this interface to route `slb_glossary`'s logging anywhere:
-    a file, a socket, a queue for an in-app log viewer, a bug-report buffer,
+    Implement this interface to route `slb_glossary`'s logging anywhere.
+    A file, a socket, a queue for an in-app log viewer, a bug-report buffer,
     etc. Pass an instance (or the class itself, for a no-argument constructor)
     to `configure_logging`, `resolve_sink`, `--log-to`/`--log-sink`, or
     `open_session(log_sink=...)`.
@@ -176,7 +176,7 @@ route's sink(s).
 """
 
 
-def _sink_filter_matches(filter: SinkFilter, record: logging.LogRecord) -> bool:
+def check_filter_matches(filter: SinkFilter, record: logging.LogRecord) -> bool:
     """Whether `filter` selects `record` for its route's sink(s)."""
     if isinstance(filter, str):
         return fnmatch.fnmatch(record.name, filter)
@@ -244,7 +244,7 @@ class SinkHandler(RichHandler):
             return
 
         for filter, sink in self._routes:
-            if filter is not None and not _sink_filter_matches(filter, record):
+            if filter is not None and not check_filter_matches(filter, record):
                 continue
             try:
                 sink.write(message)
@@ -265,7 +265,8 @@ class SinkHandler(RichHandler):
 
 def import_sink(dotted_path: str) -> typing.Any:
     """
-    Import a `LogSink` class or instance given its `"module:attr"`/`"package.module.attr"` path.
+    Import a `LogSink` class or instance given its `"module:attr"` or
+    `"package.module.attr"` path.
 
     :param dotted_path: Either `"module:attr"` (splitting on the last
         `":"`) or `"package.module.attr"` (splitting on the last `"."`).
@@ -303,7 +304,8 @@ def resolve_sink(
     default: LogSink | None = None,
 ) -> LogSink:
     """
-    Resolve `--log-to`/`--log-sink`-style input (or a library-level equivalent) into a `LogSink`.
+    Resolve `--log-to`/`--log-sink`-style input (or a library-level equivalent)
+    into a `LogSink`.
 
     :param spec: Any of:
         - `None`: returns `default`, or a `StderrSink()` if `default` is also `None`.
@@ -415,7 +417,8 @@ def configure_logging(
     a file for bug reports, an in-memory sink for a test harness, several
     sinks at once, etc. Calling this again (e.g. because `--log-to`
     changed mid-process) cleanly tears down the handler it previously set
-    up before attaching the new one, so repeat calls don't pile up duplicate handlers.
+    up before attaching the new one, so repeat calls don't pile up duplicate
+    handlers.
 
     :param sinks: One sink (spec), several, a `{filter: sink(s)}` mapping
         to route only matching log records to each sink (see
