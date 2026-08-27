@@ -94,12 +94,12 @@ def list_topics(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
     source = resolve_source(params)
     config = get_loaded_config(params)
 
-    async def _local_records(db: typing.Any) -> typing.AsyncIterator[TopicRecord]:
+    async def get_local_records(db: typing.Any) -> typing.AsyncIterator[TopicRecord]:
         topics = await query.get_topics(db=db, source=Source.LOCAL)
         async for record in iter_topic_records(topics):
             yield record
 
-    async def _live_records(session: typing.Any) -> typing.AsyncIterator[TopicRecord]:
+    async def get_live_records(session: typing.Any) -> typing.AsyncIterator[TopicRecord]:
         topics = await query.get_topics(session=session, source=Source.LIVE)
         async for record in iter_topic_records(topics):
             yield record
@@ -111,8 +111,8 @@ def list_topics(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
                 params,
                 db,
                 source=source,
-                local_call=_local_records,
-                live_call=_live_records,
+                local_call=get_local_records,
+                live_call=get_live_records,
             )
             return await output_results(
                 records,

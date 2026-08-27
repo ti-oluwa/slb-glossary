@@ -18,7 +18,6 @@ from slb_glossary.cli.commands import (
     sync,
     terms,
     topics,
-    update,
     urls,
 )
 from slb_glossary.cli.tui import TuiUnavailableError, launch_tui
@@ -99,7 +98,6 @@ COMMANDS = {
     "compare": compare,
     "random": random_term,
     "sync": sync,
-    "update": update,
     "local": local,
     "config": config,
     "mcp": mcp,

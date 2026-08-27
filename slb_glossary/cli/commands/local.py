@@ -7,8 +7,6 @@ import typing
 import click
 
 from slb_glossary import local as local_pkg
-from slb_glossary.cli.commands.sync import sync as sync_command
-from slb_glossary.cli.commands.update import update as update_command
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
 from slb_glossary.cli.runner import run_async
@@ -359,7 +357,7 @@ def _field_or_empty(ctx: click.Context, param: click.Parameter, value: str | Non
         "write less often but risk losing more unwritten rows if the "
         "import is interrupted before the next flush. Defaults to "
         "constants.import_batch_size (500 unless "
-        "SLB_GLOSSARY_IMPORT_BATCH_SIZE overrides it)."
+        "`SLB_GLOSSARY_IMPORT_BATCH_SIZE` overrides it)."
     ),
 )
 @database_option
@@ -471,9 +469,3 @@ def reset(**params: typing.Any) -> None:
     run_async(run())
     click.echo("Local database reset.")
 
-
-# `sync`/`update` are the same commands registered at the CLI root, added
-# here too under `local` for discoverability.
-# Both go live, unlike everything else in this group.
-local.add_command(sync_command, name="sync")
-local.add_command(update_command, name="update")

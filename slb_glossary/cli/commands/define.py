@@ -137,7 +137,7 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
         if not params["quiet"]:
             click.secho(f"(source: {lookup.source.value})", fg="bright_black", err=True)
 
-        async def _one() -> typing.AsyncIterator[typing.Any]:
+        async def _one() -> typing.AsyncIterator[typing.Any]:  # ruff: ignore[unused-async]
             yield exact
 
         count = await output_results(

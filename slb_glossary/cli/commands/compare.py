@@ -100,7 +100,7 @@ def compare(
                 )
                 if lookup.value is not None:
                     sources_seen.add(lookup.source.value)
-                    yield lookup.value
+                    yield lookup.value  # ruff: ignore[yield-in-context-manager-in-async-generator]
 
                 elif not params["quiet"]:
                     click.secho(f"Not found: {term!r}", fg="yellow", err=True)

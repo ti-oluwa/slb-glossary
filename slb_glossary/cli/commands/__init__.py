@@ -12,7 +12,6 @@ from slb_glossary.cli.commands.search import search
 from slb_glossary.cli.commands.sync import sync
 from slb_glossary.cli.commands.terms import terms
 from slb_glossary.cli.commands.topics import topics
-from slb_glossary.cli.commands.update import update
 from slb_glossary.cli.commands.urls import urls
 
 __all__ = [
@@ -28,6 +27,5 @@ __all__ = [
     "sync",
     "terms",
     "topics",
-    "update",
     "urls",
 ]
