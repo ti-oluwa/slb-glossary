@@ -49,12 +49,9 @@ async def get_known_urls_set(
     the live site returns) cheap regardless of how many URLs are excluded.
     """
     return frozenset(
-        [
-            url
-            for url in await get_known_urls(
-                db, query=query, topic=topic, start_letter=start_letter, language=language
-            )
-        ]
+        await get_known_urls(
+            db, query=query, topic=topic, start_letter=start_letter, language=language
+        )
     )
 
 

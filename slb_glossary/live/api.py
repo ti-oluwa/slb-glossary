@@ -251,21 +251,30 @@ async def get_terms_urls(
     tab = 1
     max_tabs: int | None = None
 
-    if session.base_page is not None and not session.base_page.is_closed():
-        # Use the session's base page if it has it (since its already initialized).
-        # We have already interacted with it (to load topics et al) so subsequent
-        # requests will not meet a "access restricted" page/message.
-        # This is mostlikely the only reasonable place to utilize the base page so far.
-        # The only caveat is that two `get_term_urls` task must not run concurrently using
-        # this same session, else, they will be overriding each other page loads.
+    base_page_free = (
+        session.base_page is not None
+        and not session.base_page.is_closed()
+        and not session.base_page_in_use
+    )
+    if base_page_free:
+        # Reuse the session's base page when it's free: it's already
+        # warmed up (see `Session.base_page`'s docstring for why that
+        # matters), and staying warmed up isn't a one-time thing, so
+        # there's no reason to throw it away after a single use.
         page = session.base_page
+        owns_page = False
+        session.base_page_in_use = True
     else:
+        # `base_page` is either unavailable (closed, or this session was
+        # never initialized with one) or already checked out by a
+        # concurrent `get_terms_urls` call - either way, get a dedicated
+        # page of our own and pay the one-time warm-up cost ourselves
+        # rather than racing another call over `base_page`'s navigation.
         page = await session.new_page()
-        # We need to interact and basically start from the base page
-        # so we dont get the "access restricted" message.
-        # The results links wont even load if we do not do this
+        owns_page = True
         await fetch_topics(page, base_url=session.base_url)
     try:
+        assert page is not None
         # The glossary auto-runs an unfiltered query as soon as the search
         # screen loads (that's what populates the facet panel), so the page
         # always has *some* results-panel state to diff a filtered search
@@ -339,7 +348,10 @@ async def get_terms_urls(
                 return
             tab += 1
     finally:
-        await page.close()
+        if owns_page and page is not None:
+            await page.close()
+        else:
+            session.base_page_in_use = False
         elapsed = time.monotonic() - started_at
         logger.debug(
             "`get_terms_urls` done: %d url(s) yielded, %d skipped (excluded), "

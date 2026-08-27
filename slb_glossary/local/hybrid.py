@@ -15,28 +15,40 @@ logger = logging.getLogger(__name__)
 __all__ = ["hybrid_search"]
 
 
-def _compute_rrf_scores(
-    *rankings: Sequence[str], weights: Sequence[float], k: float
-) -> dict[str, float]:
+def _result_key(result: SearchResult) -> tuple[str, str] | None:
     """
-    Score every URL appearing in any of `rankings` by weighted reciprocal rank fusion.
+    A result's identity for ranking/dedup purposes: `(url, topic)`, not `url` alone.
 
-    :param rankings: One ranked sequence of URLs (best first) per ranker.
-        A URL missing from a given ranking just doesn't get that
-        ranker's term added to its score, rather than being penalized
-        explicitly.
+    :param result: The result to key.
+    :return: `(result.url, result.topic or "")`, or `None` if `result` has no `url`.
+    """
+    if not result.url:
+        return None
+    return (result.url, result.topic or "")
+
+
+def _compute_rrf_scores(
+    *rankings: Sequence[tuple[str, str]], weights: Sequence[float], k: float
+) -> dict[tuple[str, str], float]:
+    """
+    Score every result appearing in any of `rankings` by weighted reciprocal rank fusion.
+
+    :param rankings: One ranked sequence of `_result_key`s (best first)
+        per ranker. A key missing from a given ranking just doesn't get
+        that ranker's term added to its score, rather than being
+        penalized explicitly.
     :param weights: One weight per ranker, same length and order as `rankings`.
     :param k: The RRF `k` constant. See `constants.rrf_k`.
-    :return: URL to fused score, unsorted and not normalized to any
-        particular range. `hybrid_search` min-max normalizes these
+    :return: Result key to fused score, unsorted and not normalized to
+        any particular range. `hybrid_search` min-max normalizes these
         relative to each other into a `[0.0, 1.0]`-ish band.
     """
-    scores: dict[str, float] = {}
+    scores: dict[tuple[str, str], float] = {}
     for ranking, weight in zip(rankings, weights, strict=True):
         if not weight:
             continue
-        for rank, url in enumerate(ranking, start=1):
-            scores[url] = scores.get(url, 0.0) + weight / (k + rank)
+        for rank, key in enumerate(ranking, start=1):
+            scores[key] = scores.get(key, 0.0) + weight / (k + rank)
     return scores
 
 
@@ -74,8 +86,7 @@ async def hybrid_search(
         score = sum(weight / (k + rank), over every ranker that found it)
 
     which needs no calibration between the two rankers at all. See
-    `slb_glossary.constants.Constants.rrf_k`/`lexical_weight`/`semantic_weight`
-    to tune it.
+    `constants.rrf_k`/`lexical_weight`/`semantic_weight` to tune it.
 
     Needs terms already embedded via `slb_glossary.local.embed_terms`. A
     term synced or imported since the last `embed_terms` call is only
@@ -102,7 +113,7 @@ async def hybrid_search(
     :return: `(result, score)` pairs, best match first. `score` is `1.0`/`0.9`
         for the exact/prefix name tier, same as `lexical_search`; everything
         else is the fused ranking, min-max normalized against its own
-        result set into `[0.0, 1.0]` - not capped the way `lexical_search`'s
+        result set into `[0.0, 1.0]`, not capped the way `lexical_search`'s
         own bm25-only score is, since a fused rank already reflects a
         genuine signal from two independent rankers rather than word
         overlap alone.
@@ -114,39 +125,51 @@ async def hybrid_search(
     started_at = time.monotonic()
     pool = candidate_pool if candidate_pool is not None else constants.hybrid_candidate_pool
 
+    # Resolved once here rather than once each inside `lexical_search`/
+    # `vector_search`: with `fuzzy=True`, resolving a topic reads every
+    # locally stored topic name (`slb_glossary.local.api.get_topics`) to
+    # fuzzy-match against, and both sub-searches would otherwise redo
+    # that same read for the same `topic`/`language`. Passing the
+    # already-resolved topic through with `fuzzy=False` also means
+    # `get_topics` runs at most once per `hybrid_search` call, on any
+    # database size, not twice.
+    from slb_glossary.local.api import resolve_topic
+
+    resolved_topic = await resolve_topic(db, topic, fuzzy, language=language)
+
     lexical = await lexical_search(
         db,
         query,
-        topic=topic,
+        topic=resolved_topic,
         start_letter=start_letter,
         language=language,
         limit=pool,
-        fuzzy=fuzzy,
+        fuzzy=False,
         exclude=exclude,
     )
     semantic = await vector_search(
         db,
         query,
-        topic=topic,
+        topic=resolved_topic,
         start_letter=start_letter,
         language=language,
         limit=pool,
-        fuzzy=fuzzy,
+        fuzzy=False,
         exclude=exclude,
     )
 
     name_tier = [
         (result, score) for result, score in lexical if score >= constants.prefix_match_score
     ]
-    name_tier_urls = {result.url for result, _ in name_tier if result.url}
+    name_tier_keys = {key for result, _ in name_tier if (key := _result_key(result))}
 
     lexical_ranking = [
-        result.url
+        key
         for result, score in lexical
-        if score < constants.prefix_match_score and result.url
+        if score < constants.prefix_match_score and (key := _result_key(result))
     ]
     semantic_ranking = [
-        result.url for result, _ in semantic if result.url and result.url not in name_tier_urls
+        key for result, _ in semantic if (key := _result_key(result)) and key not in name_tier_keys
     ]
 
     fused_scores = _compute_rrf_scores(
@@ -156,26 +179,26 @@ async def hybrid_search(
         k=constants.rrf_k,
     )
 
-    results_by_url: dict[str, SearchResult] = {}
+    results_by_key: dict[tuple[str, str], SearchResult] = {}
     for result, _ in lexical:
-        if result.url:
-            results_by_url[result.url] = result
+        if key := _result_key(result):
+            results_by_key[key] = result
     for result, _ in semantic:
-        if result.url:
-            results_by_url.setdefault(result.url, result)
+        if key := _result_key(result):
+            results_by_key.setdefault(key, result)
 
-    ranked_urls = sorted(fused_scores, key=lambda url: fused_scores[url], reverse=True)
+    ranked_keys = sorted(fused_scores, key=lambda key: fused_scores[key], reverse=True)
     worst = min(fused_scores.values(), default=0.0)
     best = max(fused_scores.values(), default=0.0)
     spread = (best - worst) or 1.0
 
     fused_tier: list[tuple[SearchResult, float]] = [
         (
-            results_by_url[url],
-            round((fused_scores[url] - worst) / spread, 4),
+            results_by_key[key],
+            round((fused_scores[key] - worst) / spread, 4),
         )
-        for url in ranked_urls
-        if url in results_by_url
+        for key in ranked_keys
+        if key in results_by_key
     ]
 
     combined = name_tier + fused_tier

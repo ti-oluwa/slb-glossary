@@ -297,23 +297,29 @@ class Session:
     base_page: Page | None = None
     """
     The page `initialize()` used to load `topics`/`size`, held onto
-    (unless `initialize(hold_page=False)` was used) so a later operation
-    can reuse an already-warmed-up page instead of opening and warming up
-    its own.
+    (unless `initialize(hold_page=False)` was used) so later calls can
+    reuse an already-warmed-up page instead of opening and warming up
+    their own each time.
 
     The glossary site blocks requests that don't originate from a page
     that's already been interacted with, so a brand-new page has to run a
     throwaway search first before it can be trusted with a real one.
+    `base_page` has already paid that cost during `initialize()`, and
+    stays warmed-up indefinitely. `slb_glossary.live.get_terms_urls`
+    reuses it every time it's free, not just once, falling back to
+    opening and warming up a fresh page only when `base_page` is
+    unavailable (closed) or already checked out by a concurrent call
+    (see `base_page_in_use`).
+    """
 
-    `base_page` has already paid that cost during `initialize()`.
-    `slb_glossary.live.get_terms_urls` reuses it automatically when
-    available, and falling back to opening and warming up a fresh page 
-    otherwise.
-
-    Two concurrent `Session`s tasks must never try to use it (they'd 
-    each be navigating out from under the other), and `base_page` itself 
-    is only actually reusable for the first such call; afterward it's a 
-    closed page, and the next call warms up a fresh one instead.
+    base_page_in_use: bool = dataclasses.field(default=False, repr=False)
+    """
+    Whether `base_page` is currently checked out by a `get_terms_urls`
+    call. Sessions aren't meant to run several `get_terms_urls` calls at
+    once (they'd each need to navigate `base_page` independently, racing
+    over its single tab/state), so a concurrent call finding this `True`
+    falls back to a dedicated page of its own for that call, rather than
+    navigating `base_page` out from under the call already using it.
     """
 
     _initialized: bool = dataclasses.field(init=False, repr=False, default=False)
