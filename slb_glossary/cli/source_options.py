@@ -8,6 +8,7 @@ satisfiable locally never pays for launching a browser.
 """
 
 import contextlib
+import logging
 import pathlib
 import typing
 
@@ -19,12 +20,16 @@ from slb_glossary.cli.session_options import (
     resolve_session_kwargs,
 )
 from slb_glossary.config import Config
+from slb_glossary.constants import constants
 from slb_glossary.live.browser import Session
 from slb_glossary.live.browser import session as browser_session
 from slb_glossary.local.connection import database
 from slb_glossary.local.types import Database
+from slb_glossary.network import has_internet_connection
 from slb_glossary.paths import get_data_dir
 from slb_glossary.query import QueryResult, Source
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "database_option",
@@ -95,7 +100,7 @@ def source_options(func: F) -> F:
     )(func)
     func = click.option(
         "--auto",
-        "source_intelligent",
+        "source_auto",
         is_flag=True,
         help="Shorthand for --source auto (the default): local first, live as a fallback.",
     )(func)
@@ -196,7 +201,7 @@ def resolve_source(params: typing.Mapping[str, typing.Any]) -> Source:
         chosen.append(Source.LOCAL)
     if params.get("source_live"):
         chosen.append(Source.LIVE)
-    if params.get("source_intelligent"):
+    if params.get("source_auto"):
         chosen.append(Source.AUTO)
     if params.get("source"):
         chosen.append(Source(str(params["source"]).lower()))
@@ -333,7 +338,11 @@ async def resolve_lookup(
 
     For `Source.AUTO`, `local_call` is tried first (no browser
     launched); a live session is opened via `live_call` only if that came
-    back empty (`QueryResult.value` falsy).
+    back empty (`QueryResult.value` falsy) - and even then, only if
+    `constants.check_internet_before_live` doesn't find a reason not to
+    (see `slb_glossary.query.resolve_source`). No internet logs a
+    warning and returns local's (empty) result rather than opening a
+    browser for a live fetch that would just time out.
 
     :param ctx: The current click context.
     :param params: The command's parsed parameters (for `live_session`).
@@ -367,6 +376,15 @@ async def resolve_lookup(
         if local_result.value:
             return local_result
 
+        if constants.check_internet_before_live and not await has_internet_connection():
+            logger.warning(
+                "No internet connection detected; the local database had "
+                "nothing for this query, but skipping the live fetch rather "
+                "than opening a browser for it. Pass --live to force it "
+                "anyway, or set SLB_GLOSSARY_CHECK_INTERNET_BEFORE_LIVE=false."
+            )
+            return local_result
+
     async with live_session(ctx, params) as session:
         return await live_call(session)
 
@@ -390,7 +408,11 @@ async def resolve_stream(
 
     For `Source.AUTO`, `local_call` is fully drained first (no
     browser launched); a live session is opened via `live_call` only if
-    that came back with nothing at all.
+    that came back with nothing at all. Even then, only if
+    `constants.check_internet_before_live` doesn't find a reason not to
+    (see `slb_glossary.query.resolve_source`). No internet logs a
+    warning and returns local's (empty) results rather than opening a
+    browser for a live fetch that would just time out.
 
     :param ctx: The current click context.
     :param params: The command's parsed parameters (for `live_session`).
@@ -434,6 +456,15 @@ async def resolve_stream(
         if local_items:
             for item in local_items:
                 yield item
+            return
+
+        if constants.check_internet_before_live and not await has_internet_connection():
+            logger.warning(
+                "No internet connection detected; the local database had "
+                "nothing for this query, but skipping the live fetch rather "
+                "than opening a browser for it. Pass --live to force it "
+                "anyway, or set `SLB_GLOSSARY_CHECK_INTERNET_BEFORE_LIVE=false`."
+            )
             return
 
     async with live_session(ctx, params) as session:

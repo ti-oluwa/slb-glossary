@@ -76,6 +76,12 @@ class Constant(typing.Generic[T]):
 
     Without `env_var`, a `Constant` is just `default`, always and `cache`
     has no effect, since there's nothing to re-read from.
+
+    Regardless of `cache`, an explicit `instance.constant_name = value`
+    assignment always overrides every future read, bypassing both
+    `default` and the environment, until `reset()` is called. `cache`
+    only governs how a *non-overridden* constant resolves from the
+    environment (fresh every time, or once and held).
     """
 
     def __init__(
@@ -134,24 +140,47 @@ class Constant(typing.Generic[T]):
             # not an instance so we hand back the descriptor for introspection.
             return self  # type: ignore[return-value]
 
+        # An explicit `__set__` override always wins, `cache` or not, as
+        # that's the whole point of `__set__` ("bypassing the
+        # environment"). Only `reset()` clears this back to `_UNSET`,
+        # re-enabling normal env/default resolution below.
+        if self._cached is not _UNSET:
+            return typing.cast(T, self._cached)
+
         if self.env_var is None or not self.cache:
             return self._resolve()
 
-        if self._cached is _UNSET:
-            with self._lock:
-                if self._cached is _UNSET:
-                    self._cached = self._resolve()
+        with self._lock:
+            if self._cached is _UNSET:
+                self._cached = self._resolve()
         return typing.cast(T, self._cached)
 
     def __set__(self, instance: typing.Any, value: T) -> None:
-        """Override this constant's value directly (e.g. from a test), bypassing the environment."""
+        """
+        Override this constant's value directly (e.g. from a test), bypassing the environment.
+
+        Takes effect immediately and for every subsequent read regardless
+        of this `Constant`'s `cache` setting . `cache` only governs how a
+        *non-overridden* value resolves from the environment, not whether
+        an explicit override is honored. Call `reset()` to remove the
+        override and go back to reading `default`/the environment.
+        """
         if self.validator is not None and not self.validator(value):
             raise ValueError(f"{self._name!r}: {value!r} is not a valid value for this constant.")
         with self._lock:
             self._cached = value
 
     def reset(self) -> None:
-        """Clear a cached value, so the next access re-resolves it (from `default`/the environment)."""
+        """
+        Clear this constant back to normal resolution.
+
+        Removes both an explicit `__set__` override, if any, and any
+        cached env-resolved value (for a `cache=True` constant). 
+
+        Either way, the next access re-resolves fresh from `default`/the
+        environment, and (for `cache=True`) caches that fresh result
+        again from there.
+        """
         with self._lock:
             self._cached = _UNSET
 
@@ -169,7 +198,7 @@ class Constants:
     """
     Package-wide constants.
 
-    Not meant to be instantiated directly! Import and use the shared
+    **Not meant to be instantiated directly!** Import and use the shared
     `constants` instance below instead, so every constant is resolved
     (and, where `cache=True`, cached) exactly once across the whole
     process, not per-instance.
@@ -395,6 +424,50 @@ class Constants:
     need the `semantic` extra installed and terms already embedded
     (`slb_glossary.local.embed_terms`); set this to one of those once a
     database is embedded, it generally ranks better.
+    """
+
+    check_internet_before_live = Constant(
+        True,
+        env_var="SLB_GLOSSARY_CHECK_INTERNET_BEFORE_LIVE",
+    )
+    """
+    Whether `slb_glossary.query`'s `Source.AUTO` functions check
+    `slb_glossary.network.has_internet_connection` before attempting a
+    live fetch, when both a local database and a live session are
+    available. When `True` (the default), if no internet is detected, the
+    call logs a warning and serves local results only, skipping the live
+    attempt entirely. 
+    
+    This is much cheaper than opening a browser and waiting
+    out a full navigation timeout only to hit a `NetworkError`. Set to
+    `False` to always attempt live regardless (e.g. if the check itself
+    is unreliable on your network, such as one that blocks the probe
+    targets but still reaches the glossary site fine through a proxy).
+    Has no effect on `Source.LOCAL`/`Source.LIVE` calls, which never had
+    a choice to begin with.
+    """
+
+    internet_check_timeout = Constant(
+        2.0,
+        env_var="SLB_GLOSSARY_INTERNET_CHECK_TIMEOUT",
+        validator=lambda v: v > 0.0,
+    )
+    """
+    Seconds `slb_glossary.network.has_internet_connection` waits for each
+    probe target before giving up on it. Also the check's worst-case
+    total wall time, since every target is probed concurrently, not one
+    after another.
+    """
+
+    internet_check_cache_ttl = Constant(
+        15.0,
+        env_var="SLB_GLOSSARY_INTERNET_CHECK_CACHE_TTL",
+        validator=lambda v: v >= 0.0,
+    )
+    """
+    Seconds `slb_glossary.network.has_internet_connection` reuses its
+    last result for, instead of probing again, when called with its
+    default `use_cache=True`. `0` disables caching and every call probes fresh.
     """
 
 

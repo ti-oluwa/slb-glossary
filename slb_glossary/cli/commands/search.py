@@ -1,5 +1,6 @@
 """`slb-glossary search` - free-text search of the SLB glossary."""
 
+import logging
 import typing
 
 import click
@@ -25,8 +26,11 @@ from slb_glossary.cli.tui import launch_tui
 from slb_glossary.constants import constants
 from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
+from slb_glossary.network import has_internet_connection
 from slb_glossary.query import QueryResult, Source
 from slb_glossary.types import SearchMode, SearchResult
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["search"]
 
@@ -123,6 +127,17 @@ async def auto_search_stream(
     )
     best_score = scored[0][1] if scored else 0.0
     if scored and best_score >= relevance_threshold:
+        for result, score in scored:
+            yield QueryResult(value=result, source=Source.LOCAL, persisted=False, score=score)
+        return
+
+    if constants.check_internet_before_live and not await has_internet_connection():
+        logger.warning(
+            "No internet connection detected; serving this search from the "
+            "local database only instead of opening a browser for a live "
+            "fetch. Pass --live to force it anyway, or set "
+            "`SLB_GLOSSARY_CHECK_INTERNET_BEFORE_LIVE=false`."
+        )
         for result, score in scored:
             yield QueryResult(value=result, source=Source.LOCAL, persisted=False, score=score)
         return

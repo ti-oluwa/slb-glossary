@@ -53,6 +53,7 @@ from slb_glossary.live.browser import Session
 from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
 from slb_glossary.natural_language import clean_query
+from slb_glossary.network import has_internet_connection
 from slb_glossary.types import RelatedTerm, SearchMode, SearchResult
 
 logger = logging.getLogger(__name__)
@@ -173,10 +174,42 @@ def validate_source(db: Database | None, session: Session | None, source: Source
         raise QueryError("`source=Source.LIVE` requires `session` (an open `Session`).")
 
 
-def resolve_source(db: Database | None, session: Session | None, source: Source) -> Source:
-    """Attempt to narrow `Source.AUTO` to a starting concrete source given what's available."""
+async def resolve_source(db: Database | None, session: Session | None, source: Source) -> Source:
+    """
+    Attempt to narrow `Source.AUTO` to a starting concrete source given what's available.
+
+    When only one of `db`/`session` is given, `Source.AUTO` simply
+    resolves to whichever one that is.
+
+    When both are given, this defers back to `Source.AUTO` (returns it
+    unchanged) so the caller's own local-first, live-fallback logic can
+    decide, *unless* `constants.check_internet_before_live` is set and
+    `slb_glossary.network.has_internet_connection` reports no
+    connectivity, in which case this resolves straight to `Source.LOCAL`
+    instead, logging a warning. Attempting live with no internet would
+    just mean opening a browser and waiting out a full navigation
+    timeout to reach the same conclusion.
+
+    :param db: An open local `Database`, or `None`.
+    :param session: An open live `Session`, or `None`.
+    :param source: The source requested by the caller.
+    :return: The source to actually use.
+    :raises QueryError: If neither `db` nor `session` is given, or the
+        requested `source` needs one that wasn't given.
+    """
     validate_source(db, session, source)
-    if source is not Source.AUTO or (db is not None and session is not None):
+    if source is not Source.AUTO:
+        return source
+    if db is not None and session is not None:
+        if constants.check_internet_before_live and not await has_internet_connection():
+            logger.warning(
+                "No internet connection detected; serving this query from the "
+                "local database only instead of attempting a live fetch. Set "
+                "`constants.check_internet_before_live = False` (or "
+                "`SLB_GLOSSARY_CHECK_INTERNET_BEFORE_LIVE=false`) to always "
+                "attempt live regardless."
+            )
+            return Source.LOCAL
         return source
     return Source.LOCAL if db is not None else Source.LIVE
 
@@ -435,7 +468,7 @@ async def search(
         relevance_threshold if relevance_threshold is not None else constants.relevance_threshold
     )
     started_at = time.monotonic()
-    resolved_source = resolve_source(db, session, source)
+    resolved_source = await resolve_source(db, session, source)
     count = 0
     if resolved_source is Source.LOCAL:
         assert db is not None
@@ -685,8 +718,8 @@ async def get_terms_on(
     """
     validate_language(session, language)
     started_at = time.monotonic()
-    resolved = resolve_source(db, session, source)
-    if resolved is Source.LOCAL:
+    resolved_source = await resolve_source(db, session, source)
+    if resolved_source is Source.LOCAL:
         assert db is not None
         count = 0
         for result in await local.get_terms_on(
@@ -709,7 +742,7 @@ async def get_terms_on(
         )
         return
 
-    if resolved is Source.LIVE or source is not Source.AUTO:
+    if resolved_source is Source.LIVE or source is not Source.AUTO:
         assert session is not None
         stream = live.get_terms_on(
             session,
@@ -856,7 +889,7 @@ async def get_terms_urls(
         isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
-    resolved_source = resolve_source(db, session, source)
+    resolved_source = await resolve_source(db, session, source)
     if resolved_source is Source.LOCAL:
         assert db is not None
         for url in await local.get_terms_urls(
@@ -969,12 +1002,12 @@ async def get_topics(
         isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
-    resolved = resolve_source(db, session, source)
-    if resolved is Source.LOCAL:
+    resolved_source = await resolve_source(db, session, source)
+    if resolved_source is Source.LOCAL:
         assert db is not None
         return await local.get_topics(db, language=language)
 
-    if resolved is Source.LIVE or source is not Source.AUTO:
+    if resolved_source is Source.LIVE or source is not Source.AUTO:
         assert session is not None
         await live.ensure_initialized(session, auto_initialize)
         return dict(session.topics)
@@ -1081,8 +1114,8 @@ async def get_term(
         isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
-    resolved = resolve_source(db, session, source)
-    if resolved is Source.LOCAL:
+    resolved_source = await resolve_source(db, session, source)
+    if resolved_source is Source.LOCAL:
         assert db is not None
         return await _lookup_local_term(
             db,
@@ -1093,9 +1126,9 @@ async def get_term(
             max_similar_terms=max_similar_terms,
         )
 
-    if resolved is Source.LIVE or source is not Source.AUTO:
+    if resolved_source is Source.LIVE or source is not Source.AUTO:
         assert session is not None
-        fetched = await _lookup_live_term(
+        result = await _lookup_live_term(
             session,
             term_or_url,
             with_similar=with_similar,
@@ -1104,11 +1137,11 @@ async def get_term(
             auto_initialize=auto_initialize,
         )
         return await _finalize_live_term_lookup(
-            db, session, fetched, with_similar=with_similar, persist=persist
+            db, session, result, with_similar=with_similar, persist=persist
         )
 
     assert db is not None
-    local_lookup = await _lookup_local_term(
+    result = await _lookup_local_term(
         db,
         term_or_url,
         language=language,
@@ -1117,17 +1150,17 @@ async def get_term(
         max_similar_terms=max_similar_terms,
     )
     if with_similar:
-        assert isinstance(local_lookup.value, SimilarResult)
-        found = local_lookup.value.exact is not None
+        assert isinstance(result.value, SimilarResult)
+        found = result.value.exact is not None
     else:
-        found = local_lookup.value is not None
+        found = result.value is not None
     if found:
-        return local_lookup
+        return result
 
     if session is None:
-        return local_lookup
+        return result
 
-    fetched = await _lookup_live_term(
+    result = await _lookup_live_term(
         session,
         term_or_url,
         with_similar=with_similar,
@@ -1136,7 +1169,7 @@ async def get_term(
         auto_initialize=auto_initialize,
     )
     return await _finalize_live_term_lookup(
-        db, session, fetched, with_similar=with_similar, persist=persist
+        db, session, result, with_similar=with_similar, persist=persist
     )
 
 
@@ -1148,7 +1181,7 @@ async def _lookup_local_term(
     with_similar: bool,
     similar_pool_size: int | None,
     max_similar_terms: int | None,
-) -> QueryResult:
+) -> QueryResult[SearchResult | SimilarResult | None]:
     """
     Look up `term_or_url` in `db` and build `get_term`'s return value from it.
 
@@ -1458,13 +1491,13 @@ async def get_random_term(
     :raises QueryError: If neither `db` nor `session` is given,
         or the requested `source` needs one that wasn't given.
     """
-    resolved = resolve_source(db, session, source)
-    if resolved is Source.LOCAL:
+    resolved_source = await resolve_source(db, session, source)
+    if resolved_source is Source.LOCAL:
         assert db is not None
         result = await local.get_random_term(db, topic=topic, fuzzy=fuzzy)
         return QueryResult(value=result, source=Source.LOCAL, persisted=False)
 
-    if resolved is Source.LIVE or source is not Source.AUTO:
+    if resolved_source is Source.LIVE or source is not Source.AUTO:
         assert session is not None
         result = await _fetch_random_term(session, topic=topic)
         persisted = await _maybe_persist(
@@ -1619,7 +1652,7 @@ async def compare(
 
     async def _get_term(term: str) -> tuple[str, QueryResult]:
         async with semaphore:
-            lookup = await get_term(
+            result = await get_term(
                 term,
                 db=db,
                 session=session,
@@ -1628,7 +1661,7 @@ async def compare(
                 language=language,
                 with_similar=with_similar,
             )
-        return term, lookup
+        return term, result
 
     # `asyncio.gather` preserves the order of the awaitables passed to it
     # in its results, regardless of which finishes first, so `results`
