@@ -11,8 +11,10 @@ from slb_glossary.cli.runtime import run_async
 from slb_glossary.cli.session_options import config_option, resolve_session_kwargs, session_options
 from slb_glossary.cli.source_options import (
     database_option,
+    exclude_option,
     get_loaded_config,
     open_configured_db,
+    resolve_exclude,
     resolve_source,
     resolve_stream,
     source_options,
@@ -80,6 +82,7 @@ def urls() -> None:
     "instead of requiring an exact (case-insensitive) match.",
 )
 @source_options
+@exclude_option
 @database_option
 @config_option
 @session_options
@@ -103,12 +106,17 @@ def list_urls(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
     local database available, cached URLs are used first and the live site
     is only visited if the local database has nothing matching the filters.
 
+    Use --exclude to leave specific URLs or term names out of the
+    results entirely, e.g. ones you already have. Repeatable, and each
+    occurrence may itself be a comma-separated list.
+
     \b
     Examples:
       slb-glossary urls list --topic Geophysics
       slb-glossary urls list --query porosity --limit 5
       slb-glossary urls list --start-letter a --save urls.txt
       slb-glossary urls list --topic Geophysics --local --fuzzy
+      slb-glossary urls list --topic Geophysics --exclude porosity,permeability
     """
     if use_tui:
         launch_tui(ctx, command_path=("urls", "list"))
@@ -118,6 +126,7 @@ def list_urls(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
         raise click.UsageError("Give at least one of --query, --topic or --start-letter.")
 
     limit = params["limit"] or None
+    exclude = resolve_exclude(params)
     source = resolve_source(params)
     config = get_loaded_config(params)
 
@@ -145,6 +154,7 @@ def list_urls(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
                     start_letter=params["start_letter"],
                     limit=limit,
                     fuzzy=params["fuzzy"],
+                    exclude=exclude,
                 ),
                 live_call=lambda session: query.get_terms_urls(
                     db=db,
@@ -154,6 +164,7 @@ def list_urls(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
                     topic=params["topic"],
                     start_letter=params["start_letter"],
                     limit=limit,
+                    exclude=exclude,
                 ),
             )
             records = (UrlRecord(url=url) async for url in url_iter)

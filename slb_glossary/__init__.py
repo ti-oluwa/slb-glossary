@@ -69,7 +69,7 @@ from .types import (
 from .utils import get_topic_match, print_async_records, print_records
 from .writers import WRITERS, Writer, records_to_dicts, save, supported_formats, writer
 
-py_logging.basicConfig(  # ruff: ignore[non-empty-init-module]
+py_logging.basicConfig(
     format="%(levelname)s  %(asctime)s  [%(name)s.%(funcName)s:%(lineno)d]:  %(message)s",
     level=py_logging.INFO,
 )

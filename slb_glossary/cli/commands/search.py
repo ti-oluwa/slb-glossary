@@ -11,10 +11,12 @@ from slb_glossary.cli.runtime import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
+    exclude_option,
     get_loaded_config,
     live_session,
     open_configured_db,
     persist_kwargs,
+    resolve_exclude,
     resolve_source,
     resolve_stream,
     source_options,
@@ -67,6 +69,7 @@ async def auto_search_stream(
     limit: int | None,
     concurrency: int,
     relevance_threshold: float,
+    exclude: tuple[str, ...] | None,
 ) -> typing.AsyncIterator[LookupResult[SearchResult]]:
     """
     Stream `Source.AUTO` results for the `search` command, opening a live
@@ -88,6 +91,8 @@ async def auto_search_stream(
     :param limit: Maximum number of terms to look up. `None` for unlimited.
     :param concurrency: Concurrent term-page fetches, if a live fetch happens.
     :param relevance_threshold: See `slb_glossary.query.search`'s parameter of the same name.
+    :param exclude: URLs and/or term names to leave out of the results
+        entirely. See `slb_glossary.cli.source_options.exclude_option`.
     :yield: `LookupResult[SearchResult]`s, local results first if a live fetch also happens.
     """
     if db is None:
@@ -100,6 +105,7 @@ async def auto_search_stream(
                 start_letter=params["start_letter"],
                 limit=limit,
                 concurrency=concurrency,
+                exclude=exclude,
                 **persist_kwargs(params),
             ):
                 yield lookup
@@ -134,6 +140,7 @@ async def auto_search_stream(
             fuzzy=params["fuzzy"],
             mode=params["mode"],
             relevance_threshold=relevance_threshold,
+            exclude=exclude,
             **persist_kwargs(params),
         ):
             yield lookup
@@ -258,6 +265,7 @@ async def auto_search_stream(
     ),
 )
 @source_options
+@exclude_option
 @database_option
 @config_option
 @session_options
@@ -295,6 +303,10 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
     at once at the end, so a long-running fetch that gets interrupted
     still keeps whatever it already fetched (see --cache-on-error).
 
+    Use --exclude to leave specific URLs or term names out of the
+    results entirely, e.g. ones you already have. Repeatable, and each
+    occurrence may itself be a comma-separated list.
+
     \b
     Examples:
       slb-glossary search porosity
@@ -310,6 +322,8 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
       slb-glossary search porosity --mode hybrid
       slb-glossary search porosity --config ~/my-config.toml
       slb-glossary search porosity --config none --headed
+      slb-glossary search porosity --exclude "https://glossary.slb.com/en/terms/p/porosity"
+      slb-glossary search drilling --exclude "mud,fluid" --exclude casing
     """
     if use_tui:
         launch_tui(ctx, command_path=("search",))
@@ -317,6 +331,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
 
     limit = params["limit"] or None
     concurrency = params["concurrency"] or 1
+    exclude = resolve_exclude(params)
     source = resolve_source(params)
     config = get_loaded_config(params)
     title = f"Search Results for {query!r}"
@@ -334,6 +349,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
                     limit=limit,
                     concurrency=concurrency,
                     relevance_threshold=params["relevance_threshold"],
+                    exclude=exclude,
                 )
             else:
                 lookups = resolve_stream(
@@ -350,6 +366,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
                         limit=limit,
                         fuzzy=params["fuzzy"],
                         mode=params["mode"],
+                        exclude=exclude,
                     ),
                     live_call=lambda session: query_api.search(
                         query,
@@ -360,6 +377,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
                         start_letter=params["start_letter"],
                         limit=limit,
                         concurrency=concurrency,
+                        exclude=exclude,
                         **persist_kwargs(params),
                     ),
                 )

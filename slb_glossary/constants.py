@@ -328,6 +328,24 @@ class Constants:
     )
     """Weight given to the vector ranking in `slb_glossary.local.hybrid_search`'s RRF combination."""
 
+    session_auto_initialize = Constant(
+        False,
+        env_var="SLB_GLOSSARY_SESSION_AUTO_INITIALIZE",
+    )
+    """
+    Default for `open_session`/`session`'s `initialize` parameter when
+    it's left as `None` (the default there too). `False` means a session
+    comes back immediately without loading topics/size (lazy), which
+    search functions will raise `SessionNotInitializedError` for until
+    `session.initialize()` is called. 
+    
+    Useful because that load is one of the more expensive parts of 
+    opening a session, and is wasted work for a caller that's about 
+    to check the local database first and only fall back to a live 
+    session on a miss. Set to `True` (or pass `initialize=True` explicitly 
+    at the call site) to always load eagerly instead.
+    """
+
     hybrid_candidate_pool = Constant(
         50,
         env_var="SLB_GLOSSARY_HYBRID_CANDIDATE_POOL",

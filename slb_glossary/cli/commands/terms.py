@@ -11,9 +11,11 @@ from slb_glossary.cli.runtime import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
+    exclude_option,
     get_loaded_config,
     open_configured_db,
     persist_kwargs,
+    resolve_exclude,
     resolve_source,
     resolve_stream,
     source_options,
@@ -100,6 +102,7 @@ def _validate_topic(
     "instead of requiring an exact (case-insensitive) match.",
 )
 @source_options
+@exclude_option
 @database_option
 @config_option
 @session_options
@@ -130,6 +133,10 @@ def terms(ctx: click.Context, topic: str, use_tui: bool, **params: typing.Any) -
     at once at the end - so a long-running fetch that gets interrupted
     still keeps whatever it already fetched (see --cache-on-error).
 
+    Use --exclude to leave specific URLs or term names out of the
+    results entirely, e.g. ones you already have. Repeatable, and each
+    occurrence may itself be a comma-separated list.
+
     \b
     Examples:
       slb-glossary terms Geophysics
@@ -139,6 +146,7 @@ def terms(ctx: click.Context, topic: str, use_tui: bool, **params: typing.Any) -
       slb-glossary terms Drilling --local --fuzzy
       slb-glossary terms Drilling --config ~/my-config.toml
       slb-glossary terms Drilling --limit 0 --cache-batch-size 10
+      slb-glossary terms Drilling --exclude casing,cementing
     """
     if use_tui:
         launch_tui(ctx, command_path=("terms",))
@@ -147,6 +155,7 @@ def terms(ctx: click.Context, topic: str, use_tui: bool, **params: typing.Any) -
     limit = params["limit"] or None
     concurrency = params["concurrency"] or 1
     start_letter = params["start_letter"]
+    exclude = resolve_exclude(params)
     source = resolve_source(params)
     config = get_loaded_config(params)
 
@@ -168,6 +177,7 @@ def terms(ctx: click.Context, topic: str, use_tui: bool, **params: typing.Any) -
                     start_letter=start_letter,
                     limit=limit,
                     fuzzy=params["fuzzy"],
+                    exclude=exclude,
                 ),
                 live_call=lambda session: query.get_terms_on(
                     topic,
@@ -177,6 +187,7 @@ def terms(ctx: click.Context, topic: str, use_tui: bool, **params: typing.Any) -
                     start_letter=start_letter,
                     limit=limit,
                     concurrency=concurrency,
+                    exclude=exclude,
                     **persist_kwargs(params),
                 ),
             )

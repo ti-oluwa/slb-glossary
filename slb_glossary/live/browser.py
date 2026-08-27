@@ -11,6 +11,7 @@ from patchright.async_api import Browser, Playwright, Route, async_playwright
 from playwright_stealth import Stealth
 
 from slb_glossary.config import Config
+from slb_glossary.constants import constants
 from slb_glossary.errors import BrowserError, LoggingError, NetworkError
 from slb_glossary.live.types import BrowserType, ResourceType, Session
 from slb_glossary.live.urls import get_glossary_base_url
@@ -259,7 +260,7 @@ async def open_session(
     launch_kwargs: dict[str, typing.Any] | None = None,
     context_kwargs: dict[str, typing.Any] | None = None,
     use_stealth: bool | None = None,
-    initialize: bool = True,
+    initialize: bool | None = None,
     log_sink: LogSink | type[LogSink] | str | pathlib.Path | None = None,
 ) -> SessionT:
     """
@@ -314,11 +315,17 @@ async def open_session(
         not easier.
     :param initialize: Whether to load the glossary's topics/size before
         returning the session, so it's immediately ready to pass to search
-        functions. Defaults to `True`. Pass `False` to get the session back
-        faster and call `session.initialize()` yourself later; search
-        functions raise `SessionNotInitializedError` until then.
+        functions. `None` (the default) resolves this from
+        `constants.session_auto_initialize`, which
+        defaults to `False`, since that load is wasted work for a
+        caller (e.g. `slb_glossary.query.search`) that's about to check
+        the local database first and only fall back to a live session on
+        a miss. Pass `True`/`False` explicitly to always initialize
+        eagerly/lazily regardless of that default. While uninitialized,
+        search functions raise `SessionNotInitializedError`; call
+        `session.initialize()` yourself when you're ready for it.
     :param log_sink: Where to route `slb_glossary`'s logging for the
-        lifetime of this process - a `slb_glossary.logging.LogSink`
+        lifetime of this process. A `slb_glossary.logging.LogSink`
         instance/class, a file path, `"stderr"`/`"stdout"`, or a
         `"module:ClassName"` import path resolved via
         `slb_glossary.logging.resolve_sink`. Handy for bug reports: point
@@ -402,6 +409,8 @@ async def open_session(
             settle_timeout=settle_timeout,
             poll_interval=poll_interval,
         )
+        if initialize is None:
+            initialize = constants.session_auto_initialize
         if initialize:
             await session.initialize()
 
@@ -474,7 +483,7 @@ async def session(
     launch_kwargs: dict[str, typing.Any] | None = None,
     context_kwargs: dict[str, typing.Any] | None = None,
     use_stealth: bool | None = None,
-    initialize: bool = True,
+    initialize: bool | None = None,
     log_sink: LogSink | type[LogSink] | str | pathlib.Path | None = None,
 ) -> typing.AsyncIterator[SessionT]:
     """

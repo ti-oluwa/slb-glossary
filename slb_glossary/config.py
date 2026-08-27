@@ -127,13 +127,18 @@ class BrowserSessionOptions(Updatable):
     a search page paging through tabs at the same time.
     """
 
-    initialize: bool = True
+    initialize: bool | None = None
     """
     Whether to eagerly load the glossary's topics/size when a session
-    opens, so it's immediately ready to search. Leave this `True` unless
-    you're opening a session yourself and calling `Session.initialize()`
-    on your own schedule; search functions raise
-    `SessionNotInitializedError` until a session is initialized.
+    opens, so it's immediately ready to search. `None` (the default) lets
+    `open_session`/`session` resolve it themselves from
+    `constants.session_auto_initialize` (`False` by default). 
+    
+    Set this explicitly if you want every session
+    opened from this config to always initialize eagerly (`True`) or
+    always defer it (`False`), overriding that default. While
+    uninitialized, search functions raise `SessionNotInitializedError`
+    until `Session.initialize()` is called.
     """
 
     settle_timeout: float = 8000

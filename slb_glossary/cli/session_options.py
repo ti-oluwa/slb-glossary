@@ -290,12 +290,12 @@ def session_options(func: F) -> F:
         click.option(
             "--initialize/--no-initialize",
             "initialize",
-            default=True,
-            show_default=True,
+            default=None,
             help=(
                 "Load the glossary's topics/size as soon as the session "
-                "opens. Leave this on unless you have a specific reason to "
-                "defer it."
+                "opens. Leave unset (the default) to resolve this "
+                "automatically instead: eager/lazy per "
+                "`SLB_GLOSSARY_SESSION_AUTO_INITIALIZE` (lazy unless set)."
             ),
         ),
         click.option(

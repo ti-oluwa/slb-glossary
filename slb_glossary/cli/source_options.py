@@ -28,12 +28,14 @@ from slb_glossary.query import LookupResult, Source
 
 __all__ = [
     "database_option",
+    "exclude_option",
     "get_loaded_config",
     "live_session",
     "local_storage_enabled",
     "open_configured_db",
     "persist_kwargs",
     "resolve_db_path",
+    "resolve_exclude",
     "resolve_lookup",
     "resolve_source",
     "resolve_stream",
@@ -117,6 +119,68 @@ def source_options(func: F) -> F:
         help="Where to read from. Same choices as --local/--live/--auto, spelled out.",
     )(func)
     return func
+
+
+def _split_exclude_values(
+    ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
+) -> tuple[str, ...] | None:
+    """
+    Flatten a repeatable, comma-splittable `--exclude` option into one tuple.
+
+    Each occurrence of `--exclude` can itself hold a comma-separated list,
+    so `--exclude a,b --exclude c` and `--exclude a --exclude b --exclude c`
+    both resolve the same way, to `("a", "b", "c")`.
+
+    :param ctx: The current click context (unused; required by click's callback signature).
+    :param param: The option this callback is attached to (unused; required by click's callback signature).
+    :param value: The raw tuple of strings click collected, one per
+        `--exclude` occurrence, before any comma-splitting.
+    :return: A flattened tuple of individual entries, with surrounding
+        whitespace stripped and empty entries dropped, or `None` if
+        nothing was given (so it can be passed straight through as
+        `slb_glossary.query`'s `exclude=None` default).
+    """
+    if not value:
+        return None
+    flattened: list[str] = []
+    for raw in value:
+        flattened.extend(part.strip() for part in raw.split(",") if part.strip())
+    return tuple(flattened) or None
+
+
+def exclude_option(func: F) -> F:
+    """
+    Attach a repeatable, comma-splittable `--exclude` option to a command.
+
+    Pair with `resolve_exclude` to read the parsed value back out, ready
+    to pass as `slb_glossary.query`'s `exclude` keyword argument.
+
+    :param func: The click command callback to attach the option to.
+    :return: `func`, with `--exclude` attached.
+    """
+    return click.option(
+        "--exclude",
+        "exclude",
+        multiple=True,
+        callback=_split_exclude_values,
+        metavar="URL_OR_TERM[,URL_OR_TERM...]",
+        help=(
+            "A URL or term name to leave out of the results entirely, e.g. "
+            "ones already stored locally. Repeatable (--exclude a --exclude "
+            "b), and each occurrence may itself be a comma-separated list "
+            "(--exclude a,b,c). The two forms combine freely."
+        ),
+    )(func)
+
+
+def resolve_exclude(params: typing.Mapping[str, typing.Any]) -> tuple[str, ...] | None:
+    """
+    Read `exclude_option`'s parsed `--exclude` value back out.
+
+    :param params: The command's parsed parameters, as attached by `exclude_option`.
+    :return: The flattened `--exclude` entries, or `None` if none were given.
+    """
+    return params.get("exclude")
 
 
 def resolve_source(params: typing.Mapping[str, typing.Any]) -> Source:

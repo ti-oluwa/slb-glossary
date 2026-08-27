@@ -440,7 +440,7 @@ class Logging(Updatable):
     fmt: str | None = None
     """
     `logging.Formatter` format string used for every sink. `None` uses
-    `slb_glossary.constants.constants.log_format`.
+    `constants.log_format`.
     """
 
     propagate: bool = False
