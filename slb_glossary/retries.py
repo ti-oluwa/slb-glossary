@@ -140,7 +140,7 @@ async def retry(
     """
     started_at = time.monotonic()
     result: T | None = None
-    err: BaseException | None = None
+    error: BaseException | None = None
     attempts_made = 0
     total_delay = 0.0
     for attempt in range(1, policy.attempts + 1):
@@ -162,7 +162,7 @@ async def retry(
         except (SystemExit, KeyboardInterrupt, asyncio.CancelledError):
             raise
         except BaseException as exc:
-            err = exc
+            error = exc
             logger.debug(
                 "Error occurred on attempt %d/%d (%.3fs into this attempt): %s",
                 attempt,
@@ -193,6 +193,6 @@ async def retry(
         elapsed,
         total_delay,
     )
-    if raise_exception and err is not None:
-        raise err
+    if raise_exception and error is not None:
+        raise error
     return result

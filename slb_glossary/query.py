@@ -184,7 +184,7 @@ async def resolve_source(db: Database | None, session: Session | None, source: S
     When both are given, this defers back to `Source.AUTO` (returns it
     unchanged) so the caller's own local-first, live-fallback logic can
     decide, *unless* `constants.check_internet_before_live` is set and
-    `slb_glossary.network.has_internet_connection` reports no
+    `slb_glossary.connectivity.has_internet_connection` reports no
     connectivity, in which case this resolves straight to `Source.LOCAL`
     instead, logging a warning. Attempting live with no internet would
     just mean opening a browser and waiting out a full navigation

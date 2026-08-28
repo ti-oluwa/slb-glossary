@@ -443,7 +443,7 @@ class Constants:
     )
     """
     Whether `slb_glossary.query`'s `Source.AUTO` functions check
-    `slb_glossary.network.has_internet_connection` before attempting a
+    `slb_glossary.connectivity.has_internet_connection` before attempting a
     live fetch, when both a local database and a live session are
     available. When `True` (the default), if no internet is detected, the
     call logs a warning and serves local results only, skipping the live
@@ -464,7 +464,7 @@ class Constants:
         validator=lambda v: v > 0.0,
     )
     """
-    Seconds `slb_glossary.network.has_internet_connection` waits for each
+    Seconds `slb_glossary.connectivity.has_internet_connection` waits for each
     probe target before giving up on it. Also the check's worst-case
     total wall time, since every target is probed concurrently, not one
     after another.
@@ -476,7 +476,7 @@ class Constants:
         validator=lambda v: v >= 0.0,
     )
     """
-    Seconds `slb_glossary.network.has_internet_connection` reuses its
+    Seconds `slb_glossary.connectivity.has_internet_connection` reuses its
     last result for, instead of probing again, when called with its
     default `use_cache=True`. `0` disables caching and every call probes fresh.
     """
