@@ -12,8 +12,8 @@ from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
-    get_loaded_config,
     live_session,
+    load_config,
     open_configured_db,
     resolve_source,
     source_options,
@@ -34,16 +34,18 @@ def _validate_terms(
     return value
 
 
-async def _gather_bounded(
-    calls: typing.Sequence[typing.Callable[[], typing.Awaitable[QueryResult[SearchResult]]]],
+async def _gather(
+    calls: typing.Sequence[
+        typing.Callable[[], typing.Awaitable[QueryResult[SearchResult | None]]]
+    ],
     concurrency: int,
-) -> list[QueryResult[SearchResult]]:
+) -> list[QueryResult[SearchResult | None]]:
     """Run `calls` concurrently, at most `concurrency` at once, preserving their order."""
     semaphore = asyncio.Semaphore(max(concurrency, 1))
 
     async def _bounded(
-        call: typing.Callable[[], typing.Awaitable[QueryResult[SearchResult]]],
-    ) -> QueryResult[SearchResult]:
+        call: typing.Callable[[], typing.Awaitable[QueryResult[SearchResult | None]]],
+    ) -> QueryResult[SearchResult | None]:
         async with semaphore:
             return await call()
 
@@ -113,7 +115,7 @@ def compare(
         return
 
     source = resolve_source(params)
-    config = get_loaded_config(params)
+    config = load_config(params)
     title = f"Comparing: {', '.join(terms)}"
     concurrency = params["concurrency"]
     language = params["language"]
@@ -143,50 +145,48 @@ def compare(
         async with open_configured_db(config, db_path_override=params["db_path"]) as db:
             if source is Source.LOCAL:
                 assert db is not None
-                lookups = await _gather_bounded(
-                    [_local_call(db, term) for term in terms], concurrency
-                )
+                results = await _gather([_local_call(db, term) for term in terms], concurrency)
             elif source is Source.LIVE:
                 async with live_session(ctx, params) as session:
-                    lookups = await _gather_bounded(
+                    results = await _gather(
                         [_live_call(db, session, term) for term in terms], concurrency
                     )
             else:
                 # Source.AUTO: try every term against the local database
                 # first, concurrently, with no browser involved at all. A
                 # live session is opened, once, only if at least one term
-                # came back empty - and then only the still-missing terms
+                # came back empty. Even then only the still-missing terms
                 # are looked up against it, concurrently, rather than
                 # opening a fresh session per term the way running each
                 # term through a single-lookup helper independently would.
-                lookups = (
-                    await _gather_bounded([_local_call(db, term) for term in terms], concurrency)
+                results = (
+                    await _gather([_local_call(db, term) for term in terms], concurrency)
                     if db is not None
                     else [None] * len(terms)
                 )
                 missing = [
                     (index, term)
-                    for index, (term, lookup) in enumerate(zip(terms, lookups, strict=True))
-                    if lookup is None or lookup.value is None
+                    for index, (term, result) in enumerate(zip(terms, results, strict=True))
+                    if result is None or result.value is None
                 ]
                 if missing:
                     async with live_session(ctx, params) as session:
-                        live_lookups = await _gather_bounded(
+                        live_lookups = await _gather(
                             [_live_call(db, session, term) for _, term in missing], concurrency
                         )
-                    for (index, _), live_lookup in zip(missing, live_lookups, strict=True):
-                        lookups[index] = live_lookup
+                    for (index, _), result in zip(missing, live_lookups, strict=True):
+                        results[index] = result  # type: ignore[arg-type]
 
-            async def _stream() -> typing.AsyncIterator[SearchResult]:
-                for term, lookup in zip(terms, lookups, strict=True):
-                    if lookup is not None and lookup.value is not None:
-                        sources_seen.add(lookup.source.value)
-                        yield lookup.value
+            async def stream() -> typing.AsyncIterator[SearchResult]:
+                for term, result in zip(terms, results, strict=True):
+                    if result is not None and result.value is not None:
+                        sources_seen.add(result.source.value)
+                        yield result.value
                     elif not params["quiet"]:
                         click.secho(f"Not found: {term!r}", fg="yellow", err=True)
 
             return await output_results(
-                _stream(),
+                stream(),
                 title=title,
                 save_paths=params["save_paths"],
                 format=params["format"],

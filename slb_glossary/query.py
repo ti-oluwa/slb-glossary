@@ -1032,6 +1032,7 @@ async def get_term(
     source: Source = Source.AUTO,
     persist: bool = False,
     language: str | None = None,
+    topic: str | None = None,
     with_similar: typing.Literal[False] = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
@@ -1046,6 +1047,7 @@ async def get_term(
     source: Source = Source.AUTO,
     persist: bool = False,
     language: str | None = None,
+    topic: str | None = None,
     with_similar: typing.Literal[True],
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
@@ -1462,6 +1464,7 @@ async def related_terms(
         source=source,
         persist=persist,
         language=language,
+        with_similar=False,
         topic=topic,
         auto_initialize=auto_initialize,
     )

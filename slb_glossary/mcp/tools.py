@@ -335,7 +335,7 @@ def get_effective_persist(requested: bool, config: MCPConfig) -> bool:
     return requested and config.local.allow_write
 
 
-def get_effective_stream(requested: bool, config: MCPConfig) -> bool:
+def get_effectivestream(requested: bool, config: MCPConfig) -> bool:
     streaming: Streaming = config.streaming
     if not streaming.allow_override:
         return streaming.default
@@ -350,7 +350,7 @@ async def _handle_search(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    stream = get_effective_stream(args.stream, config)
+    stream = get_effectivestream(args.stream, config)
     started_at = time.monotonic()
     async with runtime.acquire(source) as (db, session):
         results: list[dict[str, typing.Any]] = []
@@ -410,7 +410,7 @@ async def _handle_terms_on(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    stream = get_effective_stream(args.stream, config)
+    stream = get_effectivestream(args.stream, config)
     started_at = time.monotonic()
     async with runtime.acquire(source) as (db, session):
         results: list[dict[str, typing.Any]] = []

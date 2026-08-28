@@ -13,8 +13,8 @@ from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
     exclude_option,
-    get_loaded_config,
     live_session,
+    load_config,
     open_configured_db,
     persist_kwargs,
     resolve_exclude,
@@ -64,7 +64,7 @@ def _should_annotate(annotate: str, source: Source) -> bool:
     return source is Source.AUTO
 
 
-async def auto_search_stream(
+async def auto_searchstream(
     ctx: click.Context,
     params: typing.Mapping[str, typing.Any],
     db: Database | None,
@@ -348,7 +348,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
     concurrency = params["concurrency"] or 1
     exclude = resolve_exclude(params)
     source = resolve_source(params)
-    config = get_loaded_config(params)
+    config = load_config(params)
     title = f"Search Results for {query!r}"
     if params["topic"]:
         title += f" (topic: {params['topic']})"
@@ -356,7 +356,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
     async def run() -> int:
         async with open_configured_db(config, db_path_override=params["db_path"]) as db:
             if source is Source.AUTO:
-                lookups = auto_search_stream(
+                lookups = auto_searchstream(
                     ctx,
                     params,
                     db,

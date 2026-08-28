@@ -171,7 +171,7 @@ def _prefilling_screen_factory(
 
         def _preselect_and_prefill(self) -> None:
             try:
-                tree = self.query_one(command_tree_cls)
+                tree = self.queryone(command_tree_cls)
                 start = _find_tree_start_node(tree.root)
                 target = _find_node(start, command_path)
                 if target is None or target.data is None:

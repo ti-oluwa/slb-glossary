@@ -11,7 +11,7 @@ from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
 from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, log_level_option
-from slb_glossary.cli.source_options import database_option, get_loaded_config, resolve_db_path
+from slb_glossary.cli.source_options import database_option, load_config, resolve_db_path
 from slb_glossary.local.types import Metadata
 from slb_glossary.types import SearchMode
 from slb_glossary.utils import as_async_iterator
@@ -54,7 +54,7 @@ def show_path(**params: typing.Any) -> None:
     """
 
     async def run() -> tuple[typing.Any, typing.Any]:
-        config = get_loaded_config(params)
+        config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
         async with local_pkg.database(db_path) as db:
             return db.db_path, db.metadata_path
@@ -91,7 +91,7 @@ def stats(**params: typing.Any) -> None:
     """
 
     async def run() -> tuple[int, dict[str, int], Metadata]:
-        config = get_loaded_config(params)
+        config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
         async with local_pkg.database(db_path) as db:
             total = await local_pkg.count(db)
@@ -213,7 +213,7 @@ def local_search(query: str, **params: typing.Any) -> None:
     )
 
     async def run() -> int:
-        config = get_loaded_config(params)
+        config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
         async with local_pkg.database(db_path) as db:
             results = await local_pkg.search(
@@ -304,7 +304,7 @@ def local_get(term_or_url: str, **params: typing.Any) -> None:
     suggest_similar = params["suggest_similar"]
 
     async def run() -> int:
-        config = get_loaded_config(params)
+        config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
         async with local_pkg.database(db_path) as db:
             if suggest_similar:
@@ -329,11 +329,11 @@ def local_get(term_or_url: str, **params: typing.Any) -> None:
             if result is None:
                 return 0
 
-            async def _one() -> typing.AsyncIterator[typing.Any]:
+            async def one() -> typing.AsyncIterator[typing.Any]:
                 yield result
 
             return await output_results(
-                _one(),
+                one(),
                 title=f"Local: {term_or_url}",
                 save_paths=params["save_paths"],
                 format=params["format"],
@@ -512,7 +512,7 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
     """
 
     async def run() -> int:
-        config = get_loaded_config(params)
+        config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
         async with local_pkg.database(db_path) as db:
             return await local_pkg.load_file(
@@ -555,7 +555,7 @@ def flush(**params: typing.Any) -> None:
         click.confirm("Delete every term stored in the local database?", abort=True)
 
     async def run() -> None:
-        config = get_loaded_config(params)
+        config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
         async with local_pkg.database(db_path) as db:
             await local_pkg.flush(db)
@@ -584,7 +584,7 @@ def reset(**params: typing.Any) -> None:
         )
 
     async def run() -> None:
-        config = get_loaded_config(params)
+        config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
         async with local_pkg.database(db_path) as db:
             await local_pkg.reset(db)

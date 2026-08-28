@@ -599,14 +599,14 @@ def print_records(
         annotate=annotate,
     )
 
-    def _records() -> typing.Iterator[RecordLike]:
+    def records() -> typing.Iterator[RecordLike]:
         yield first
         yield from iterator
 
     count = 0
     if console.is_terminal:
         with Live(table, console=console, refresh_per_second=8, transient=False) as live:
-            for record in _records():
+            for record in records():
                 if limit is not None and count >= limit:
                     break
                 table.add_row(*format_row(record))
@@ -614,7 +614,7 @@ def print_records(
                 count += 1
         return count
 
-    for record in _records():
+    for record in records():
         if limit is not None and count >= limit:
             break
         table.add_row(*format_row(record))
@@ -660,7 +660,7 @@ async def print_async_records(
         annotate=annotate,
     )
 
-    async def _records() -> typing.AsyncIterator[RecordLike]:
+    async def records() -> typing.AsyncIterator[RecordLike]:
         yield first
         async for record in iterator:
             yield record
@@ -668,7 +668,7 @@ async def print_async_records(
     count = 0
     if console.is_terminal:
         with Live(table, console=console, refresh_per_second=8, transient=False) as live:
-            async for record in _records():
+            async for record in records():
                 if limit is not None and count >= limit:
                     break
                 table.add_row(*format_row(record))
@@ -676,7 +676,7 @@ async def print_async_records(
                 count += 1
         return count
 
-    async for record in _records():
+    async for record in records():
         if limit is not None and count >= limit:
             break
         table.add_row(*format_row(record))

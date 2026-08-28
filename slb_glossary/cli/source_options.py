@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "database_option",
     "exclude_option",
-    "get_loaded_config",
     "live_session",
+    "load_config",
     "local_storage_enabled",
     "open_configured_db",
     "persist_kwargs",
@@ -316,7 +316,7 @@ async def live_session(
         yield session
 
 
-def get_loaded_config(params: typing.Mapping[str, typing.Any]) -> Config:
+def load_config(params: typing.Mapping[str, typing.Any]) -> Config:
     """Load the `Config` named by this run's `--config` option (see `config_option`)."""
     return load_named_config(params.get("config_path", DEFAULT_CONFIG_SENTINEL))
 

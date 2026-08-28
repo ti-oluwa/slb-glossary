@@ -13,7 +13,7 @@ from slb_glossary.cli.browsers import (
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, resolve_session_kwargs, session_options
-from slb_glossary.cli.source_options import database_option, get_loaded_config, resolve_db_path
+from slb_glossary.cli.source_options import database_option, load_config, resolve_db_path
 from slb_glossary.cli.sync_options import (
     print_sync_summary,
     run_configured_sync,
@@ -123,7 +123,7 @@ def sync(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
         raise SystemExit(1)
 
     validate_sync_filters(params)
-    config = get_loaded_config(params)
+    config = load_config(params)
     db_path = resolve_db_path(config, params["db_path"])
 
     async def run() -> SyncSummary:

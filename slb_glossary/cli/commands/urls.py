@@ -12,7 +12,7 @@ from slb_glossary.cli.session_options import config_option, resolve_session_kwar
 from slb_glossary.cli.source_options import (
     database_option,
     exclude_option,
-    get_loaded_config,
+    load_config,
     open_configured_db,
     resolve_exclude,
     resolve_source,
@@ -128,7 +128,7 @@ def list_urls(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
     limit = params["limit"] or None
     exclude = resolve_exclude(params)
     source = resolve_source(params)
-    config = get_loaded_config(params)
+    config = load_config(params)
 
     title_bits = []
     if params["query"]:

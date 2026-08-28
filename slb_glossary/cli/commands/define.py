@@ -12,7 +12,7 @@ from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
-    get_loaded_config,
+    load_config,
     open_configured_db,
     resolve_lookup,
     resolve_source,
@@ -119,7 +119,7 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
         return
 
     source = resolve_source(params)
-    config = get_loaded_config(params)
+    config = load_config(params)
 
     suggest_similar = params["suggest_similar"]
 
@@ -170,11 +170,11 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
         if not params["quiet"]:
             click.secho(f"(source: {lookup.source.value})", fg="bright_black", err=True)
 
-        async def _one() -> typing.AsyncIterator[typing.Any]:
+        async def one() -> typing.AsyncIterator[typing.Any]:
             yield exact
 
         count = await output_results(
-            _one(),
+            one(),
             title=f"Definition: {term}",
             save_paths=params["save_paths"],
             format=params["format"],
@@ -190,7 +190,7 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
         return
 
     if similar and sys.stdin.isatty() and not params["json_output"]:
-        _show_similar_prompt(term, similar)
+        show_similar_prompt(term, similar)
     else:
         click.echo(f"{term!r} was not found.", err=True)
         if similar:
@@ -199,9 +199,7 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
                 click.echo(f"  - {candidate.value.term}", err=True)
 
 
-def _show_similar_prompt(
-    term: str, similar: typing.Sequence["query.QueryResult[SearchResult]"]
-) -> None:
+def show_similar_prompt(term: str, similar: typing.Sequence[QueryResult[SearchResult]]) -> None:
     """
     Print `similar` as a "Did you mean" list and let the user interactively view one.
 

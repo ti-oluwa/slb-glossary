@@ -11,7 +11,7 @@ from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
-    get_loaded_config,
+    load_config,
     open_configured_db,
     resolve_lookup,
     resolve_source,
@@ -90,7 +90,7 @@ def related(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) 
         return
 
     source = resolve_source(params)
-    config = get_loaded_config(params)
+    config = load_config(params)
 
     async def run() -> int:
         async with open_configured_db(config, db_path_override=params["db_path"]) as db:
@@ -119,12 +119,12 @@ def related(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) 
         if not params["quiet"] and lookup.value:
             click.secho(f"(source: {lookup.source.value})", fg="bright_black", err=True)
 
-        async def _records() -> typing.AsyncIterator[RelatedTermRecord]:
+        async def records() -> typing.AsyncIterator[RelatedTermRecord]:
             for related_term in lookup.value:
                 yield RelatedTermRecord(term=related_term.term, url=related_term.url)
 
         return await output_results(
-            _records(),
+            records(),
             title=f"Terms related to {term!r}",
             save_paths=params["save_paths"],
             format=params["format"],

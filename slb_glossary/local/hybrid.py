@@ -28,7 +28,7 @@ def get_result_key(result: SearchResult) -> tuple[str, str] | None:
     return (result.url, result.topic or "")
 
 
-def _compute_rrf_scores(
+def compute_rrf_scores(
     *rankings: Sequence[tuple[str, str]], weights: Sequence[float], k: float
 ) -> dict[tuple[str, str], float]:
     """
@@ -177,7 +177,7 @@ async def hybrid_search(
         if (key := get_result_key(result)) and key not in name_tier_keys
     ]
 
-    fused_scores = _compute_rrf_scores(
+    fused_scores = compute_rrf_scores(
         lexical_ranking,
         semantic_ranking,
         weights=(constants.lexical_weight, constants.semantic_weight),

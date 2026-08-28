@@ -46,7 +46,7 @@ def _resolve_path(ctx: click.Context, local_path: str | None) -> str | None:
     return ctx.obj.get("config_path") if ctx.obj else None
 
 
-_path_option = click.option(
+path_option = click.option(
     "--path",
     "config_path",
     default=None,
@@ -87,7 +87,7 @@ def config(ctx: click.Context, config_path: str | None, use_tui: bool) -> None:
     View, edit, and locate slb-glossary's config file.
 
     Run with no subcommand to open the interactive wizard (same as
-    `config wizard`) - a guided, section-by-section walkthrough that shows
+    `config wizard`). A guided, section-by-section walkthrough that shows
     each setting's current value and lets you accept it or type a new one.
     For scripting, use `config get`/`config set`/`config show` instead.
 
@@ -109,7 +109,7 @@ def config(ctx: click.Context, config_path: str | None, use_tui: bool) -> None:
 
 
 @config.command("path")
-@_path_option
+@path_option
 @click.pass_context
 def show_path(ctx: click.Context, config_path: str | None) -> None:
     """
@@ -126,7 +126,7 @@ def show_path(ctx: click.Context, config_path: str | None) -> None:
 
 
 @config.command("show")
-@_path_option
+@path_option
 @click.option(
     "--format",
     "output_format",
@@ -175,7 +175,7 @@ def show(ctx: click.Context, config_path: str | None, output_format: str) -> Non
 
 @config.command("get")
 @click.argument("key")
-@_path_option
+@path_option
 @click.pass_context
 @cli_command
 def get(ctx: click.Context, key: str, config_path: str | None) -> None:
@@ -199,7 +199,7 @@ def get(ctx: click.Context, key: str, config_path: str | None) -> None:
 @config.command("set")
 @click.argument("key")
 @click.argument("value")
-@_path_option
+@path_option
 @click.option(
     "--format",
     "output_format",
@@ -232,7 +232,7 @@ def set_(
 
 
 @config.command("init")
-@_path_option
+@path_option
 @click.option(
     "--format",
     "output_format",
@@ -264,7 +264,7 @@ def init(
 
 
 @config.command("edit")
-@_path_option
+@path_option
 @click.pass_context
 @cli_command
 def edit(ctx: click.Context, config_path: str | None) -> None:
@@ -304,7 +304,7 @@ SECTION_TITLES: dict[str, str] = {
 
 
 @config.command("wizard")
-@_path_option
+@path_option
 @click.pass_context
 @cli_command
 def wizard(ctx: click.Context, config_path: str | None) -> None:

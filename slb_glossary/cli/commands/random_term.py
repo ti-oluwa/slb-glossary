@@ -11,7 +11,7 @@ from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
-    get_loaded_config,
+    load_config,
     open_configured_db,
     resolve_lookup,
     resolve_source,
@@ -79,12 +79,12 @@ def random_term(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
         return
 
     source = resolve_source(params)
-    config = get_loaded_config(params)
+    config = load_config(params)
     topic = params["topic"]
     count = max(params["count"] or 1, 1)
     title = f"Random Term(s) - topic: {topic}" if topic else "Random Term(s)"
 
-    async def _stream() -> typing.AsyncIterator[SearchResult]:
+    async def stream() -> typing.AsyncIterator[SearchResult]:
         async with open_configured_db(config, db_path_override=params["db_path"]) as db:
             for _ in range(count):
                 lookup = await resolve_lookup(
@@ -106,7 +106,7 @@ def random_term(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
                 if lookup.value is not None:
                     sources_seen.add(lookup.source.value)
                     # Holds `open_configured_db` open across the yield on purpose,
-                    # so each pick is printed as soon as it's resolved. Safe:
+                    # so each pick is printed as soon as it's resolved. Safe as
                     # `output_results` (the only consumer) wraps this generator
                     # in `contextlib.aclosing`, so the db still closes promptly
                     # on an early break/cancel.
@@ -114,7 +114,7 @@ def random_term(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
 
     async def run() -> int:
         return await output_results(
-            _stream(),
+            stream(),
             title=title,
             save_paths=params["save_paths"],
             format=params["format"],

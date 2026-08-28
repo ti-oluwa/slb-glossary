@@ -12,7 +12,7 @@ from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
     exclude_option,
-    get_loaded_config,
+    load_config,
     open_configured_db,
     persist_kwargs,
     resolve_exclude,
@@ -157,7 +157,7 @@ def terms(ctx: click.Context, topic: str, use_tui: bool, **params: typing.Any) -
     start_letter = params["start_letter"]
     exclude = resolve_exclude(params)
     source = resolve_source(params)
-    config = get_loaded_config(params)
+    config = load_config(params)
 
     title = f"Terms under {topic!r}"
     if start_letter:

@@ -11,7 +11,7 @@ from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
-    get_loaded_config,
+    load_config,
     open_configured_db,
     resolve_source,
     resolve_stream,
@@ -96,7 +96,7 @@ def list_topics(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
         return
 
     source = resolve_source(params)
-    config = get_loaded_config(params)
+    config = load_config(params)
 
     async def get_local_records(db: typing.Any) -> typing.AsyncIterator[TopicRecord]:
         topics = await query.get_topics(db=db, source=Source.LOCAL)
