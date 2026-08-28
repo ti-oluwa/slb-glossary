@@ -1,0 +1,269 @@
+diff --git a/slb_glossary/cli/commands/config.py b/slb_glossary/cli/commands/config.py
+index e87f7f7..2d7842e 100644
+--- a/slb_glossary/cli/commands/config.py
++++ b/slb_glossary/cli/commands/config.py
+@@ -29,6 +29,32 @@ def _load(path: str | None) -> tuple[Config, pathlib.Path]:
+     return Config(), resolved
+ 
+ 
++def _resolve_path(ctx: click.Context, local_path: str | None) -> str | None:
++    """
++    Resolve which config path a subcommand should use.
++
++    A `--path` given directly to the subcommand wins; otherwise falls
++    back to the one given to the parent `config` group, if any (`slb-glossary
++    config --path X show` and `slb-glossary config show --path X` both work).
++
++    :param ctx: The subcommand's click context.
++    :param local_path: The subcommand's own `--path` value, if given.
++    :return: The path to use, or `None` for the default config path.
++    """
++    if local_path:
++        return local_path
++    return ctx.obj.get("config_path") if ctx.obj else None
++
++
++_path_option = click.option(
++    "--path",
++    "config_path",
++    default=None,
++    help="Config file to operate on. Defaults to the one given to `config`, "
++    "or the global config path (see `config path`) if neither is given.",
++)
++
++
+ def _iter_leaf_fields(
+     obj: typing.Any, prefix: str = ""
+ ) -> typing.Iterator[tuple[str, typing.Any]]:
+@@ -83,8 +109,9 @@ def config(ctx: click.Context, config_path: str | None, use_tui: bool) -> None:
+ 
+ 
+ @config.command("path")
++@_path_option
+ @click.pass_context
+-def show_path(ctx: click.Context) -> None:
++def show_path(ctx: click.Context, config_path: str | None) -> None:
+     """
+     Print the config file path this command group would read/write.
+ 
+@@ -92,13 +119,14 @@ def show_path(ctx: click.Context) -> None:
+     Examples:
+       slb-glossary config path
+     """
+-    path = ctx.obj.get("config_path") if ctx.obj else None
++    path = _resolve_path(ctx, config_path)
+     resolved = pathlib.Path(path) if path else Config.default_path()
+     exists = "exists" if resolved.exists() else "does not exist yet"
+     click.echo(f"{resolved} ({exists})")
+ 
+ 
+ @config.command("show")
++@_path_option
+ @click.option(
+     "--format",
+     "output_format",
+@@ -109,7 +137,7 @@ def show_path(ctx: click.Context) -> None:
+ )
+ @click.pass_context
+ @cli_command
+-def show(ctx: click.Context, output_format: str) -> None:
++def show(ctx: click.Context, config_path: str | None, output_format: str) -> None:
+     """
+     Print the effective config (loaded config file, merged over built-in defaults).
+ 
+@@ -117,8 +145,9 @@ def show(ctx: click.Context, output_format: str) -> None:
+     Examples:
+       slb-glossary config show
+       slb-glossary config show --format json
++      slb-glossary config show --path ~/my-config.toml
+     """
+-    cfg, _ = _load(ctx.obj.get("config_path") if ctx.obj else None)
++    cfg, _ = _load(_resolve_path(ctx, config_path))
+     data = cfg.to_dict()
+ 
+     if output_format == "json":
+@@ -146,9 +175,10 @@ def show(ctx: click.Context, output_format: str) -> None:
+ 
+ @config.command("get")
+ @click.argument("key")
++@_path_option
+ @click.pass_context
+ @cli_command
+-def get(ctx: click.Context, key: str) -> None:
++def get(ctx: click.Context, key: str, config_path: str | None) -> None:
+     """
+     Print a single dotted config key's value, e.g. `session.headless`.
+ 
+@@ -156,8 +186,9 @@ def get(ctx: click.Context, key: str) -> None:
+     Examples:
+       slb-glossary config get session.headless
+       slb-glossary config get local.prefer_local
++      slb-glossary config get session.headless --path ~/my-config.toml
+     """
+-    cfg, _ = _load(ctx.obj.get("config_path") if ctx.obj else None)
++    cfg, _ = _load(_resolve_path(ctx, config_path))
+     try:
+         value = cfg.get(key)
+     except ConfigError as exc:
+@@ -168,6 +199,7 @@ def get(ctx: click.Context, key: str) -> None:
+ @config.command("set")
+ @click.argument("key")
+ @click.argument("value")
++@_path_option
+ @click.option(
+     "--format",
+     "output_format",
+@@ -176,7 +208,9 @@ def get(ctx: click.Context, key: str) -> None:
+ )
+ @click.pass_context
+ @cli_command
+-def set_(ctx: click.Context, key: str, value: str, output_format: str | None) -> None:
++def set_(
++    ctx: click.Context, key: str, value: str, config_path: str | None, output_format: str | None
++) -> None:
+     """
+     Set a single dotted config key and save the config file.
+ 
+@@ -185,9 +219,10 @@ def set_(ctx: click.Context, key: str, value: str, output_format: str | None) ->
+       slb-glossary config set session.headless false
+       slb-glossary config set session.browser_type firefox
+       slb-glossary config set local.sync_max_age_days 3.5
++      slb-glossary config set session.headless false --path ~/my-config.toml
+     """
+-    config_path = ctx.obj.get("config_path") if ctx.obj else None
+-    cfg, resolved = _load(config_path)
++    resolved_path = _resolve_path(ctx, config_path)
++    cfg, resolved = _load(resolved_path)
+     try:
+         cfg.set(key, value)
+     except ConfigError as exc:
+@@ -197,6 +232,7 @@ def set_(ctx: click.Context, key: str, value: str, output_format: str | None) ->
+ 
+ 
+ @config.command("init")
++@_path_option
+ @click.option(
+     "--format",
+     "output_format",
+@@ -207,7 +243,9 @@ def set_(ctx: click.Context, key: str, value: str, output_format: str | None) ->
+ @click.option("--force", is_flag=True, help="Overwrite the file if it already exists.")
+ @click.pass_context
+ @cli_command
+-def init(ctx: click.Context, output_format: str | None, force: bool) -> None:
++def init(
++    ctx: click.Context, config_path: str | None, output_format: str | None, force: bool
++) -> None:
+     """
+     Write a fresh, all-defaults config file.
+ 
+@@ -215,9 +253,10 @@ def init(ctx: click.Context, output_format: str | None, force: bool) -> None:
+     Examples:
+       slb-glossary config init
+       slb-glossary config init --format json --force
++      slb-glossary config init --path ~/my-config.toml
+     """
+-    config_path = ctx.obj.get("config_path") if ctx.obj else None
+-    resolved = pathlib.Path(config_path) if config_path else Config.default_path()
++    resolved_path = _resolve_path(ctx, config_path)
++    resolved = pathlib.Path(resolved_path) if resolved_path else Config.default_path()
+     if resolved.exists() and not force:
+         raise click.ClickException(f"{resolved} already exists. Use --force to overwrite it.")
+     Config().to_file(resolved, format=output_format)
+@@ -225,18 +264,20 @@ def init(ctx: click.Context, output_format: str | None, force: bool) -> None:
+ 
+ 
+ @config.command("edit")
++@_path_option
+ @click.pass_context
+ @cli_command
+-def edit(ctx: click.Context) -> None:
++def edit(ctx: click.Context, config_path: str | None) -> None:
+     """
+     Open the config file in $EDITOR (or $VISUAL), creating it with defaults first if missing.
+ 
+     \b
+     Examples:
+       slb-glossary config edit
++      slb-glossary config edit --path ~/my-config.toml
+     """
+-    config_path = ctx.obj.get("config_path") if ctx.obj else None
+-    resolved = pathlib.Path(config_path) if config_path else Config.default_path()
++    resolved_path = _resolve_path(ctx, config_path)
++    resolved = pathlib.Path(resolved_path) if resolved_path else Config.default_path()
+     if not resolved.exists():
+         Config().to_file(resolved)
+         click.echo(f"Created default config at {resolved}")
+@@ -263,9 +304,10 @@ SECTION_TITLES: dict[str, str] = {
+ 
+ 
+ @config.command("wizard")
++@_path_option
+ @click.pass_context
+ @cli_command
+-def wizard(ctx: click.Context) -> None:
++def wizard(ctx: click.Context, config_path: str | None) -> None:
+     """
+     Walk through the config section by section, showing current values and prompting for new ones.
+ 
+@@ -276,9 +318,10 @@ def wizard(ctx: click.Context) -> None:
+     Examples:
+       slb-glossary config wizard
+       slb-glossary config          # same thing, the group's default action
++      slb-glossary config wizard --path ~/my-config.toml
+     """
+-    config_path = ctx.obj.get("config_path") if ctx.obj else None
+-    cfg, resolved = _load(config_path)
++    resolved_path = _resolve_path(ctx, config_path)
++    cfg, resolved = _load(resolved_path)
+     console = Console()
+ 
+     console.print(
+diff --git a/slb_glossary/live/topics.py b/slb_glossary/live/topics.py
+index a374de3..bf54b60 100644
+--- a/slb_glossary/live/topics.py
++++ b/slb_glossary/live/topics.py
+@@ -95,8 +95,31 @@ async def refresh_topics(session: Session) -> Session:
+     """
+     started_at = time.monotonic()
+     logger.debug("Refreshing topics for session on %s", session.base_url)
+-    page = await session.new_page()
++
++    base_page_free = (
++        session.base_page is not None
++        and not session.base_page.is_closed()
++        and not session.base_page_in_use
++    )
++    if base_page_free:
++        # Reuse the session's base page when it's free: it's already
++        # warmed up (see `Session.base_page`'s docstring for why that
++        # matters), and this navigates it to the same search screen
++        # `fetch_topics` always loads anyway, so nothing about a fresh
++        # page would help here.
++        page = session.base_page
++        owns_page = False
++        session.base_page_in_use = True
++    else:
++        # `base_page` is either unavailable (closed, or this session was
++        # never initialized with one) or already checked out by another
++        # call - either way, get a dedicated page rather than racing that
++        # call over `base_page`'s navigation.
++        page = await session.new_page()
++        owns_page = True
++
+     try:
++        assert page is not None
+         topics, size = await fetch_topics(
+             page,
+             base_url=session.base_url,
+@@ -104,7 +127,10 @@ async def refresh_topics(session: Session) -> Session:
+             settle_delay=session.settle_timeout,
+         )
+     finally:
+-        await page.close()
++        if owns_page:
++            await page.close()
++        else:
++            session.base_page_in_use = False
+ 
+     session.topics = topics
+     session.size = size

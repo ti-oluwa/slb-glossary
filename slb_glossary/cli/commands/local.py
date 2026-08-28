@@ -13,6 +13,8 @@ from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, log_level_option
 from slb_glossary.cli.source_options import database_option, get_loaded_config, resolve_db_path
 from slb_glossary.local.types import Metadata
+from slb_glossary.types import SearchMode
+from slb_glossary.utils import as_async_iterator
 
 __all__ = ["local"]
 
@@ -135,11 +137,43 @@ def stats(**params: typing.Any) -> None:
     help="Restrict results to this topic, or several comma-separated topics.",
 )
 @click.option(
+    "--start-letter",
+    default=None,
+    metavar="LETTER",
+    help="Restrict results to terms starting with this letter.",
+)
+@click.option(
+    "--language",
+    "-L",
+    default=None,
+    help="Restrict results to this glossary language edition (e.g. 'en'/'es'). "
+    "Unset by default: doesn't filter by language.",
+)
+@click.option(
     "--fuzzy",
     is_flag=True,
     help="Tolerate minor misspellings/partial names in --topic, matched "
     "against topics actually stored locally, instead of requiring an exact "
     "(case-insensitive) match.",
+)
+@click.option(
+    "--mode",
+    "-m",
+    type=click.Choice([mode.value for mode in SearchMode], case_sensitive=False),
+    default=None,
+    show_default="the SLB_GLOSSARY_DEFAULT_SEARCH_MODE / default_search_mode setting",
+    help=(
+        "Ranking strategy: 'lexical' (bm25 full-text, works out of the "
+        "box), 'semantic' (embedding similarity), or 'hybrid' (both, "
+        "fused; needs the [semantic] extra and terms already embedded "
+        "via `slb_glossary.local.embed_terms`)."
+    ),
+)
+@click.option(
+    "--exclude",
+    default=None,
+    metavar="ENTRIES",
+    help="Comma-separated URLs and/or term names to leave out of the results.",
 )
 @click.option(
     "--limit",
@@ -163,6 +197,7 @@ def local_search(query: str, **params: typing.Any) -> None:
       slb-glossary local search porosity
       slb-glossary local search "drilling fluid" --topic Drilling
       slb-glossary local search viscosity --topic Petrophysic --fuzzy
+      slb-glossary local search "reservoir rock" --mode hybrid
     """
     if not query.strip():
         raise click.BadParameter("Missing search query.")
@@ -171,16 +206,29 @@ def local_search(query: str, **params: typing.Any) -> None:
     title = f"Local Search Results for {query!r}"
     if params["topic"]:
         title += f" (topic: {params['topic']})"
+    exclude = (
+        tuple(e.strip() for e in params["exclude"].split(",") if e.strip())
+        if params["exclude"]
+        else None
+    )
 
     async def run() -> int:
         config = get_loaded_config(params)
         db_path = resolve_db_path(config, params["db_path"])
         async with local_pkg.database(db_path) as db:
-            results = local_pkg.search(
-                db, query, topic=params["topic"], limit=limit, fuzzy=params["fuzzy"]
+            results = await local_pkg.search(
+                db,
+                query,
+                topic=params["topic"],
+                start_letter=params["start_letter"],
+                language=params["language"],
+                limit=limit,
+                fuzzy=params["fuzzy"],
+                mode=params["mode"],
+                exclude=exclude,
             )
             return await output_results(
-                results,  # type: ignore[arg-type]
+                as_async_iterator(results),
                 title=title,
                 save_paths=params["save_paths"],
                 format=params["format"],
@@ -195,6 +243,46 @@ def local_search(query: str, **params: typing.Any) -> None:
 
 @local.command("get")
 @click.argument("term_or_url", default="")
+@click.option(
+    "--topic",
+    "-t",
+    default=None,
+    help="Pick a specific stored definition if TERM_OR_URL has several "
+    "locally (one per topic it's filed under). Without this, and more "
+    "than one is stored, which one comes back is deterministic (by "
+    "topic name) but not otherwise meaningful.",
+)
+@click.option(
+    "--language",
+    "-L",
+    default=None,
+    help="Restrict the lookup to this glossary language edition (e.g. "
+    "'en'/'es'). Unset by default: doesn't filter by language.",
+)
+@click.option(
+    "--suggest/--no-suggest",
+    "suggest_similar",
+    default=True,
+    show_default=True,
+    help="When no exact match is found, offer up to --max-similar "
+    "similarly-named alternatives instead of just reporting nothing found.",
+)
+@click.option(
+    "--similar-pool-size",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="N",
+    help="Candidates pulled while looking for the exact match, and to draw "
+    "--suggest alternatives from. Defaults to constants.similar_terms_pool_size.",
+)
+@click.option(
+    "--max-similar",
+    "max_similar_terms",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="N",
+    help="Max --suggest alternatives offered. Defaults to constants.max_similar_terms.",
+)
 @database_option
 @config_option
 @output_options
@@ -207,15 +295,37 @@ def local_get(term_or_url: str, **params: typing.Any) -> None:
     \b
     Examples:
       slb-glossary local get porosity
+      slb-glossary local get porosity --topic Petrophysics
+      slb-glossary local get "https://glossary.slb.com/en/terms/p/porosity"
     """
     if not term_or_url.strip():
         raise click.BadParameter("Missing term or URL.")
+
+    suggest_similar = params["suggest_similar"]
 
     async def run() -> int:
         config = get_loaded_config(params)
         db_path = resolve_db_path(config, params["db_path"])
         async with local_pkg.database(db_path) as db:
-            result = await local_pkg.get_term(db, term_or_url)
+            if suggest_similar:
+                result, similar = await local_pkg.get_term(
+                    db,
+                    term_or_url,
+                    language=params["language"],
+                    topic=params["topic"],
+                    with_similar=True,
+                    similar_pool_size=params["similar_pool_size"],
+                    max_similar_terms=params["max_similar_terms"],
+                )
+                if result is None and similar and not params["quiet"]:
+                    click.secho("Not found exactly. Did you mean:", fg="yellow", err=True)
+                    for candidate, score in similar:
+                        click.secho(f"  {candidate.term} ({score:.2f})", fg="yellow", err=True)
+            else:
+                result = await local_pkg.get_term(
+                    db, term_or_url, language=params["language"], topic=params["topic"]
+                )
+
             if result is None:
                 return 0
 
@@ -289,7 +399,7 @@ def _field_or_empty(ctx: click.Context, param: click.Parameter, value: str | Non
     help=(
         "Column/key holding each row's source URL. Pass '' to always "
         "synthesize a 'local://imported/<slugified-term>' URL instead - "
-        "needed since url is the local database's primary key."
+        "needed since url and topic together are the local database's primary key."
     ),
 )
 @click.option(
@@ -317,22 +427,31 @@ def _field_or_empty(ctx: click.Context, param: click.Parameter, value: str | Non
     help="Language stored for a row with no usable --language-field value.",
 )
 @click.option(
-    "--embedding-field",
-    default=None,
+    "--image-field",
+    default="image",
+    show_default=True,
     callback=_field_or_empty,
-    help=(
-        "Column/key holding a precomputed embedding vector for each row - "
-        "either a JSON array, or a comma/semicolon/whitespace-separated "
-        "string of numbers. If given, a vector is stored (see "
-        "`slb-glossary local` vector search) for every row that has one. "
-        "Omitted by default: no vectors are imported."
-    ),
+    help="Column/key holding each row's image URL. Pass '' to leave it unset.",
 )
 @click.option(
-    "--embedding-model",
-    default="custom",
+    "--image-caption-field",
+    default="image_caption",
     show_default=True,
-    help="Model label to store --embedding-field vectors under. Only meaningful with --embedding-field.",
+    callback=_field_or_empty,
+    help="Column/key holding each row's image caption. Pass '' to leave it unset.",
+)
+@click.option(
+    "--related-field",
+    default="related",
+    show_default=True,
+    callback=_field_or_empty,
+    help=(
+        "Column/key holding each row's related terms. Pass '' to leave it "
+        "unset. The value needs to be a list (from a JSON source) or a "
+        'JSON array string (any format) of {"term": ..., "url": ...} '
+        "objects or [term, url] pairs; anything else is left unset for "
+        "that row rather than raising."
+    ),
 )
 @click.option(
     "--source-tag",
@@ -374,8 +493,9 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
     Matching a row's own field names is case-insensitive.
 
     A row's own url (or, missing that, a URL synthesized from its term -
-    see --url-field) is the local database's primary key, so importing the
-    same file twice updates existing rows rather than duplicating them.
+    see --url-field) and topic together are the local database's primary
+    key, so importing the same file twice updates existing rows rather
+    than duplicating them.
 
     Rows are read and upserted in batches (see --batch-size) rather than
     all at once, so a large import stays memory-bounded, and an
@@ -387,7 +507,7 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
       slb-glossary local import terms.csv
       slb-glossary local import terms.json --source-tag internal-wordlist
       slb-glossary local import terms.xlsx --topic-field Category --url-field ""
-      slb-glossary local import terms.csv --embedding-field vector --embedding-model text-embedding-3-small
+      slb-glossary local import terms.json --related-field see_also
       slb-glossary local import terms.csv --batch-size 200 --db-path ./my.db
     """
 
@@ -405,6 +525,9 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
                 url_field=params["url_field"],
                 grammatical_label_field=params["grammatical_label_field"],
                 language_field=params["language_field"],
+                image_field=params["image_field"],
+                image_caption_field=params["image_caption_field"],
+                related_field=params["related_field"],
                 default_language=params["default_language"],
                 source=params["source_tag"],
                 batch_size=params["batch_size"],
@@ -468,4 +591,3 @@ def reset(**params: typing.Any) -> None:
 
     run_async(run())
     click.echo("Local database reset.")
-

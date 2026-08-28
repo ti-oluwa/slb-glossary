@@ -1,5 +1,6 @@
 """`slb-glossary compare` - look up several glossary terms side by side."""
 
+import asyncio
 import typing
 
 import click
@@ -12,13 +13,13 @@ from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
     get_loaded_config,
+    live_session,
     open_configured_db,
-    resolve_lookup,
     resolve_source,
     source_options,
 )
 from slb_glossary.cli.tui import launch_tui
-from slb_glossary.query import Source
+from slb_glossary.query import QueryResult, Source
 from slb_glossary.types import SearchResult
 
 __all__ = ["compare"]
@@ -33,16 +34,49 @@ def _validate_terms(
     return value
 
 
+async def _gather_bounded(
+    calls: typing.Sequence[typing.Callable[[], typing.Awaitable[QueryResult[SearchResult]]]],
+    concurrency: int,
+) -> list[QueryResult[SearchResult]]:
+    """Run `calls` concurrently, at most `concurrency` at once, preserving their order."""
+    semaphore = asyncio.Semaphore(max(concurrency, 1))
+
+    async def _bounded(
+        call: typing.Callable[[], typing.Awaitable[QueryResult[SearchResult]]],
+    ) -> QueryResult[SearchResult]:
+        async with semaphore:
+            return await call()
+
+    return list(await asyncio.gather(*(_bounded(call) for call in calls)))
+
+
 @click.command("compare")
 @click.argument("terms", nargs=-1, callback=_validate_terms)
 @source_options
 @database_option
+@click.option(
+    "--topic",
+    "-t",
+    default=None,
+    help="Pick a specific stored definition for any term/URL that has "
+    "several locally (one per topic it's filed under). Only affects a "
+    "local read; a live read always returns whatever the site serves.",
+)
 @click.option(
     "--show-related/--hide-related",
     "show_related",
     default=False,
     show_default=True,
     help="Show/hide the related-terms column.",
+)
+@click.option(
+    "--concurrency",
+    type=click.IntRange(min=1),
+    default=3,
+    show_default=True,
+    help="Number of terms to look up concurrently, instead of one at a "
+    "time. Higher values may be faster, but use with discretion so as "
+    "not to overload the glossary server on a live/auto lookup.",
 )
 @config_option
 @session_options
@@ -63,13 +97,16 @@ def compare(
 
     Same --local/--live/--auto source selection as `define`. Terms
     not found by the resolved source(s) are skipped, with a note printed
-    to stderr.
+    to stderr. Terms are looked up concurrently (see --concurrency),
+    rather than one at a time.
 
     \b
     Examples:
       slb-glossary compare "water flooding" "gas flooding"
       slb-glossary compare porosity permeability --local
+      slb-glossary compare porosity permeability --local --topic Petrophysics
       slb-glossary compare "black oil" "heavy oil" --save comparison.csv
+      slb-glossary compare a b c d e --concurrency 5
     """
     if use_tui:
         launch_tui(ctx, command_path=("compare",))
@@ -78,45 +115,86 @@ def compare(
     source = resolve_source(params)
     config = get_loaded_config(params)
     title = f"Comparing: {', '.join(terms)}"
+    concurrency = params["concurrency"]
+    language = params["language"]
+    topic = params["topic"]
+    sources_seen: set[str] = set()
 
-    async def _stream() -> typing.AsyncIterator[SearchResult]:
-        async with open_configured_db(config, db_path_override=params["db_path"]) as db:
-            for term in terms:
-                lookup = await resolve_lookup(
-                    ctx,
-                    params,
-                    db,
-                    source=source,
-                    local_call=lambda db, term=term: query.get_term(
-                        term, db=db, source=Source.LOCAL
-                    ),
-                    live_call=lambda session, term=term: query.get_term(
-                        term,
-                        db=db,
-                        session=session,
-                        source=Source.LIVE,
-                        persist=params["cache_results"],
-                    ),
-                )
-                if lookup.value is not None:
-                    sources_seen.add(lookup.source.value)
-                    yield lookup.value  # ruff: ignore[yield-in-context-manager-in-async-generator]
-
-                elif not params["quiet"]:
-                    click.secho(f"Not found: {term!r}", fg="yellow", err=True)
-
-    async def run() -> int:
-        return await output_results(
-            _stream(),
-            title=title,
-            save_paths=params["save_paths"],
-            format=params["format"],
-            quiet=params["quiet"],
-            json_output=params["json_output"],
-            show_related=params["show_related"],
+    def _local_call(
+        db: typing.Any, term: str
+    ) -> typing.Callable[[], typing.Awaitable[QueryResult[SearchResult | None]]]:
+        return lambda: query.get_term(
+            term, db=db, source=Source.LOCAL, language=language, topic=topic
         )
 
-    sources_seen: set[str] = set()
+    def _live_call(
+        db: typing.Any, session: typing.Any, term: str
+    ) -> typing.Callable[[], typing.Awaitable[QueryResult[SearchResult | None]]]:
+        return lambda: query.get_term(
+            term,
+            db=db,
+            session=session,
+            source=Source.LIVE,
+            persist=params["cache_results"],
+            language=language,
+        )
+
+    async def run() -> int:
+        async with open_configured_db(config, db_path_override=params["db_path"]) as db:
+            if source is Source.LOCAL:
+                assert db is not None
+                lookups = await _gather_bounded(
+                    [_local_call(db, term) for term in terms], concurrency
+                )
+            elif source is Source.LIVE:
+                async with live_session(ctx, params) as session:
+                    lookups = await _gather_bounded(
+                        [_live_call(db, session, term) for term in terms], concurrency
+                    )
+            else:
+                # Source.AUTO: try every term against the local database
+                # first, concurrently, with no browser involved at all. A
+                # live session is opened, once, only if at least one term
+                # came back empty - and then only the still-missing terms
+                # are looked up against it, concurrently, rather than
+                # opening a fresh session per term the way running each
+                # term through a single-lookup helper independently would.
+                lookups = (
+                    await _gather_bounded([_local_call(db, term) for term in terms], concurrency)
+                    if db is not None
+                    else [None] * len(terms)
+                )
+                missing = [
+                    (index, term)
+                    for index, (term, lookup) in enumerate(zip(terms, lookups, strict=True))
+                    if lookup is None or lookup.value is None
+                ]
+                if missing:
+                    async with live_session(ctx, params) as session:
+                        live_lookups = await _gather_bounded(
+                            [_live_call(db, session, term) for _, term in missing], concurrency
+                        )
+                    for (index, _), live_lookup in zip(missing, live_lookups, strict=True):
+                        lookups[index] = live_lookup
+
+            async def _stream() -> typing.AsyncIterator[SearchResult]:
+                for term, lookup in zip(terms, lookups, strict=True):
+                    if lookup is not None and lookup.value is not None:
+                        sources_seen.add(lookup.source.value)
+                        yield lookup.value
+                    elif not params["quiet"]:
+                        click.secho(f"Not found: {term!r}", fg="yellow", err=True)
+
+            return await output_results(
+                _stream(),
+                title=title,
+                save_paths=params["save_paths"],
+                format=params["format"],
+                quiet=params["quiet"],
+                json_output=params["json_output"],
+                show_related=params["show_related"],
+            )
+
     count = run_async(run())
     if not params["quiet"] and sources_seen:
         click.secho(f"(source: {', '.join(sorted(sources_seen))})", fg="bright_black", err=True)

@@ -95,8 +95,31 @@ async def refresh_topics(session: Session) -> Session:
     """
     started_at = time.monotonic()
     logger.debug("Refreshing topics for session on %s", session.base_url)
-    page = await session.new_page()
+
+    base_page_free = (
+        session.base_page is not None
+        and not session.base_page.is_closed()
+        and not session.base_page_in_use
+    )
+    if base_page_free:
+        # Reuse the session's base page when it's free: it's already
+        # warmed up (see `Session.base_page`'s docstring for why that
+        # matters), and this navigates it to the same search screen
+        # `fetch_topics` always loads anyway, so nothing about a fresh
+        # page would help here.
+        page = session.base_page
+        owns_page = False
+        session.base_page_in_use = True
+    else:
+        # `base_page` is either unavailable (closed, or this session was
+        # never initialized with one) or already checked out by another
+        # call - either way, get a dedicated page rather than racing that
+        # call over `base_page`'s navigation.
+        page = await session.new_page()
+        owns_page = True
+
     try:
+        assert page is not None
         topics, size = await fetch_topics(
             page,
             base_url=session.base_url,
@@ -104,7 +127,10 @@ async def refresh_topics(session: Session) -> Session:
             settle_delay=session.settle_timeout,
         )
     finally:
-        await page.close()
+        if owns_page and page is not None:
+            await page.close()
+        else:
+            session.base_page_in_use = False
 
     session.topics = topics
     session.size = size

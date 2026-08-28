@@ -1061,6 +1061,7 @@ async def get_term(
     source: Source = Source.AUTO,
     persist: bool = False,
     language: str | None = None,
+    topic: str | None = None,
     with_similar: bool = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
@@ -1085,6 +1086,11 @@ async def get_term(
         For a live read, `session` is already bound to one language for
         its whole lifetime, so `language` here is only validated against
         it, not applied as a filter. See `validate_language`.
+    :param topic: A term/URL can have several stored definitions locally,
+        one per topic it's filed under - `topic` picks a specific one
+        (exact, case-insensitive match). Only affects a local read; a
+        live read has no such filter (a live fetch always returns
+        whatever the site itself serves for that term/URL).
     :param with_similar: If `True`, resolve to a `QueryResult[SimilarResult]`
         instead: `SimilarResult.exact` holds what a plain call would have
         returned, and `SimilarResult.similar` holds up to `max_similar_terms`
@@ -1121,6 +1127,7 @@ async def get_term(
             db,
             term_or_url,
             language=language,
+            topic=topic,
             with_similar=with_similar,
             similar_pool_size=similar_pool_size,
             max_similar_terms=max_similar_terms,
@@ -1145,6 +1152,7 @@ async def get_term(
         db,
         term_or_url,
         language=language,
+        topic=topic,
         with_similar=with_similar,
         similar_pool_size=similar_pool_size,
         max_similar_terms=max_similar_terms,
@@ -1178,6 +1186,7 @@ async def _lookup_local_term(
     term_or_url: str,
     *,
     language: str | None,
+    topic: str | None,
     with_similar: bool,
     similar_pool_size: int | None,
     max_similar_terms: int | None,
@@ -1192,7 +1201,7 @@ async def _lookup_local_term(
     way `search` itself scores local results.
     """
     if not with_similar:
-        result = await local.get_term(db, term_or_url, language=language)
+        result = await local.get_term(db, term_or_url, language=language, topic=topic)
         score = constants.exact_match_score if result is not None else None
         return QueryResult(value=result, source=Source.LOCAL, persisted=False, score=score)
 
@@ -1200,6 +1209,7 @@ async def _lookup_local_term(
         db,
         term_or_url,
         language=language,
+        topic=topic,
         with_similar=True,
         similar_pool_size=similar_pool_size,
         max_similar_terms=max_similar_terms,
@@ -1414,6 +1424,7 @@ async def related_terms(
     source: Source = Source.AUTO,
     persist: bool = False,
     language: str | None = None,
+    topic: str | None = None,
     auto_initialize: bool = True,
 ) -> QueryResult[tuple[RelatedTerm, ...]]:
     """
@@ -1431,6 +1442,8 @@ async def related_terms(
         term's own result into `db`.
     :param language: Restrict the lookup to this glossary language
         edition. See `get_term`'s parameter of the same name.
+    :param topic: Pick a specific stored definition for a term/URL with
+        several. See `get_term`'s parameter of the same name.
     :param auto_initialize: If a live fetch happens and `session` isn't
         initialized yet, initialize it automatically (the default) or
         raise. See `slb_glossary.live.ensure_initialized`.
@@ -1449,6 +1462,7 @@ async def related_terms(
         source=source,
         persist=persist,
         language=language,
+        topic=topic,
         auto_initialize=auto_initialize,
     )
     related = lookup.value.related if lookup.value is not None else None

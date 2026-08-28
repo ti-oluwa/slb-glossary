@@ -1,0 +1,811 @@
+diff --git a/slb_glossary/cli/commands/compare.py b/slb_glossary/cli/commands/compare.py
+index b6af0cc..15e7a54 100644
+--- a/slb_glossary/cli/commands/compare.py
++++ b/slb_glossary/cli/commands/compare.py
+@@ -1,5 +1,6 @@
+ """`slb-glossary compare` - look up several glossary terms side by side."""
+ 
++import asyncio
+ import typing
+ 
+ import click
+@@ -12,13 +13,13 @@ from slb_glossary.cli.session_options import config_option, session_options
+ from slb_glossary.cli.source_options import (
+     database_option,
+     get_loaded_config,
++    live_session,
+     open_configured_db,
+-    resolve_lookup,
+     resolve_source,
+     source_options,
+ )
+ from slb_glossary.cli.tui import launch_tui
+-from slb_glossary.query import Source
++from slb_glossary.query import QueryResult, Source
+ from slb_glossary.types import SearchResult
+ 
+ __all__ = ["compare"]
+@@ -33,10 +34,34 @@ def _validate_terms(
+     return value
+ 
+ 
++async def _gather_bounded(
++    calls: typing.Sequence[typing.Callable[[], typing.Awaitable[QueryResult[SearchResult]]]],
++    concurrency: int,
++) -> list[QueryResult[SearchResult]]:
++    """Run `calls` concurrently, at most `concurrency` at once, preserving their order."""
++    semaphore = asyncio.Semaphore(max(concurrency, 1))
++
++    async def _bounded(
++        call: typing.Callable[[], typing.Awaitable[QueryResult[SearchResult]]],
++    ) -> QueryResult[SearchResult]:
++        async with semaphore:
++            return await call()
++
++    return list(await asyncio.gather(*(_bounded(call) for call in calls)))
++
++
+ @click.command("compare")
+ @click.argument("terms", nargs=-1, callback=_validate_terms)
+ @source_options
+ @database_option
++@click.option(
++    "--topic",
++    "-t",
++    default=None,
++    help="Pick a specific stored definition for any term/URL that has "
++    "several locally (one per topic it's filed under). Only affects a "
++    "local read; a live read always returns whatever the site serves.",
++)
+ @click.option(
+     "--show-related/--hide-related",
+     "show_related",
+@@ -44,6 +69,15 @@ def _validate_terms(
+     show_default=True,
+     help="Show/hide the related-terms column.",
+ )
++@click.option(
++    "--concurrency",
++    type=click.IntRange(min=1),
++    default=3,
++    show_default=True,
++    help="Number of terms to look up concurrently, instead of one at a "
++    "time. Higher values may be faster, but use with discretion so as "
++    "not to overload the glossary server on a live/auto lookup.",
++)
+ @config_option
+ @session_options
+ @output_options
+@@ -63,13 +97,16 @@ def compare(
+ 
+     Same --local/--live/--auto source selection as `define`. Terms
+     not found by the resolved source(s) are skipped, with a note printed
+-    to stderr.
++    to stderr. Terms are looked up concurrently (see --concurrency),
++    rather than one at a time.
+ 
+     \b
+     Examples:
+       slb-glossary compare "water flooding" "gas flooding"
+       slb-glossary compare porosity permeability --local
++      slb-glossary compare porosity permeability --local --topic Petrophysics
+       slb-glossary compare "black oil" "heavy oil" --save comparison.csv
++      slb-glossary compare a b c d e --concurrency 5
+     """
+     if use_tui:
+         launch_tui(ctx, command_path=("compare",))
+@@ -78,45 +115,86 @@ def compare(
+     source = resolve_source(params)
+     config = get_loaded_config(params)
+     title = f"Comparing: {', '.join(terms)}"
++    concurrency = params["concurrency"]
++    language = params["language"]
++    topic = params["topic"]
++    sources_seen: set[str] = set()
+ 
+-    async def _stream() -> typing.AsyncIterator[SearchResult]:
++    def _local_call(
++        db: typing.Any, term: str
++    ) -> typing.Callable[[], typing.Awaitable[QueryResult[SearchResult]]]:
++        return lambda: query.get_term(
++            term, db=db, source=Source.LOCAL, language=language, topic=topic
++        )
++
++    def _live_call(
++        db: typing.Any, session: typing.Any, term: str
++    ) -> typing.Callable[[], typing.Awaitable[QueryResult[SearchResult]]]:
++        return lambda: query.get_term(
++            term,
++            db=db,
++            session=session,
++            source=Source.LIVE,
++            persist=params["cache_results"],
++            language=language,
++        )
++
++    async def run() -> int:
+         async with open_configured_db(config, db_path_override=params["db_path"]) as db:
+-            for term in terms:
+-                lookup = await resolve_lookup(
+-                    ctx,
+-                    params,
+-                    db,
+-                    source=source,
+-                    local_call=lambda db, term=term: query.get_term(
+-                        term, db=db, source=Source.LOCAL
+-                    ),
+-                    live_call=lambda session, term=term: query.get_term(
+-                        term,
+-                        db=db,
+-                        session=session,
+-                        source=Source.LIVE,
+-                        persist=params["cache_results"],
+-                    ),
++            if source is Source.LOCAL:
++                assert db is not None
++                lookups = await _gather_bounded(
++                    [_local_call(db, term) for term in terms], concurrency
+                 )
+-                if lookup.value is not None:
+-                    sources_seen.add(lookup.source.value)
+-                    yield lookup.value  # ruff: ignore[yield-in-context-manager-in-async-generator]
++            elif source is Source.LIVE:
++                async with live_session(ctx, params) as session:
++                    lookups = await _gather_bounded(
++                        [_live_call(db, session, term) for term in terms], concurrency
++                    )
++            else:
++                # Source.AUTO: try every term against the local database
++                # first, concurrently, with no browser involved at all. A
++                # live session is opened, once, only if at least one term
++                # came back empty - and then only the still-missing terms
++                # are looked up against it, concurrently, rather than
++                # opening a fresh session per term the way running each
++                # term through a single-lookup helper independently would.
++                lookups = (
++                    await _gather_bounded([_local_call(db, term) for term in terms], concurrency)
++                    if db is not None
++                    else [None] * len(terms)
++                )
++                missing = [
++                    (index, term)
++                    for index, (term, lookup) in enumerate(zip(terms, lookups, strict=True))
++                    if lookup is None or lookup.value is None
++                ]
++                if missing:
++                    async with live_session(ctx, params) as session:
++                        live_lookups = await _gather_bounded(
++                            [_live_call(db, session, term) for _, term in missing], concurrency
++                        )
++                    for (index, _), live_lookup in zip(missing, live_lookups, strict=True):
++                        lookups[index] = live_lookup
+ 
+-                elif not params["quiet"]:
+-                    click.secho(f"Not found: {term!r}", fg="yellow", err=True)
++            async def _stream() -> typing.AsyncIterator[SearchResult]:
++                for term, lookup in zip(terms, lookups, strict=True):
++                    if lookup is not None and lookup.value is not None:
++                        sources_seen.add(lookup.source.value)
++                        yield lookup.value
++                    elif not params["quiet"]:
++                        click.secho(f"Not found: {term!r}", fg="yellow", err=True)
+ 
+-    async def run() -> int:
+-        return await output_results(
+-            _stream(),
+-            title=title,
+-            save_paths=params["save_paths"],
+-            format=params["format"],
+-            quiet=params["quiet"],
+-            json_output=params["json_output"],
+-            show_related=params["show_related"],
+-        )
++            return await output_results(
++                _stream(),
++                title=title,
++                save_paths=params["save_paths"],
++                format=params["format"],
++                quiet=params["quiet"],
++                json_output=params["json_output"],
++                show_related=params["show_related"],
++            )
+ 
+-    sources_seen: set[str] = set()
+     count = run_async(run())
+     if not params["quiet"] and sources_seen:
+         click.secho(f"(source: {', '.join(sorted(sources_seen))})", fg="bright_black", err=True)
+diff --git a/slb_glossary/cli/commands/define.py b/slb_glossary/cli/commands/define.py
+index f7659f2..1c2f746 100644
+--- a/slb_glossary/cli/commands/define.py
++++ b/slb_glossary/cli/commands/define.py
+@@ -36,6 +36,14 @@ def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> st
+ @click.argument("term", default="", callback=_validate_term)
+ @source_options
+ @database_option
++@click.option(
++    "--topic",
++    "-t",
++    default=None,
++    help="Pick a specific stored definition when TERM/URL has several "
++    "locally (one per topic it's filed under). Only affects a local "
++    "read; a live read always returns whatever the site itself serves.",
++)
+ @click.option(
+     "--show-related/--hide-related",
+     "show_related",
+@@ -56,12 +64,28 @@ def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> st
+     default=True,
+     show_default=True,
+     help=(
+-        "When a live lookup finds no exact match for TERM, offer up to a "
+-        "few similarly-named alternatives instead of just reporting "
+-        "nothing found. On an interactive terminal, lets you pick one to "
+-        "view its definition."
++        "When a lookup finds no exact match for TERM, offer up to "
++        "--max-similar similarly-named alternatives instead of just "
++        "reporting nothing found. On an interactive terminal, lets you "
++        "pick one to view its definition."
+     ),
+ )
++@click.option(
++    "--similar-pool-size",
++    type=click.IntRange(min=1),
++    default=None,
++    metavar="N",
++    help="Candidates pulled while looking for the exact match, and to draw "
++    "--suggest alternatives from. Defaults to constants.similar_terms_pool_size.",
++)
++@click.option(
++    "--max-similar",
++    "max_similar_terms",
++    type=click.IntRange(min=1),
++    default=None,
++    metavar="N",
++    help="Max --suggest alternatives offered. Defaults to constants.max_similar_terms.",
++)
+ @config_option
+ @session_options
+ @output_options
+@@ -86,6 +110,7 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
+     Examples:
+       slb-glossary define "black oil"
+       slb-glossary define porosity --local
++      slb-glossary define porosity --local --topic Petrophysics
+       slb-glossary define "water saturation" --live --cache
+       slb-glossary define "black oil" --save black_oil.json
+     """
+@@ -109,7 +134,11 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
+                     term,
+                     db=db,
+                     source=Source.LOCAL,
++                    language=params["language"],
++                    topic=params["topic"],
+                     with_similar=suggest_similar,
++                    similar_pool_size=params["similar_pool_size"],
++                    max_similar_terms=params["max_similar_terms"],
+                 ),
+                 live_call=lambda session: query.get_term(
+                     term,
+@@ -117,7 +146,11 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
+                     session=session,
+                     source=Source.LIVE,
+                     persist=params["cache_results"],
++                    language=params["language"],
++                    topic=params["topic"],
+                     with_similar=suggest_similar,
++                    similar_pool_size=params["similar_pool_size"],
++                    max_similar_terms=params["max_similar_terms"],
+                 ),
+             )
+ 
+diff --git a/slb_glossary/cli/commands/local.py b/slb_glossary/cli/commands/local.py
+index 79b0ca0..db4f686 100644
+--- a/slb_glossary/cli/commands/local.py
++++ b/slb_glossary/cli/commands/local.py
+@@ -13,6 +13,8 @@ from slb_glossary.cli.runner import run_async
+ from slb_glossary.cli.session_options import config_option, log_level_option
+ from slb_glossary.cli.source_options import database_option, get_loaded_config, resolve_db_path
+ from slb_glossary.local.types import Metadata
++from slb_glossary.types import SearchMode
++from slb_glossary.utils import as_async_iterator
+ 
+ __all__ = ["local"]
+ 
+@@ -134,6 +136,19 @@ def stats(**params: typing.Any) -> None:
+     default=None,
+     help="Restrict results to this topic, or several comma-separated topics.",
+ )
++@click.option(
++    "--start-letter",
++    default=None,
++    metavar="LETTER",
++    help="Restrict results to terms starting with this letter.",
++)
++@click.option(
++    "--language",
++    "-L",
++    default=None,
++    help="Restrict results to this glossary language edition (e.g. 'en'/'es'). "
++    "Unset by default: doesn't filter by language.",
++)
+ @click.option(
+     "--fuzzy",
+     is_flag=True,
+@@ -141,6 +156,25 @@ def stats(**params: typing.Any) -> None:
+     "against topics actually stored locally, instead of requiring an exact "
+     "(case-insensitive) match.",
+ )
++@click.option(
++    "--mode",
++    "-m",
++    type=click.Choice([mode.value for mode in SearchMode], case_sensitive=False),
++    default=None,
++    show_default="the SLB_GLOSSARY_DEFAULT_SEARCH_MODE / default_search_mode setting",
++    help=(
++        "Ranking strategy: 'lexical' (bm25 full-text, works out of the "
++        "box), 'semantic' (embedding similarity), or 'hybrid' (both, "
++        "fused; needs the [semantic] extra and terms already embedded "
++        "via `slb_glossary.local.embed_terms`)."
++    ),
++)
++@click.option(
++    "--exclude",
++    default=None,
++    metavar="ENTRIES",
++    help="Comma-separated URLs and/or term names to leave out of the results.",
++)
+ @click.option(
+     "--limit",
+     "-n",
+@@ -163,6 +197,7 @@ def local_search(query: str, **params: typing.Any) -> None:
+       slb-glossary local search porosity
+       slb-glossary local search "drilling fluid" --topic Drilling
+       slb-glossary local search viscosity --topic Petrophysic --fuzzy
++      slb-glossary local search "reservoir rock" --mode hybrid
+     """
+     if not query.strip():
+         raise click.BadParameter("Missing search query.")
+@@ -171,16 +206,29 @@ def local_search(query: str, **params: typing.Any) -> None:
+     title = f"Local Search Results for {query!r}"
+     if params["topic"]:
+         title += f" (topic: {params['topic']})"
++    exclude = (
++        tuple(e.strip() for e in params["exclude"].split(",") if e.strip())
++        if params["exclude"]
++        else None
++    )
+ 
+     async def run() -> int:
+         config = get_loaded_config(params)
+         db_path = resolve_db_path(config, params["db_path"])
+         async with local_pkg.database(db_path) as db:
+-            results = local_pkg.search(
+-                db, query, topic=params["topic"], limit=limit, fuzzy=params["fuzzy"]
++            results = await local_pkg.search(
++                db,
++                query,
++                topic=params["topic"],
++                start_letter=params["start_letter"],
++                language=params["language"],
++                limit=limit,
++                fuzzy=params["fuzzy"],
++                mode=params["mode"],
++                exclude=exclude,
+             )
+             return await output_results(
+-                results,  # type: ignore[arg-type]
++                as_async_iterator(results),
+                 title=title,
+                 save_paths=params["save_paths"],
+                 format=params["format"],
+@@ -195,6 +243,46 @@ def local_search(query: str, **params: typing.Any) -> None:
+ 
+ @local.command("get")
+ @click.argument("term_or_url", default="")
++@click.option(
++    "--topic",
++    "-t",
++    default=None,
++    help="Pick a specific stored definition if TERM_OR_URL has several "
++    "locally (one per topic it's filed under). Without this, and more "
++    "than one is stored, which one comes back is deterministic (by "
++    "topic name) but not otherwise meaningful.",
++)
++@click.option(
++    "--language",
++    "-L",
++    default=None,
++    help="Restrict the lookup to this glossary language edition (e.g. "
++    "'en'/'es'). Unset by default: doesn't filter by language.",
++)
++@click.option(
++    "--suggest/--no-suggest",
++    "suggest_similar",
++    default=True,
++    show_default=True,
++    help="When no exact match is found, offer up to --max-similar "
++    "similarly-named alternatives instead of just reporting nothing found.",
++)
++@click.option(
++    "--similar-pool-size",
++    type=click.IntRange(min=1),
++    default=None,
++    metavar="N",
++    help="Candidates pulled while looking for the exact match, and to draw "
++    "--suggest alternatives from. Defaults to constants.similar_terms_pool_size.",
++)
++@click.option(
++    "--max-similar",
++    "max_similar_terms",
++    type=click.IntRange(min=1),
++    default=None,
++    metavar="N",
++    help="Max --suggest alternatives offered. Defaults to constants.max_similar_terms.",
++)
+ @database_option
+ @config_option
+ @output_options
+@@ -207,15 +295,37 @@ def local_get(term_or_url: str, **params: typing.Any) -> None:
+     \b
+     Examples:
+       slb-glossary local get porosity
++      slb-glossary local get porosity --topic Petrophysics
++      slb-glossary local get "https://glossary.slb.com/en/terms/p/porosity"
+     """
+     if not term_or_url.strip():
+         raise click.BadParameter("Missing term or URL.")
+ 
++    suggest_similar = params["suggest_similar"]
++
+     async def run() -> int:
+         config = get_loaded_config(params)
+         db_path = resolve_db_path(config, params["db_path"])
+         async with local_pkg.database(db_path) as db:
+-            result = await local_pkg.get_term(db, term_or_url)
++            if suggest_similar:
++                result, similar = await local_pkg.get_term(
++                    db,
++                    term_or_url,
++                    language=params["language"],
++                    topic=params["topic"],
++                    with_similar=True,
++                    similar_pool_size=params["similar_pool_size"],
++                    max_similar_terms=params["max_similar_terms"],
++                )
++                if result is None and similar and not params["quiet"]:
++                    click.secho("Not found exactly. Did you mean:", fg="yellow", err=True)
++                    for candidate, score in similar:
++                        click.secho(f"  {candidate.term} ({score:.2f})", fg="yellow", err=True)
++            else:
++                result = await local_pkg.get_term(
++                    db, term_or_url, language=params["language"], topic=params["topic"]
++                )
++
+             if result is None:
+                 return 0
+ 
+@@ -289,7 +399,7 @@ def _field_or_empty(ctx: click.Context, param: click.Parameter, value: str | Non
+     help=(
+         "Column/key holding each row's source URL. Pass '' to always "
+         "synthesize a 'local://imported/<slugified-term>' URL instead - "
+-        "needed since url is the local database's primary key."
++        "needed since url and topic together are the local database's primary key."
+     ),
+ )
+ @click.option(
+@@ -317,22 +427,31 @@ def _field_or_empty(ctx: click.Context, param: click.Parameter, value: str | Non
+     help="Language stored for a row with no usable --language-field value.",
+ )
+ @click.option(
+-    "--embedding-field",
+-    default=None,
++    "--image-field",
++    default="image",
++    show_default=True,
+     callback=_field_or_empty,
+-    help=(
+-        "Column/key holding a precomputed embedding vector for each row - "
+-        "either a JSON array, or a comma/semicolon/whitespace-separated "
+-        "string of numbers. If given, a vector is stored (see "
+-        "`slb-glossary local` vector search) for every row that has one. "
+-        "Omitted by default: no vectors are imported."
+-    ),
++    help="Column/key holding each row's image URL. Pass '' to leave it unset.",
++)
++@click.option(
++    "--image-caption-field",
++    default="image_caption",
++    show_default=True,
++    callback=_field_or_empty,
++    help="Column/key holding each row's image caption. Pass '' to leave it unset.",
+ )
+ @click.option(
+-    "--embedding-model",
+-    default="custom",
++    "--related-field",
++    default="related",
+     show_default=True,
+-    help="Model label to store --embedding-field vectors under. Only meaningful with --embedding-field.",
++    callback=_field_or_empty,
++    help=(
++        "Column/key holding each row's related terms. Pass '' to leave it "
++        "unset. The value needs to be a list (from a JSON source) or a "
++        'JSON array string (any format) of {"term": ..., "url": ...} '
++        "objects or [term, url] pairs; anything else is left unset for "
++        "that row rather than raising."
++    ),
+ )
+ @click.option(
+     "--source-tag",
+@@ -374,8 +493,9 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
+     Matching a row's own field names is case-insensitive.
+ 
+     A row's own url (or, missing that, a URL synthesized from its term -
+-    see --url-field) is the local database's primary key, so importing the
+-    same file twice updates existing rows rather than duplicating them.
++    see --url-field) and topic together are the local database's primary
++    key, so importing the same file twice updates existing rows rather
++    than duplicating them.
+ 
+     Rows are read and upserted in batches (see --batch-size) rather than
+     all at once, so a large import stays memory-bounded, and an
+@@ -387,7 +507,7 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
+       slb-glossary local import terms.csv
+       slb-glossary local import terms.json --source-tag internal-wordlist
+       slb-glossary local import terms.xlsx --topic-field Category --url-field ""
+-      slb-glossary local import terms.csv --embedding-field vector --embedding-model text-embedding-3-small
++      slb-glossary local import terms.json --related-field see_also
+       slb-glossary local import terms.csv --batch-size 200 --db-path ./my.db
+     """
+ 
+@@ -405,6 +525,9 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
+                 url_field=params["url_field"],
+                 grammatical_label_field=params["grammatical_label_field"],
+                 language_field=params["language_field"],
++                image_field=params["image_field"],
++                image_caption_field=params["image_caption_field"],
++                related_field=params["related_field"],
+                 default_language=params["default_language"],
+                 source=params["source_tag"],
+                 batch_size=params["batch_size"],
+@@ -468,4 +591,3 @@ def reset(**params: typing.Any) -> None:
+ 
+     run_async(run())
+     click.echo("Local database reset.")
+-
+diff --git a/slb_glossary/cli/commands/related.py b/slb_glossary/cli/commands/related.py
+index 273371e..6666a23 100644
+--- a/slb_glossary/cli/commands/related.py
++++ b/slb_glossary/cli/commands/related.py
+@@ -53,6 +53,14 @@ def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> st
+ @click.argument("term", default="", callback=_validate_term)
+ @source_options
+ @database_option
++@click.option(
++    "--topic",
++    "-t",
++    default=None,
++    help="Pick a specific stored definition for TERM/URL if it has "
++    "several locally (one per topic it's filed under). Only affects a "
++    "local read; a live read always returns whatever the site serves.",
++)
+ @config_option
+ @session_options
+ @output_options
+@@ -74,6 +82,7 @@ def related(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any)
+     Examples:
+       slb-glossary related "water saturation"
+       slb-glossary related porosity --local
++      slb-glossary related porosity --local --topic Petrophysics
+       slb-glossary related "black oil" --save related.csv --quiet
+     """
+     if use_tui:
+@@ -90,13 +99,20 @@ def related(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any)
+                 params,
+                 db,
+                 source=source,
+-                local_call=lambda db: query.related_terms(term, db=db, source=Source.LOCAL),
++                local_call=lambda db: query.related_terms(
++                    term,
++                    db=db,
++                    source=Source.LOCAL,
++                    language=params["language"],
++                    topic=params["topic"],
++                ),
+                 live_call=lambda session: query.related_terms(
+                     term,
+                     db=db,
+                     session=session,
+                     source=Source.LIVE,
+                     persist=params["cache_results"],
++                    language=params["language"],
+                 ),
+             )
+ 
+diff --git a/slb_glossary/cli/commands/topics.py b/slb_glossary/cli/commands/topics.py
+index 542bc40..63cd91c 100644
+--- a/slb_glossary/cli/commands/topics.py
++++ b/slb_glossary/cli/commands/topics.py
+@@ -1,4 +1,4 @@
+-"""`slb-glossary topics` - list and refresh the glossary's topic (discipline) list."""
++"""`slb-glossary topics` - list the glossary's topic (discipline) list."""
+ 
+ import typing
+ 
+@@ -8,7 +8,7 @@ from slb_glossary import query
+ from slb_glossary.cli.errors import cli_command
+ from slb_glossary.cli.output_options import output_options, output_results
+ from slb_glossary.cli.runner import run_async
+-from slb_glossary.cli.session_options import config_option, resolve_session_kwargs, session_options
++from slb_glossary.cli.session_options import config_option, session_options
+ from slb_glossary.cli.source_options import (
+     database_option,
+     get_loaded_config,
+@@ -18,8 +18,6 @@ from slb_glossary.cli.source_options import (
+     source_options,
+ )
+ from slb_glossary.cli.tui import launch_tui
+-from slb_glossary.live.browser import session as browser_session
+-from slb_glossary.live.topics import refresh_topics
+ from slb_glossary.query import Source
+ 
+ __all__ = ["topics"]
+@@ -46,7 +44,13 @@ class TopicRecord(typing.NamedTuple):
+ 
+ @click.group("topics")
+ def topics() -> None:
+-    """List or refresh the glossary's topic (discipline) list."""
++    """
++    List the glossary's topic (discipline) list.
++
++    `topics list --live` already reloads current topics from the site
++    (opening a session already does this), so there's no separate
++    "refresh" step - a live list is always current.
++    """
+ 
+ 
+ async def iter_topic_records(
+@@ -131,53 +135,3 @@ def list_topics(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
+     count = run_async(run())
+     if not params["quiet"] and count == 0:
+         click.echo("No topics found.", err=True)
+-
+-
+-@topics.command("refresh")
+-@config_option
+-@session_options
+-@output_options
+-@click.option(
+-    "--tui",
+-    "use_tui",
+-    is_flag=True,
+-    help="Open this command in the interactive TUI instead of running it directly.",
+-)
+-@click.pass_context
+-@cli_command
+-def refresh(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
+-    """
+-    Reload the glossary's topic list and term counts directly from the site.
+-
+-    Unlike `topics list`, this reloads the search page instead of trusting
+-    the topic list captured when the session opened - use it if the
+-    glossary's topics may have changed since.
+-
+-    \b
+-    Examples:
+-      slb-glossary topics refresh
+-    """
+-    if use_tui:
+-        launch_tui(ctx, command_path=("topics", "refresh"))
+-        return
+-
+-    async def run() -> int:
+-        async with browser_session(**resolve_session_kwargs(ctx, params)) as session:
+-            session = await refresh_topics(session)
+-            return await output_results(
+-                iter_topic_records(session.topics),
+-                title="Topics (refreshed)",
+-                save_paths=params["save_paths"],
+-                format=params["format"],
+-                quiet=params["quiet"],
+-                json_output=params["json_output"],
+-                show_url=False,
+-                show_topic=False,
+-                show_grammar=False,
+-                show_image=False,
+-                show_related=False,
+-            )
+-
+-    count = run_async(run())
+-    if not params["quiet"] and count == 0:
+-        click.echo("No topics found.", err=True)
+diff --git a/slb_glossary/query.py b/slb_glossary/query.py
+index 4a9898b..6052a35 100644
+--- a/slb_glossary/query.py
++++ b/slb_glossary/query.py
+@@ -1061,6 +1061,7 @@ async def get_term(
+     source: Source = Source.AUTO,
+     persist: bool = False,
+     language: str | None = None,
++    topic: str | None = None,
+     with_similar: bool = False,
+     similar_pool_size: int | None = None,
+     max_similar_terms: int | None = None,
+@@ -1085,6 +1086,11 @@ async def get_term(
+         For a live read, `session` is already bound to one language for
+         its whole lifetime, so `language` here is only validated against
+         it, not applied as a filter. See `validate_language`.
++    :param topic: A term/URL can have several stored definitions locally,
++        one per topic it's filed under - `topic` picks a specific one
++        (exact, case-insensitive match). Only affects a local read; a
++        live read has no such filter (a live fetch always returns
++        whatever the site itself serves for that term/URL).
+     :param with_similar: If `True`, resolve to a `QueryResult[SimilarResult]`
+         instead: `SimilarResult.exact` holds what a plain call would have
+         returned, and `SimilarResult.similar` holds up to `max_similar_terms`
+@@ -1121,6 +1127,7 @@ async def get_term(
+             db,
+             term_or_url,
+             language=language,
++            topic=topic,
+             with_similar=with_similar,
+             similar_pool_size=similar_pool_size,
+             max_similar_terms=max_similar_terms,
+@@ -1145,6 +1152,7 @@ async def get_term(
+         db,
+         term_or_url,
+         language=language,
++        topic=topic,
+         with_similar=with_similar,
+         similar_pool_size=similar_pool_size,
+         max_similar_terms=max_similar_terms,
+@@ -1178,6 +1186,7 @@ async def _lookup_local_term(
+     term_or_url: str,
+     *,
+     language: str | None,
++    topic: str | None,
+     with_similar: bool,
+     similar_pool_size: int | None,
+     max_similar_terms: int | None,
+@@ -1192,7 +1201,7 @@ async def _lookup_local_term(
+     way `search` itself scores local results.
+     """
+     if not with_similar:
+-        result = await local.get_term(db, term_or_url, language=language)
++        result = await local.get_term(db, term_or_url, language=language, topic=topic)
+         score = constants.exact_match_score if result is not None else None
+         return QueryResult(value=result, source=Source.LOCAL, persisted=False, score=score)
+ 
+@@ -1200,6 +1209,7 @@ async def _lookup_local_term(
+         db,
+         term_or_url,
+         language=language,
++        topic=topic,
+         with_similar=True,
+         similar_pool_size=similar_pool_size,
+         max_similar_terms=max_similar_terms,
+@@ -1414,6 +1424,7 @@ async def related_terms(
+     source: Source = Source.AUTO,
+     persist: bool = False,
+     language: str | None = None,
++    topic: str | None = None,
+     auto_initialize: bool = True,
+ ) -> QueryResult[tuple[RelatedTerm, ...]]:
+     """
+@@ -1431,6 +1442,8 @@ async def related_terms(
+         term's own result into `db`.
+     :param language: Restrict the lookup to this glossary language
+         edition. See `get_term`'s parameter of the same name.
++    :param topic: Pick a specific stored definition for a term/URL with
++        several. See `get_term`'s parameter of the same name.
+     :param auto_initialize: If a live fetch happens and `session` isn't
+         initialized yet, initialize it automatically (the default) or
+         raise. See `slb_glossary.live.ensure_initialized`.
+@@ -1449,6 +1462,7 @@ async def related_terms(
+         source=source,
+         persist=persist,
+         language=language,
++        topic=topic,
+         auto_initialize=auto_initialize,
+     )
+     related = lookup.value.related if lookup.value is not None else None

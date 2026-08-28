@@ -37,6 +37,14 @@ def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> st
 @source_options
 @database_option
 @click.option(
+    "--topic",
+    "-t",
+    default=None,
+    help="Pick a specific stored definition when TERM/URL has several "
+    "locally (one per topic it's filed under). Only affects a local "
+    "read; a live read always returns whatever the site itself serves.",
+)
+@click.option(
     "--show-related/--hide-related",
     "show_related",
     default=True,
@@ -56,11 +64,27 @@ def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> st
     default=True,
     show_default=True,
     help=(
-        "When a live lookup finds no exact match for TERM, offer up to a "
-        "few similarly-named alternatives instead of just reporting "
-        "nothing found. On an interactive terminal, lets you pick one to "
-        "view its definition."
+        "When a lookup finds no exact match for TERM, offer up to "
+        "--max-similar similarly-named alternatives instead of just "
+        "reporting nothing found. On an interactive terminal, lets you "
+        "pick one to view its definition."
     ),
+)
+@click.option(
+    "--similar-pool-size",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="N",
+    help="Candidates pulled while looking for the exact match, and to draw "
+    "--suggest alternatives from. Defaults to constants.similar_terms_pool_size.",
+)
+@click.option(
+    "--max-similar",
+    "max_similar_terms",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="N",
+    help="Max --suggest alternatives offered. Defaults to constants.max_similar_terms.",
 )
 @config_option
 @session_options
@@ -86,6 +110,7 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
     Examples:
       slb-glossary define "black oil"
       slb-glossary define porosity --local
+      slb-glossary define porosity --local --topic Petrophysics
       slb-glossary define "water saturation" --live --cache
       slb-glossary define "black oil" --save black_oil.json
     """
@@ -109,7 +134,11 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
                     term,
                     db=db,
                     source=Source.LOCAL,
+                    language=params["language"],
+                    topic=params["topic"],
                     with_similar=suggest_similar,
+                    similar_pool_size=params["similar_pool_size"],
+                    max_similar_terms=params["max_similar_terms"],
                 ),
                 live_call=lambda session: query.get_term(
                     term,
@@ -117,7 +146,11 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
                     session=session,
                     source=Source.LIVE,
                     persist=params["cache_results"],
+                    language=params["language"],
+                    topic=params["topic"],
                     with_similar=suggest_similar,
+                    similar_pool_size=params["similar_pool_size"],
+                    max_similar_terms=params["max_similar_terms"],
                 ),
             )
 

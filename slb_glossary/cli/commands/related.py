@@ -53,6 +53,14 @@ def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> st
 @click.argument("term", default="", callback=_validate_term)
 @source_options
 @database_option
+@click.option(
+    "--topic",
+    "-t",
+    default=None,
+    help="Pick a specific stored definition for TERM/URL if it has "
+    "several locally (one per topic it's filed under). Only affects a "
+    "local read; a live read always returns whatever the site serves.",
+)
 @config_option
 @session_options
 @output_options
@@ -74,6 +82,7 @@ def related(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) 
     Examples:
       slb-glossary related "water saturation"
       slb-glossary related porosity --local
+      slb-glossary related porosity --local --topic Petrophysics
       slb-glossary related "black oil" --save related.csv --quiet
     """
     if use_tui:
@@ -90,13 +99,20 @@ def related(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) 
                 params,
                 db,
                 source=source,
-                local_call=lambda db: query.related_terms(term, db=db, source=Source.LOCAL),
+                local_call=lambda db: query.related_terms(
+                    term,
+                    db=db,
+                    source=Source.LOCAL,
+                    language=params["language"],
+                    topic=params["topic"],
+                ),
                 live_call=lambda session: query.related_terms(
                     term,
                     db=db,
                     session=session,
                     source=Source.LIVE,
                     persist=params["cache_results"],
+                    language=params["language"],
                 ),
             )
 

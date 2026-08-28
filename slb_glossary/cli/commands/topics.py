@@ -1,4 +1,4 @@
-"""`slb-glossary topics` - list and refresh the glossary's topic (discipline) list."""
+"""`slb-glossary topics` - list the glossary's topic (discipline) list."""
 
 import typing
 
@@ -8,7 +8,7 @@ from slb_glossary import query
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
 from slb_glossary.cli.runner import run_async
-from slb_glossary.cli.session_options import config_option, resolve_session_kwargs, session_options
+from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
     database_option,
     get_loaded_config,
@@ -18,8 +18,6 @@ from slb_glossary.cli.source_options import (
     source_options,
 )
 from slb_glossary.cli.tui import launch_tui
-from slb_glossary.live.browser import session as browser_session
-from slb_glossary.live.topics import refresh_topics
 from slb_glossary.query import Source
 
 __all__ = ["topics"]
@@ -46,7 +44,13 @@ class TopicRecord(typing.NamedTuple):
 
 @click.group("topics")
 def topics() -> None:
-    """List or refresh the glossary's topic (discipline) list."""
+    """
+    List the glossary's topic (discipline) list.
+
+    `topics list --live` already reloads current topics from the site
+    (opening a session already does this), so there's no separate
+    "refresh" step - a live list is always current.
+    """
 
 
 async def iter_topic_records(
@@ -117,56 +121,6 @@ def list_topics(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
             return await output_results(
                 records,
                 title="Topics",
-                save_paths=params["save_paths"],
-                format=params["format"],
-                quiet=params["quiet"],
-                json_output=params["json_output"],
-                show_url=False,
-                show_topic=False,
-                show_grammar=False,
-                show_image=False,
-                show_related=False,
-            )
-
-    count = run_async(run())
-    if not params["quiet"] and count == 0:
-        click.echo("No topics found.", err=True)
-
-
-@topics.command("refresh")
-@config_option
-@session_options
-@output_options
-@click.option(
-    "--tui",
-    "use_tui",
-    is_flag=True,
-    help="Open this command in the interactive TUI instead of running it directly.",
-)
-@click.pass_context
-@cli_command
-def refresh(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
-    """
-    Reload the glossary's topic list and term counts directly from the site.
-
-    Unlike `topics list`, this reloads the search page instead of trusting
-    the topic list captured when the session opened - use it if the
-    glossary's topics may have changed since.
-
-    \b
-    Examples:
-      slb-glossary topics refresh
-    """
-    if use_tui:
-        launch_tui(ctx, command_path=("topics", "refresh"))
-        return
-
-    async def run() -> int:
-        async with browser_session(**resolve_session_kwargs(ctx, params)) as session:
-            session = await refresh_topics(session)
-            return await output_results(
-                iter_topic_records(session.topics),
-                title="Topics (refreshed)",
                 save_paths=params["save_paths"],
                 format=params["format"],
                 quiet=params["quiet"],
