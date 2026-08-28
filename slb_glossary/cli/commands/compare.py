@@ -43,13 +43,13 @@ async def _gather(
     """Run `calls` concurrently, at most `concurrency` at once, preserving their order."""
     semaphore = asyncio.Semaphore(max(concurrency, 1))
 
-    async def _bounded(
+    async def bounded(
         call: typing.Callable[[], typing.Awaitable[QueryResult[SearchResult | None]]],
     ) -> QueryResult[SearchResult | None]:
         async with semaphore:
             return await call()
 
-    return list(await asyncio.gather(*(_bounded(call) for call in calls)))
+    return list(await asyncio.gather(*(bounded(call) for call in calls)))
 
 
 @click.command("compare")
@@ -122,14 +122,14 @@ def compare(
     topic = params["topic"]
     sources_seen: set[str] = set()
 
-    def _local_call(
+    def get_local_term(
         db: typing.Any, term: str
     ) -> typing.Callable[[], typing.Awaitable[QueryResult[SearchResult | None]]]:
         return lambda: query.get_term(
             term, db=db, source=Source.LOCAL, language=language, topic=topic
         )
 
-    def _live_call(
+    def get_live_term(
         db: typing.Any, session: typing.Any, term: str
     ) -> typing.Callable[[], typing.Awaitable[QueryResult[SearchResult | None]]]:
         return lambda: query.get_term(
@@ -145,11 +145,11 @@ def compare(
         async with open_configured_db(config, db_path_override=params["db_path"]) as db:
             if source is Source.LOCAL:
                 assert db is not None
-                results = await _gather([_local_call(db, term) for term in terms], concurrency)
+                results = await _gather([get_local_term(db, term) for term in terms], concurrency)
             elif source is Source.LIVE:
                 async with live_session(ctx, params) as session:
                     results = await _gather(
-                        [_live_call(db, session, term) for term in terms], concurrency
+                        [get_live_term(db, session, term) for term in terms], concurrency
                     )
             else:
                 # Source.AUTO: try every term against the local database
@@ -160,7 +160,7 @@ def compare(
                 # opening a fresh session per term the way running each
                 # term through a single-lookup helper independently would.
                 results = (
-                    await _gather([_local_call(db, term) for term in terms], concurrency)
+                    await _gather([get_local_term(db, term) for term in terms], concurrency)
                     if db is not None
                     else [None] * len(terms)
                 )
@@ -172,7 +172,7 @@ def compare(
                 if missing:
                     async with live_session(ctx, params) as session:
                         live_lookups = await _gather(
-                            [_live_call(db, session, term) for _, term in missing], concurrency
+                            [get_live_term(db, session, term) for _, term in missing], concurrency
                         )
                     for (index, _), result in zip(missing, live_lookups, strict=True):
                         results[index] = result  # type: ignore[arg-type]

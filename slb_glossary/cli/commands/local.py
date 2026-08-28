@@ -488,7 +488,7 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
     Import term data from a CSV, JSON, or XLSX file into the local database.
 
     Each row/record needs at least --term-field (default 'term'); every
-    other field is optional - pass '' to any --*-field option to leave
+    other field is optional. Pass '' to any --*-field option to leave
     that field unset on every imported row instead of looking it up.
     Matching a row's own field names is case-insensitive.
 

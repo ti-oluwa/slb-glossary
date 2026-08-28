@@ -105,11 +105,6 @@ def random_term(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
                 )
                 if lookup.value is not None:
                     sources_seen.add(lookup.source.value)
-                    # Holds `open_configured_db` open across the yield on purpose,
-                    # so each pick is printed as soon as it's resolved. Safe as
-                    # `output_results` (the only consumer) wraps this generator
-                    # in `contextlib.aclosing`, so the db still closes promptly
-                    # on an early break/cancel.
                     yield lookup.value
 
     async def run() -> int:

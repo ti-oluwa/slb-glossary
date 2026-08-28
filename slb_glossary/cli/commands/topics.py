@@ -46,10 +46,6 @@ class TopicRecord(typing.NamedTuple):
 def topics() -> None:
     """
     List the glossary's topic (discipline) list.
-
-    `topics list --live` already reloads current topics from the site
-    (opening a session already does this), so there's no separate
-    "refresh" step - a live list is always current.
     """
 
 
