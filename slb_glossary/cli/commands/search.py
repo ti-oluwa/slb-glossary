@@ -23,10 +23,10 @@ from slb_glossary.cli.source_options import (
     source_options,
 )
 from slb_glossary.cli.tui import launch_tui
+from slb_glossary.connectivity import has_internet_connection
 from slb_glossary.constants import constants
 from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
-from slb_glossary.network import has_internet_connection
 from slb_glossary.query import QueryResult, Source
 from slb_glossary.types import SearchMode, SearchResult
 

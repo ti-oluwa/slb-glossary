@@ -11,7 +11,13 @@ from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.output_options import output_options, output_results
 from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, log_level_option
-from slb_glossary.cli.source_options import database_option, load_config, resolve_db_path
+from slb_glossary.cli.source_options import (
+    database_option,
+    exclude_option,
+    load_config,
+    resolve_db_path,
+    resolve_exclude,
+)
 from slb_glossary.local.types import Metadata
 from slb_glossary.types import SearchMode
 from slb_glossary.utils import as_async_iterator
@@ -26,11 +32,8 @@ def local() -> None:
 
     Every command here talks only to the local database,
     regardless of any --local/--live/--auto flag elsewhere.
-    `local sync`/`local update` are the exception (and the only ones here
-    that go live): they're the same commands as top-level `sync`/`update`,
-    grouped here too for discoverability. `local import` is the other way
-    to fill the database: from your own CSV/JSON/XLSX file instead of the
-    live glossary.
+    `local import` is a way to fill the database from your
+    own CSV/JSON/XLSX file instead of the live glossary.
     """
 
 
@@ -44,7 +47,7 @@ def show_path(**params: typing.Any) -> None:
     Print the resolved local database and metadata file paths.
 
     If you move or back these up by hand, also bring along the
-    database's `-wal`/`-shm` sidecar files (it runs in WAL mode) - or
+    database's `-wal`/`-shm` sidecar files (it runs in WAL mode), or
     close the database first (e.g. don't have anything else using it) so
     SQLite folds them back into the main file before you copy it.
 
@@ -63,8 +66,8 @@ def show_path(**params: typing.Any) -> None:
     click.echo(f"Database: {db_path}")
     click.echo(f"Metadata: {metadata_path}")
     click.echo(
-        f"(WAL sidecar files, if present: {db_path}-wal, {db_path}-shm - "
-        "move/copy these together with the database above, and metadata "
+        f"(WAL sidecar files, if present: {db_path}-wal, {db_path}-shm. "
+        "Move/copy these together with the database above, and metadata "
         "separately; see `slb-glossary local path --help`.)"
     )
 
@@ -169,12 +172,7 @@ def stats(**params: typing.Any) -> None:
         "via `slb_glossary.local.embed_terms`)."
     ),
 )
-@click.option(
-    "--exclude",
-    default=None,
-    metavar="ENTRIES",
-    help="Comma-separated URLs and/or term names to leave out of the results.",
-)
+@exclude_option
 @click.option(
     "--limit",
     "-n",
@@ -206,11 +204,7 @@ def local_search(query: str, **params: typing.Any) -> None:
     title = f"Local Search Results for {query!r}"
     if params["topic"]:
         title += f" (topic: {params['topic']})"
-    exclude = (
-        tuple(e.strip() for e in params["exclude"].split(",") if e.strip())
-        if params["exclude"]
-        else None
-    )
+    exclude = resolve_exclude(params)
 
     async def run() -> int:
         config = load_config(params)
@@ -352,7 +346,7 @@ def _field_or_empty(ctx: click.Context, param: click.Parameter, value: str | Non
 
     Every optional `load_file` field defaults to its usual column/key name
     (e.g. `--definition-field` defaults to `"definition"`), so there needs
-    to be some way to say "skip this field entirely" instead - passing an
+    to be some way to say "skip this field entirely" instead. Passing an
     empty string (`--definition-field ""`) does that, converted to `None`
     here for `load_file` itself.
     """
@@ -535,6 +529,144 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
 
     written = run_async(run())
     click.echo(f"Imported {written} row(s) from {path} into the local database.")
+
+
+@local.command("export")
+@click.option(
+    "--topic",
+    "-t",
+    default=None,
+    help="Restrict the export to this topic, or several comma-separated "
+    "topics. Omit for every topic.",
+)
+@click.option(
+    "--query",
+    default=None,
+    help="Restrict the export to results matching this search query, "
+    "ranked by --mode, instead of a raw dump. Combine with --topic to "
+    "search within one topic.",
+)
+@click.option(
+    "--mode",
+    "-m",
+    type=click.Choice([mode.value for mode in SearchMode], case_sensitive=False),
+    default=None,
+    show_default="the `SLB_GLOSSARY_DEFAULT_SEARCH_MODE` / `default_search_mode` setting",
+    help="Ranking strategy when --query is given. Has no effect on a raw topic/full export.",
+)
+@click.option(
+    "--start-letter",
+    default=None,
+    metavar="LETTER",
+    help="Restrict the export to terms starting with this letter.",
+)
+@click.option(
+    "--language",
+    "-L",
+    default=None,
+    help="Restrict the export to this glossary language edition (e.g. "
+    "'en'/'es'). Unset by default: doesn't filter by language.",
+)
+@click.option(
+    "--fuzzy",
+    is_flag=True,
+    help="Tolerate minor misspellings/partial names in --topic, matched "
+    "against topics actually stored locally, instead of requiring an "
+    "exact (case-insensitive) match.",
+)
+@exclude_option
+@click.option(
+    "--limit",
+    "-n",
+    type=int,
+    default=0,
+    show_default=False,
+    help="Maximum number of results to export. Defaults to everything matching the given filters.",
+)
+@database_option
+@config_option
+@output_options
+@log_level_option
+@cli_command
+def export(**params: typing.Any) -> None:
+    """
+    Export locally stored terms to a file, by topic, by search query, or the whole database.
+
+    With neither --topic nor --query, exports every locally stored term
+    (a full local database dump), ordered by term name. --query instead
+    ranks by relevance (see --mode); a topic-only or full export has no
+    ranking, just every match. Combine --topic and --query to search
+    within one topic specifically.
+
+    Writing to a file works exactly like every other command's --save
+    (CSV/JSON/XLSX, chosen by extension or --format) - this command just
+    doesn't need a query or topic to have something to export.
+
+    \b
+    Examples:
+      slb-glossary local export --save backup.json
+      slb-glossary local export --topic Drilling --save drilling.csv
+      slb-glossary local export --query porosity --mode hybrid --save results.csv
+      slb-glossary local export --topic Drilling --query mud --save drilling_mud.json
+      slb-glossary local export --language es --save spanish_terms.xlsx
+    """
+    if not params["save_paths"] and not params["quiet"]:
+        click.secho(
+            "No --save path given; printing to the console only. Pass "
+            "--save PATH to write a file.",
+            fg="yellow",
+            err=True,
+        )
+
+    limit = params["limit"] or None
+    exclude = resolve_exclude(params)
+    query_text = params["query"]
+
+    title = "Local export"
+    if params["topic"]:
+        title += f" (topic: {params['topic']})"
+    if query_text:
+        title += f" (query: {query_text!r})"
+
+    async def run() -> int:
+        config = load_config(params)
+        db_path = resolve_db_path(config, params["db_path"])
+        async with local_pkg.database(db_path) as db:
+            if query_text:
+                results = await local_pkg.search(
+                    db,
+                    query_text,
+                    topic=params["topic"],
+                    start_letter=params["start_letter"],
+                    language=params["language"],
+                    limit=limit,
+                    fuzzy=params["fuzzy"],
+                    mode=params["mode"],
+                    exclude=exclude,
+                )
+                stream: typing.AsyncIterator[typing.Any] = as_async_iterator(results)
+            else:
+                stream = local_pkg.iter_terms(
+                    db,
+                    topic=params["topic"],
+                    start_letter=params["start_letter"],
+                    language=params["language"],
+                    fuzzy=params["fuzzy"],
+                    exclude=exclude,
+                    limit=limit,
+                )
+            return await output_results(
+                stream,
+                title=title,
+                save_paths=params["save_paths"],
+                format=params["format"],
+                quiet=params["quiet"],
+                json_output=params["json_output"],
+            )
+
+    count = run_async(run())
+    if not params["quiet"]:
+        click.echo(f"Exported {count} term(s).", err=True)
 
 
 @local.command("flush")

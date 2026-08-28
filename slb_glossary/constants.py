@@ -272,6 +272,17 @@ class Constants:
     before writing an incremental upsert batch to the local database.
     """
 
+    export_batch_size = Constant(
+        500,
+        env_var="SLB_GLOSSARY_EXPORT_BATCH_SIZE",
+        validator=lambda v: v >= 1,
+    )
+    """
+    Default number of rows `slb_glossary.local.iter_terms` reads from the
+    database per batch while streaming a local export, instead of
+    loading every matching row into memory before yielding the first one.
+    """
+
     exact_match_score = Constant(
         1.0,
         env_var="SLB_GLOSSARY_EXACT_MATCH_SCORE",

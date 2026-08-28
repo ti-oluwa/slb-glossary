@@ -20,12 +20,12 @@ from slb_glossary.cli.session_options import (
     resolve_session_kwargs,
 )
 from slb_glossary.config import Config
+from slb_glossary.connectivity import has_internet_connection
 from slb_glossary.constants import constants
 from slb_glossary.live.browser import Session
 from slb_glossary.live.browser import session as browser_session
 from slb_glossary.local.connection import database
 from slb_glossary.local.types import Database
-from slb_glossary.network import has_internet_connection
 from slb_glossary.paths import get_data_dir
 from slb_glossary.query import QueryResult, Source
 

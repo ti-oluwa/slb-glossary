@@ -376,15 +376,25 @@ async def get_results_from_url(
     """
     Load a term detail page and lazily yield each definition found on it.
 
-    A term can carry several definitions, one per topic it appears under;
-    this yields one `SearchResult` per definition.
+    A term can carry several definitions, one per topic it appears under,
+    and a single definition can itself be filed under several topics at
+    once (shown on the page as a bracketed, comma-separated list, e.g.
+    `"1. n. [Drilling, Shale Gas]"`). This yields one `SearchResult` per
+    definition *per topic it's filed under*, so a definition listed under
+    two topics yields two otherwise-identical results, one per topic
+    consistent with topic being part of a locally stored term's identity.
 
     :param session: An open glossary session.
     :param url: A term detail page URL, as yielded by `get_terms_urls`.
     :param topic: If a definition's source topic matches this topic
         (or one of several comma-separated topics), that resolved topic
-        name is used for its `SearchResult.topic` instead of the topic
-        parsed off the page.
+        name is used for its `SearchResult.topic` instead of the raw
+        topic text parsed off the page (canonicalizing minor
+        formatting differences between the two). Every other topic
+        listed alongside it, and every other definition on the page,
+        is still yielded regardless - this only affects how one
+        matching topic entry is labeled, not which definitions/topics
+        are yielded at all.
     :param page: A page to navigate to `url` on. When given, it's assumed
         to be owned by the caller (e.g. a worker page reused across
         several calls) and is left open when this generator finishes. When
@@ -401,12 +411,15 @@ async def get_results_from_url(
         `slb_glossary.utils.split_exclude` for how an entry is told apart
         as a URL vs. a term name. Pass a `set`/`frozenset` to keep the URL
         check cheap. `None` (the default) excludes nothing.
-    :yield: One `SearchResult` per definition found on the page. Each
-        result's `image`/`image_caption` reflect *that definition's own*
-        section, independently of any other section on the page, and is `None`
-        only when that particular section has no illustrative image, even
-        if a sibling section does. `related` is empty when that section
-        has no related-term links.
+    :yield: One `SearchResult` per definition-topic pairing found on the
+        page. Every result from the same definition (one appearing under
+        several topics) shares the same `term`/`definition`/
+        `grammatical_label`/`image`/`image_caption`/`related`, differing
+        only in `topic`. Each definition's `image`/`image_caption` reflect
+        *that definition's own* section, independently of any other
+        section on the page, and is `None` only when that particular
+        section has no illustrative image, even if a sibling section
+        does. `related` is empty when that section has no related-term links.
     :param auto_initialize: If `session` isn't initialized yet, initialize
         it automatically (the default) or raise. See `ensure_initialized`.
     :raises SessionNotInitializedError: If `session` isn't initialized and
@@ -457,10 +470,17 @@ async def get_results_from_url(
             label_abbreviation = summary_words[1] if len(summary_words) > 1 else ""
             grammatical_label = resolve_grammatical_label(session.language, label_abbreviation)
 
-            if resolved_topic and resolved_topic.lower() in summary_line.lower():
-                topic = resolved_topic
-            else:
-                topic = summary_line.split(".")[-1].strip().removeprefix("[").removesuffix("]")
+            bracket_text = summary_line.split(".")[-1].strip().removeprefix("[").removesuffix("]")
+            raw_topics = [name.strip() for name in bracket_text.split(",") if name.strip()]
+            section_topics: list[str | None] = [
+                resolved_topic
+                if resolved_topic and resolved_topic.lower() in name.lower()
+                else name
+                for name in raw_topics
+            ] or [resolved_topic if resolved_topic else None]
+            # A section can list the same topic more than once in principle,
+            # so we keep first-seen order rather than an unordered `set`.
+            section_topics = list(dict.fromkeys(section_topics))
 
             section_image = section_images[index] if index < len(section_images) else None
             image_url, image_caption = (
@@ -469,18 +489,19 @@ async def get_results_from_url(
                 else (None, None)
             )
 
-            yielded += 1
-            yield SearchResult(
-                term=term_name,
-                definition=definition,
-                grammatical_label=grammatical_label,
-                topic=topic,
-                url=url,
-                image=image_url,
-                image_caption=image_caption,
-                related=related,
-                language=session.language.value,
-            )
+            for section_topic in section_topics:
+                yielded += 1
+                yield SearchResult(
+                    term=term_name,
+                    definition=definition,
+                    grammatical_label=grammatical_label,
+                    topic=section_topic,
+                    url=url,
+                    image=image_url,
+                    image_caption=image_caption,
+                    related=related,
+                    language=session.language.value,
+                )
 
         logger.debug(
             "Fetched %r: %d definition(s) from %s in %.3fs",
@@ -553,7 +574,7 @@ async def get_results_from_urls(
     yielded = 0
     skipped = 0
 
-    async def _filtered_urls() -> typing.AsyncIterator[str]:
+    async def filtered_urls() -> typing.AsyncIterator[str]:
         nonlocal skipped
         async for url in as_async_iterator(urls):
             if excluded_urls and url in excluded_urls:
@@ -561,14 +582,19 @@ async def get_results_from_urls(
                 continue
             yield url
 
-    url_iter = _filtered_urls()
+    url_iter = filtered_urls()
 
     if concurrency == 1:
         page = await session.new_page()
         try:
             async for url in url_iter:
                 async for result in get_results_from_url(
-                    session, url, topic=topic, page=page, exclude=exclude
+                    session,
+                    url,
+                    topic=topic,
+                    page=page,
+                    exclude=exclude,
+                    auto_initialize=auto_initialize,
                 ):
                     yielded += 1
                     yield result
@@ -595,13 +621,13 @@ async def get_results_from_urls(
     url_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=concurrency * 2)
     result_queue: asyncio.Queue[SearchResult | None] = asyncio.Queue()
 
-    async def _produce() -> None:
+    async def produce() -> None:
         async for url in url_iter:
             await url_queue.put(url)
         for _ in worker_pages:
             await url_queue.put(None)  # one stop signal per worker
 
-    async def _consume(worker_page: Page) -> None:
+    async def consume(worker_page: Page) -> None:
         while True:
             url = await url_queue.get()
             if url is None:
@@ -609,7 +635,12 @@ async def get_results_from_urls(
 
             try:
                 async for result in get_results_from_url(
-                    session, url, topic=topic, page=worker_page, exclude=exclude
+                    session,
+                    url,
+                    topic=topic,
+                    page=worker_page,
+                    exclude=exclude,
+                    auto_initialize=auto_initialize,
                 ):
                     await result_queue.put(result)
                     if first_only:
@@ -618,8 +649,8 @@ async def get_results_from_urls(
                 logger.warning("Failed to fetch %s", url, exc_info=True)
         await result_queue.put(None)  # this worker is done
 
-    producer_task = asyncio.create_task(_produce())
-    worker_tasks = [asyncio.create_task(_consume(worker_page)) for worker_page in worker_pages]
+    producer_task = asyncio.create_task(produce())
+    worker_tasks = [asyncio.create_task(consume(worker_page)) for worker_page in worker_pages]
 
     try:
         total_worker_tasks = len(worker_tasks)
@@ -703,6 +734,7 @@ async def search(
         start_letter=start_letter,
         limit=limit,
         exclude=exclude,
+        auto_initialize=auto_initialize,
     )
     count = 0
     async for result in log_timed_yields(
@@ -713,6 +745,7 @@ async def search(
             concurrency=concurrency,
             first_only=first_only,
             exclude=exclude,
+            auto_initialize=auto_initialize,
         ),
         logger=logger,
         label=f"search({query!r})",
@@ -778,6 +811,7 @@ async def get_terms_on(
         start_letter=start_letter,
         limit=limit,
         exclude=exclude,
+        auto_initialize=auto_initialize,
     )
     count = 0
     async for result in log_timed_yields(
@@ -788,6 +822,7 @@ async def get_terms_on(
             concurrency=concurrency,
             first_only=first_only,
             exclude=exclude,
+            auto_initialize=auto_initialize,
         ),
         logger=logger,
         label=f"get_terms_on({topic!r})",

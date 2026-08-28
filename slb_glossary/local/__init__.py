@@ -24,6 +24,7 @@ from slb_glossary.local.api import (
     get_terms_on,
     get_terms_urls,
     get_topics,
+    iter_terms,
     search,
     upsert_results,
 )
@@ -64,6 +65,7 @@ __all__ = [
     "get_terms_urls",
     "get_topics",
     "hybrid_search",
+    "iter_terms",
     "lexical_search",
     "load_file",
     "open_db",

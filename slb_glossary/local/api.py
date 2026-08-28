@@ -29,6 +29,7 @@ __all__ = [
     "get_terms_on",
     "get_terms_urls",
     "get_topics",
+    "iter_terms",
     "search",
     "upsert_results",
     "upsert_results_incrementally",
@@ -626,6 +627,100 @@ async def get_terms_on(
         "Local `get_terms_on(%r)` returned %d term(s) in %.3fs", topic, len(results), elapsed
     )
     return results
+
+
+async def iter_terms(
+    db: Database,
+    *,
+    topic: str | None = None,
+    start_letter: str | None = None,
+    language: str | None = None,
+    fuzzy: bool = False,
+    exclude: Collection[str] | None = None,
+    limit: int | None = None,
+    batch_size: int | None = None,
+) -> typing.AsyncIterator[SearchResult]:
+    """
+    Stream every locally stored term, optionally filtered, for a full or partial database export.
+
+    Unlike `search`/`get_terms_on`, there's no relevance ranking here and
+    no required filter. Omit every one of `topic`/`start_letter`/`language`
+    for a full dump of everything stored locally.
+
+    Results come back ordered by term name, read from the database in
+    batches (see `batch_size`) rather than all at once, so exporting
+    a large local database doesn't require holding the whole thing in
+    memory before the first result is even available.
+
+    `slb_glossary.writers.save` does still collect the full stream into
+    memory before writing it out, so streaming here mainly helps a
+    `limit`-bounded partial export return early, and keeps the database-side
+    read itself from ever having to materialize an unbounded result set at once.
+
+    :param db: The local database to read from.
+    :param topic: Restrict results to this topic, or several
+        comma-separated topics (case-insensitive exact match by default).
+        `None` (the default) doesn't filter by topic.
+    :param start_letter: Restrict results to terms starting with this letter.
+    :param language: Restrict results to this glossary language edition
+        (e.g. `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+    :param fuzzy: If `True`, tolerate minor misspellings/partial names in
+        `topic` by resolving it against locally stored topic names first.
+        Has no effect if `topic` is falsy.
+    :param exclude: URLs and/or term names to leave out of the results
+        entirely, filtered in SQL before `limit` is applied. See
+        `slb_glossary.utils.split_exclude` for how an entry is told apart
+        as a URL vs. a term name.
+    :param limit: Maximum number of results. `None` (the default) for
+        everything matching the given filters.
+    :param batch_size: Rows read from the database per batch. `None`
+        (the default) uses `constants.export_batch_size`, resolved fresh
+        on this call.
+    :yield: Matching `SearchResult`s, ordered by term name.
+    """
+    resolved_topic = await resolve_topic(db, topic, fuzzy, language=language) if topic else None
+    resolved_batch_size = batch_size if batch_size is not None else constants.export_batch_size
+
+    sql = "SELECT * FROM terms WHERE 1 = 1"
+    params: list[typing.Any] = []
+    if resolved_topic:
+        topics = [name.strip() for name in resolved_topic.split(",") if name.strip()]
+        if topics:
+            placeholders = ", ".join("?" for _ in topics)
+            sql += f" AND topic COLLATE NOCASE IN ({placeholders})"
+            params.extend(topics)
+    if start_letter:
+        sql += " AND term COLLATE NOCASE LIKE ?"
+        params.append(f"{start_letter}%")
+    if language:
+        sql += " AND language = ?"
+        params.append(language)
+    sql = _apply_exclude(sql, params, exclude)
+
+    sql += " ORDER BY term"
+    if limit:
+        sql += " LIMIT ?"
+        params.append(limit)
+
+    started_at = time.monotonic()
+    yielded = 0
+    async with db.connection.execute(sql, params) as cursor:
+        while True:
+            rows = await cursor.fetchmany(resolved_batch_size)
+            if not rows:
+                break
+            for row in rows:
+                yielded += 1
+                yield _row_to_result(row)
+
+    logger.debug(
+        "Local `iter_terms` (topic=%r start_letter=%r language=%r) streamed %d term(s) in %.3fs",
+        topic,
+        start_letter,
+        language,
+        yielded,
+        time.monotonic() - started_at,
+    )
 
 
 @typing.overload

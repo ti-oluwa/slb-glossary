@@ -171,10 +171,10 @@ def compare(
                 ]
                 if missing:
                     async with live_session(ctx, params) as session:
-                        live_lookups = await _gather(
+                        live_results = await _gather(
                             [get_live_term(db, session, term) for _, term in missing], concurrency
                         )
-                    for (index, _), result in zip(missing, live_lookups, strict=True):
+                    for (index, _), result in zip(missing, live_results, strict=True):
                         results[index] = result  # type: ignore[arg-type]
 
             async def stream() -> typing.AsyncIterator[SearchResult]:

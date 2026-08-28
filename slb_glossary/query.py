@@ -46,6 +46,7 @@ import typing
 from collections.abc import Collection
 
 from slb_glossary import live
+from slb_glossary.connectivity import has_internet_connection
 from slb_glossary.constants import constants
 from slb_glossary.embeddings import embed
 from slb_glossary.errors import QueryError
@@ -53,7 +54,6 @@ from slb_glossary.live.browser import Session
 from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
 from slb_glossary.natural_language import clean_query
-from slb_glossary.network import has_internet_connection
 from slb_glossary.types import RelatedTerm, SearchMode, SearchResult
 
 logger = logging.getLogger(__name__)
@@ -1088,11 +1088,15 @@ async def get_term(
         For a live read, `session` is already bound to one language for
         its whole lifetime, so `language` here is only validated against
         it, not applied as a filter. See `validate_language`.
-    :param topic: A term/URL can have several stored definitions locally,
-        one per topic it's filed under - `topic` picks a specific one
-        (exact, case-insensitive match). Only affects a local read; a
-        live read has no such filter (a live fetch always returns
-        whatever the site itself serves for that term/URL).
+    :param topic: A term/URL can have several stored definitions (locally),
+        or several definitions found on one live page (one per topic it's
+        filed under, or filed under) - `topic` picks a specific one (exact,
+        case-insensitive match locally; substring, case-insensitive match
+        for a live fetch). Without it, and more than one is found, which
+        one comes back is deterministic (by topic name) for a local read,
+        or just whichever came first on the page for a live one - neither
+        is otherwise meaningful. Use `get_term_definitions` (local only)
+        if you want every stored definition instead of just one.
     :param with_similar: If `True`, resolve to a `QueryResult[SimilarResult]`
         instead: `SimilarResult.exact` holds what a plain call would have
         returned, and `SimilarResult.similar` holds up to `max_similar_terms`
@@ -1140,6 +1144,7 @@ async def get_term(
         result = await _lookup_live_term(
             session,
             term_or_url,
+            topic=topic,
             with_similar=with_similar,
             similar_pool_size=similar_pool_size,
             max_similar_terms=max_similar_terms,
@@ -1173,6 +1178,7 @@ async def get_term(
     result = await _lookup_live_term(
         session,
         term_or_url,
+        topic=topic,
         with_similar=with_similar,
         similar_pool_size=similar_pool_size,
         max_similar_terms=max_similar_terms,
@@ -1218,7 +1224,10 @@ async def _lookup_local_term(
     )
     exact = (
         QueryResult(
-            value=result, source=Source.LOCAL, persisted=False, score=constants.exact_match_score
+            value=result,
+            source=Source.LOCAL,
+            persisted=False,
+            score=constants.exact_match_score,
         )
         if result is not None
         else None
@@ -1228,7 +1237,9 @@ async def _lookup_local_term(
         for candidate, score in similar_pairs
     )
     return QueryResult(
-        value=SimilarResult(exact=exact, similar=similar), source=Source.LOCAL, persisted=False
+        value=SimilarResult(exact=exact, similar=similar),
+        source=Source.LOCAL,
+        persisted=False,
     )
 
 
@@ -1241,7 +1252,8 @@ async def _finalize_live_term_lookup(
     persist: bool,
 ) -> QueryResult:
     """
-    Persist `_lookup_live_term`'s result if requested, then build `get_term`'s return value from it.
+    Persist `_lookup_live_term`'s result if requested, then build
+    `get_term`'s return value from it.
 
     Shared by `get_term`'s `Source.LIVE` branch and its `Source.AUTO`
     live-fallback branch, since both do the same persist-then-wrap work
@@ -1283,6 +1295,7 @@ async def _lookup_live_term(
     session: Session,
     term_or_url: str,
     *,
+    topic: str | None = None,
     with_similar: typing.Literal[False] = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
@@ -1293,6 +1306,7 @@ async def _lookup_live_term(
     session: Session,
     term_or_url: str,
     *,
+    topic: str | None = None,
     with_similar: typing.Literal[True],
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
@@ -1304,17 +1318,25 @@ async def _lookup_live_term(
     session: Session,
     term_or_url: str,
     *,
+    topic: str | None = None,
     with_similar: bool = False,
     similar_pool_size: int | None = None,
     max_similar_terms: int | None = None,
     auto_initialize: bool = True,
 ) -> QueryResult[SearchResult] | SimilarResult | None:
     """
-    Resolve `term_or_url` against the live glossary: a URL fetches directly, else it's searched.
+    Resolve `term_or_url` against the live glossary.
+    A URL fetches directly, else it's searched.
 
     :param session: An open live `Session`.
     :param term_or_url: An exact (case-insensitive) term name, or a
         glossary term detail-page URL.
+    :param topic: A term/URL's live page can carry several definitions,
+        each filed under one or more topics (see `live.get_results_from_url`) -
+        `topic` picks the one filed under this topic (substring match,
+        case-insensitive), where there's a choice. Without it, and more
+        than one is found, whichever comes first on the page is used,
+        which isn't otherwise meaningful.
     :param with_similar: If `True`, return a `SimilarResult` gathering up to
         `max_similar_terms` other results turned up while searching for
         the exact match, instead of just the exact match itself. A direct
@@ -1342,14 +1364,27 @@ async def _lookup_live_term(
     )
     if term_or_url.startswith(("http://", "https://")):
         results: list[SearchResult] = [
-            result async for result in live.get_results_from_url(session, term_or_url)
+            result async for result in live.get_results_from_url(session, term_or_url, topic=topic)
         ]
         if not results:
             return SimilarResult(exact=None) if with_similar else None
 
         # A direct URL fetch is definitionally an exact match: the caller
         # already knows exactly which page they want, so every definition
-        # found on it scores `constants.exact_match_score`.
+        # found on it scores `constants.exact_match_score`. With several
+        # definitions found (one per topic - see `get_results_from_url`),
+        # `topic` picks which one is "the" exact match; the rest still
+        # count as `similar` alternatives with `with_similar=True`.
+        if topic:
+            matching = [
+                result
+                for result in results
+                if result.topic and topic.lower() in result.topic.lower()
+            ]
+            if matching:
+                first, rest = matching[0], [r for r in results if r is not matching[0]]
+                results = [first, *rest]
+
         wrapped = [
             QueryResult(
                 value=result,
@@ -1368,7 +1403,9 @@ async def _lookup_live_term(
     if not with_similar:
         # The correct definition should at least be in the first `similar_pool_size`
         # results, searching at least 2 at a time.
-        async for result in live.search(session, term, limit=resolved_pool_size, concurrency=2):
+        async for result in live.search(
+            session, term, topic=topic, limit=resolved_pool_size, concurrency=2
+        ):
             if result.term and result.term.strip().lower() == term:
                 return QueryResult(
                     value=result,
@@ -1379,7 +1416,7 @@ async def _lookup_live_term(
 
         # No exact (case-insensitive) match among the top results;
         # fall back to whatever ranked first, if anything did.
-        async for result in live.search(session, term, limit=1):
+        async for result in live.search(session, term, topic=topic, limit=1):
             score = live.score_result(term, result)
             return QueryResult(value=result, source=Source.LIVE, persisted=False, score=score)
         return None
@@ -1388,7 +1425,13 @@ async def _lookup_live_term(
     # available regardless of where (or whether) the exact match turned up.
     pool = [
         result
-        async for result in live.search(session, term, limit=resolved_pool_size, concurrency=2)
+        async for result in live.search(
+            session,
+            term,
+            topic=topic,
+            limit=resolved_pool_size,
+            concurrency=2,
+        )
     ]
     exact_result = next(
         (result for result in pool if result.term and result.term.strip().lower() == term), None
@@ -1464,7 +1507,6 @@ async def related_terms(
         source=source,
         persist=persist,
         language=language,
-        with_similar=False,
         topic=topic,
         auto_initialize=auto_initialize,
     )
@@ -1576,7 +1618,22 @@ async def _fetch_random_term(
         return None
 
     chosen_url = random.choice(urls)
-    return await anext(live.get_results_from_url(session, chosen_url, topic=topic), None)
+    results = [
+        result async for result in live.get_results_from_url(session, chosen_url, topic=topic)
+    ]
+    if not results:
+        return None
+    if topic:
+        # A page can yield several results, one per topic the matched
+        # definition is filed under (see `get_results_from_url`) - pick
+        # the one actually matching what was asked for, rather than
+        # whichever happens to come first on the page.
+        matching = [
+            result for result in results if result.topic and topic.lower() in result.topic.lower()
+        ]
+        if matching:
+            return random.choice(matching)
+    return results[0]
 
 
 @typing.overload
