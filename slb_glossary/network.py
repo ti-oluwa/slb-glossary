@@ -58,15 +58,15 @@ async def has_internet_connection(*, use_cache: bool = True) -> bool:
 
     Probes every `PROBE_TARGETS` entry concurrently, each capped at
     `constants.internet_check_timeout` seconds, and returns `True` as
-    soon as any one succeeds. 
-    
-    Only when every target fails (each having run for the full timeout) 
+    soon as any one succeeds.
+
+    Only when every target fails (each having run for the full timeout)
     is the result `False`; and total wall time in that case is still just
     `constants.internet_check_timeout`, not the sum of all attempts.
 
     :param use_cache: If `True` (the default), reuse a result from the
         last `constants.internet_check_cache_ttl` seconds instead of
-        probing again. Pass `False` to force a fresh check regardless 
+        probing again. Pass `False` to force a fresh check regardless
         of any cached result.
     :return: `True` if at least one probe target was reachable.
     """

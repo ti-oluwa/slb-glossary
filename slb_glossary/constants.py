@@ -175,7 +175,7 @@ class Constant(typing.Generic[T]):
         Clear this constant back to normal resolution.
 
         Removes both an explicit `__set__` override, if any, and any
-        cached env-resolved value (for a `cache=True` constant). 
+        cached env-resolved value (for a `cache=True` constant).
 
         Either way, the next access re-resolves fresh from `default`/the
         environment, and (for `cache=True`) caches that fresh result
