@@ -102,7 +102,7 @@ async def refresh_topics(session: Session) -> Session:
         and not session.base_page_in_use
     )
     if base_page_free:
-        # Reuse the session's base page when it's free: it's already
+        # Reuse the session's base page when it's free as it's already
         # warmed up (see `Session.base_page`'s docstring for why that
         # matters), and this navigates it to the same search screen
         # `fetch_topics` always loads anyway, so nothing about a fresh
@@ -113,7 +113,7 @@ async def refresh_topics(session: Session) -> Session:
     else:
         # `base_page` is either unavailable (closed, or this session was
         # never initialized with one) or already checked out by another
-        # call - either way, get a dedicated page rather than racing that
+        # call. Either way, get a dedicated page rather than racing that
         # call over `base_page`'s navigation.
         page = await session.new_page()
         owns_page = True
