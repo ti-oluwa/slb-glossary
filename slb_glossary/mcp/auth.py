@@ -1,41 +1,31 @@
 """
-Pluggable, request-aware authentication/authorization for `slb_glossary.mcp`.
-
-This is independent of `FastMCP`'s own OAuth-flavored
-`fastmcp.server.auth.AuthProvider` machinery, which secures the
-*transport* (e.g. rejecting an unauthenticated HTTP request before it ever
-reaches a tool). `AuthBackend` here resolves each tool call into a
-`Principal` that the server's middleware, rate limiter, and hooks key off
-of as a different, but complementary layer.
-
-See `slb_glossary.mcp.config.Auth` for how the two combine, and
-`slb_glossary.mcp.api.MCPApp` for where each is wired in.
+Caller identity authentication for `slb_glossary.mcp`, derived from FastMCP's own auth layer.
 
 ```python
-from slb_glossary.mcp.auth import Principal, StaticTokenAuth
+from slb_glossary.mcp.auth import StaticTokenVerifier
 
-auth = StaticTokenAuth(
+provider = StaticTokenVerifier(
     {
-        "sk-alice-...": Principal(id="alice", scopes=frozenset({"read", "write"})),
-        "sk-bot-...": "readonly-bot",  # bare string is shorthand for Principal(id=...)
+        "sk-alice-...": {"client_id": "alice", "scopes": ["read", "write"]},
+        "sk-bot-...": {"client_id": "readonly-bot"},
     }
 )
 ```
 """
 
 import importlib
-import types
+import time
 import typing
-from collections.abc import Mapping
+
+from fastmcp.server.auth import AuthProvider
+from fastmcp.server.auth.auth import AccessToken, TokenVerifier
 
 __all__ = [
     "ANONYMOUS",
-    "AuthBackend",
-    "AuthRequest",
-    "NullAuth",
     "Principal",
-    "StaticTokenAuth",
-    "import_backend",
+    "StaticTokenVerifier",
+    "get_principal_from_token",
+    "import_provider",
 ]
 
 
@@ -43,125 +33,99 @@ class Principal(typing.NamedTuple):
     """An authenticated (or anonymous) caller identity."""
 
     id: str
-    """Stable identifier for this caller"""
+    """Stable identifier for this caller. A FastMCP `AccessToken.client_id`, or `"anonymous"`."""
 
     scopes: frozenset[str] = frozenset()
     """
-    Free-form authorization scopes this caller holds. You can read them from
-    `slb_glossary.mcp.types.ToolRunContext.principal` in a hook or a
-    custom `AuthBackend` if you need scope-gated behavior.
-    """
-
-    metadata: Mapping[str, typing.Any] = types.MappingProxyType({})
-    """
-    Arbitrary extra free-form data an `AuthBackend` wants to carry alongside the
-    principal (e.g. a display name, a plan tier).
+    This caller's OAuth scopes, straight from their `AccessToken`. Read
+    them from `slb_glossary.mcp.types.ToolRunContext.principal` in a hook
+    if you need scope-gated behavior beyond what
+    `slb_glossary.mcp.config.Auth.required_scopes` already enforces.
     """
 
 
 ANONYMOUS = Principal(id="anonymous")
-"""The `Principal` used for calls with no token, when `Auth.required` is `False`."""
+"""The `Principal` used when there's no `AccessToken` for the current call (no `Auth.provider` configured, or an unauthenticated transport like stdio)."""
 
 
-class AuthRequest(typing.NamedTuple):
+def get_principal_from_token(token: AccessToken | None) -> Principal:
     """
-    Holds everything an `AuthBackend` gets to resolve a caller's identity from.
+    Resolve FastMCP's current-call `AccessToken` into a `Principal`.
+
+    :param token: The result of `fastmcp.server.dependencies.get_access_token()`.
+    :return: `ANONYMOUS` if `token` is `None`, otherwise a `Principal`
+        built from its `client_id`/`scopes`.
     """
+    if token is None:
+        return ANONYMOUS
+    return Principal(id=token.client_id, scopes=frozenset(token.scopes))
 
-    token: str | None
+
+class StaticTokenVerifier(TokenVerifier):
     """
-    The bearer token parsed from the `Authorization: Bearer <token>`
-    header, with the scheme prefix stripped, or `None` if there wasn't
-    one (including on transports with no per-request headers, like stdio).
-    """
+    A FastMCP `AuthProvider` backed by a fixed, in-process mapping of bearer token to identity.
 
-    headers: Mapping[str, str]
-    """
-    Every HTTP header on the incoming request, lower-cased keys. Empty
-    on transports with no per-request headers (e.g. stdio).
-    """
+    Unlike a hand-rolled lookup done inside a tool or middleware, this is
+    a real `TokenVerifier`. Pass it to `Auth.provider` and it secures the
+    transport itself, the same as any OAuth-backed provider.
+    An unrecognized token never reaches a tool call.
 
-    tool_name: str
-    """The MCP tool name about to be called."""
-
-    arguments: Mapping[str, typing.Any]
-    """The tool call's raw arguments, as a plain mapping. """
-
-
-@typing.runtime_checkable
-class AuthBackend(typing.Protocol):
-    """
-    Protocol for resolving an `AuthRequest` into a `Principal`.
-
-    Pass an instance to `slb_glossary.mcp.config.Auth.backend`.
+    Meant for simple, fixed API-key setups. For anything backed by a
+    database, external identity provider, or tokens that expire/rotate,
+    implement your own `TokenVerifier` instead.
     """
 
-    async def authenticate(self, request: AuthRequest) -> Principal | None:
+    def __init__(self, tokens: typing.Mapping[str, str | typing.Mapping[str, typing.Any]]) -> None:
         """
-        Resolves `request` into a `Principal`.
+        Initialize the verifier.
 
-        :param request: The token, headers, and call metadata to authenticate from.
-        :return: The resolved `Principal`, or `None` if `request` doesn't
-            resolve to anyone. A `None` return is treated as
-            "unauthenticated" and rejected if `Auth.required` is `True`,
-            otherwise falls back to `ANONYMOUS`.
+        :param tokens: Mapping of raw bearer token to either a bare `str`
+            (shorthand for `{"client_id": that_string}`), or a mapping of
+            `AccessToken` constructor kwargs (`client_id`, `scopes`,
+            `expires_at`, `claims`, ...). `client_id` defaults to the
+            token string itself if omitted.
         """
-        ...
-
-
-class StaticTokenAuth:
-    """An `AuthBackend` backed by a fixed, in-process mapping of token to `Principal`."""
-
-    __slots__ = ("_tokens",)
-
-    def __init__(self, tokens: Mapping[str, Principal | str]) -> None:
-        """
-        Initialize the backend with a mapping of bearer token to
-        `Principal` (or bare string shorthand).
-
-        :param tokens: Mapping of raw bearer token to either a `Principal`
-            directly, or a bare `str` used as shorthand for
-            `Principal(id=that_string)`.
-        """
-        resolved: dict[str, Principal] = {}
+        super().__init__()
+        resolved: dict[str, AccessToken] = {}
         for token, value in tokens.items():
-            resolved[token] = value if isinstance(value, Principal) else Principal(id=value)
+            if isinstance(value, str):
+                resolved[token] = AccessToken(token=token, client_id=value, scopes=[])
+                continue
+
+            kwargs = dict(value)
+            kwargs.setdefault("client_id", token)
+            kwargs.setdefault("scopes", [])
+            resolved[token] = AccessToken(token=token, **kwargs)
         self._tokens = resolved
 
-    async def authenticate(self, request: AuthRequest) -> Principal | None:
-        if request.token is None:
+    async def verify_token(self, token: str) -> AccessToken | None:
+        access_token = self._tokens.get(token)
+        if access_token is None:
             return None
-        return self._tokens.get(request.token)
+        if access_token.expires_at is not None and access_token.expires_at < time.time():
+            return None
+        return access_token
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({len(self._tokens)} token(s))"
 
 
-class NullAuth:
-    """An `AuthBackend` that authenticates nobody. Equivalent to leaving `backend=None`."""
-
-    __slots__ = ()
-
-    async def authenticate(self, request: AuthRequest) -> Principal | None:
-        return None
-
-
-def import_backend(dotted_path: str) -> AuthBackend:
+def import_provider(dotted_path: str) -> AuthProvider:
     """
-    Import and instantiate an `AuthBackend` from a dotted path, with no constructor arguments.
+    Import and instantiate an `AuthProvider` from a dotted path, with no constructor arguments.
 
     :param dotted_path: `"module:ClassName"` or `"package.module.ClassName"`.
     :return: An instance of the imported class.
     :raises ValueError: If `dotted_path` doesn't look like a valid import path.
     :raises ImportError: If the module can't be imported, or has no such attribute.
-    :raises TypeError: If the resolved attribute isn't a no-argument-constructible `AuthBackend`.
+    :raises TypeError: If the resolved attribute isn't a no-argument-constructible `AuthProvider`.
     """
     module_path, _, attr = dotted_path.partition(":")
     if not attr:
         module_path, _, attr = dotted_path.rpartition(".")
     if not module_path or not attr:
         raise ValueError(
-            f"{dotted_path!r} is not a valid auth-backend import path. Use "
+            f"{dotted_path!r} is not a valid auth-provider import path. Use "
             f"'module:ClassName' or 'package.module.ClassName'."
         )
 
@@ -171,10 +135,10 @@ def import_backend(dotted_path: str) -> AuthBackend:
     except AttributeError as exc:
         raise ImportError(f"Module {module_path!r} has no attribute {attr!r}") from exc
 
-    backend = target() if isinstance(target, type) else target
-    if not isinstance(backend, AuthBackend):
+    provider = target() if isinstance(target, type) else target
+    if not isinstance(provider, AuthProvider):
         raise TypeError(
-            f"{dotted_path!r} resolved to {backend!r}, which doesn't implement "
-            f"`AuthBackend` (an `authenticate(self, request)` coroutine method)."
+            f"{dotted_path!r} resolved to {provider!r}, which doesn't extend "
+            f"`fastmcp.server.auth.AuthProvider`."
         )
-    return backend
+    return provider

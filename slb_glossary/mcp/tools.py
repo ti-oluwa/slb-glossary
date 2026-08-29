@@ -10,8 +10,8 @@ from slb_glossary.local import sync
 from slb_glossary.mcp.config import MCPConfig, Streaming, Tool
 from slb_glossary.mcp.errors import MCPError
 from slb_glossary.mcp.runtime import Runtime
-from slb_glossary.query import QueryResult, Source
-from slb_glossary.types import SearchResult
+from slb_glossary.query import QueryResult, SimilarResult, Source
+from slb_glossary.types import SearchMode, SearchResult
 
 __all__ = [
     "DEFAULT_INSTRUCTIONS",
@@ -91,6 +91,23 @@ def related_lookup_to_dict(lookup: QueryResult[tuple[typing.Any, ...]]) -> dict[
     }
 
 
+def similar_lookup_to_dict(lookup: QueryResult[SimilarResult]) -> dict[str, typing.Any]:
+    similar_result = lookup.value
+    return {
+        "value": {
+            "exact": (
+                term_lookup_to_dict(similar_result.exact)  # type: ignore[arg-type]
+                if similar_result.exact is not None
+                else None
+            ),
+            "similar": [term_lookup_to_dict(item) for item in similar_result.similar],  # type: ignore[arg-type]
+        },
+        "source": lookup.source.value,
+        "persisted": lookup.persisted,
+        "score": lookup.score,
+    }
+
+
 @dataclasses.dataclass(slots=True, kw_only=True)
 class ToolSpec:
     """One MCP tool's registration metadata, ready for `slb_glossary.mcp.api.MCPApp` to wire up."""
@@ -147,14 +164,52 @@ class SearchArgs:
     start_letter: str | None = None
     """Restrict results to terms starting with this letter."""
 
+    language: str | None = None
+    """Restrict results to this glossary language edition, e.g. `"en"`/`"es"`."""
+
     limit: int | None = 5
     """Maximum number of results to return. `None` for unlimited (use with care)."""
+
+    mode: SearchMode | None = None
+    """
+    Local-search ranking mode. `"lexical"` (exact/fuzzy text match, works
+    everywhere), `"semantic"` (embedding similarity) or `"hybrid"` (both,
+    combined). `None` (the default) uses this server's own configured
+    default. `"semantic"`/`"hybrid"` need the local database to have
+    embedded terms; falls back to `"lexical"` where it doesn't. 
+    
+    Only affects local reads. A live fetch always ranks by relevance.
+    """
+
+    relevance_threshold: float | None = None
+    """
+    For `source="auto"`, how confident the best local result must be
+    (0.0-1.0) to skip a live fetch entirely. `None` uses this server's
+    own configured default.
+    """
+
+    exclude: tuple[str, ...] = ()
+    """URLs or exact term names to leave out of the results entirely."""
 
     persist: bool = False
     """
     If a live fetch happens, cache its results locally for next time.
     Ignored (never persists) unless the server was configured with local
     write access enabled.
+    """
+
+    persist_batch_size: int | None = None
+    """
+    Number of live results to buffer before each incremental write.
+    Only relevant when `persist=True` and a live fetch actually happens.
+    `None` uses this server's own configured default.
+    """
+
+    persist_on_error: bool = True
+    """
+    If `True` (the default) and `persist=True`, save whatever was
+    already fetched if a live fetch fails partway through, instead of
+    losing it.
     """
 
     fuzzy: bool = False
@@ -168,8 +223,8 @@ class SearchArgs:
 
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
-class GetTermArgs:
-    """Arguments for `glossary_get_term` and `glossary_related_terms`."""
+class _TermLookupArgs:
+    """Shared arguments between `glossary_get_term` and `glossary_related_terms`."""
 
     term_or_url: str
     """An exact (case-insensitive) term name, or a glossary term detail-page URL."""
@@ -177,10 +232,46 @@ class GetTermArgs:
     source: Source = Source.AUTO
     """Where to look up the term: `"auto"`, `"local"`, or `"live"`."""
 
+    language: str | None = None
+    """Restrict the lookup to this glossary language edition, e.g. `"en"`/`"es"`."""
+
+    topic: str | None = None
+    """
+    A term/URL can have several stored definitions locally, one per
+    topic it's filed under. This picks a specific one (exact,
+    case-insensitive match). Only affects a local read.
+    """
+
     persist: bool = False
     """
     If a live fetch happens, cache its result locally. Ignored unless
     the server has local write access enabled.
+    """
+
+
+@dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+class GetTermArgs(_TermLookupArgs):
+    """Arguments for `glossary_get_term`."""
+
+    with_similar: bool = False
+    """
+    If `True`, also gather other results found for `term_or_url` along
+    the way (a local `search` pass or a live one), best match first, in
+    addition to the exact match. Useful when you're not sure the exact
+    name is right and want alternatives back in the same call.
+    """
+
+    similar_pool_size: int | None = None
+    """
+    How many candidate results to gather before picking the top
+    `max_similar_terms` alternatives. Only relevant when `with_similar=True`.
+    `None` uses this server's own configured default.
+    """
+
+    max_similar_terms: int | None = None
+    """
+    Maximum number of alternatives to return. Only relevant when
+    `with_similar=True`. `None` uses this server's own configured default.
     """
 
 
@@ -200,13 +291,33 @@ class TermsOnArgs:
     start_letter: str | None = None
     """Restrict results to terms starting with this letter."""
 
+    language: str | None = None
+    """Restrict results to this glossary language edition, e.g. `"en"`/`"es"`."""
+
     limit: int | None = 25
     """Maximum number of terms to return. `None` for unlimited (use with care)."""
+
+    exclude: tuple[str, ...] = ()
+    """URLs or exact term names to leave out of the results entirely."""
 
     persist: bool = False
     """
     If a live fetch happens, cache its results locally. Ignored unless
     the server has local write access enabled.
+    """
+
+    persist_batch_size: int | None = None
+    """
+    Number of live results to buffer before each incremental write.
+    Only relevant when `persist=True` and a live fetch actually happens.
+    `None` uses this server's own configured default.
+    """
+
+    persist_on_error: bool = True
+    """
+    If `True` (the default) and `persist=True`, save whatever was
+    already fetched if a live fetch fails partway through, instead of
+    losing it.
     """
 
     fuzzy: bool = False
@@ -229,11 +340,17 @@ class TermsUrlsArgs:
     start_letter: str | None = None
     """Restrict to terms starting with this letter."""
 
+    language: str | None = None
+    """Restrict results to this glossary language edition, e.g. `"en"`/`"es"`."""
+
     source: Source = Source.AUTO
     """Where to read from: `"auto"`, `"local"`, or `"live"`."""
 
     limit: int | None = 50
     """Maximum number of URLs to return. `None` for unlimited (use with care)."""
+
+    exclude: tuple[str, ...] = ()
+    """URLs or exact term names to leave out of the results entirely."""
 
     fuzzy: bool = False
     """Tolerate minor misspellings/partial names in `topic` for local reads."""
@@ -246,10 +363,13 @@ class TopicsArgs:
     source: Source = Source.AUTO
     """Where to read from: `"auto"`, `"local"`, or `"live"`."""
 
+    language: str | None = None
+    """Restrict to this glossary language edition, e.g. `"en"`/`"es"`. Only affects a local read."""
+
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
-class RelatedTermsArgs(GetTermArgs):
-    """Arguments for `glossary_related_terms`. Same shape as `GetTermArgs`."""
+class RelatedTermsArgs(_TermLookupArgs):
+    """Arguments for `glossary_related_terms`. Same shape as `glossary_get_term`, minus `with_similar`."""
 
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
@@ -263,8 +383,10 @@ class RandomTermArgs:
     """Restrict the pick to this topic, or several comma-separated topics."""
 
     persist: bool = False
-    """If a live pick happens, cache it locally. Ignored unless the server
-    has local write access enabled."""
+    """
+    If a live pick happens, cache it locally. Ignored unless the server
+    has local write access enabled.
+    """
 
     fuzzy: bool = False
     """Tolerate minor misspellings/partial names in `topic` for local picks."""
@@ -280,6 +402,18 @@ class CompareArgs:
     source: Source = Source.AUTO
     """Where to look up each term: `"auto"`, `"local"`, or `"live"`."""
 
+    language: str | None = None
+    """Restrict every lookup to this glossary language edition, e.g. `"en"`/`"es"`."""
+
+    concurrency: int | None = None
+    """Number of terms to look up in parallel. `None` uses this server's own configured default."""
+
+    with_similar: bool = False
+    """
+    If `True`, each result also includes alternatives found along the
+    way, the same as `glossary_get_term`'s `with_similar`.
+    """
+
     persist: bool = False
     """
     If a live fetch happens, cache each result locally. Ignored unless
@@ -290,7 +424,7 @@ class CompareArgs:
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
 class SyncArgs:
     """
-    Arguments for `glossary_sync` - the one tool that writes to the local database.
+    Arguments for `glossary_sync`. This is the one tool that writes to the local database.
 
     Only ever registered when this server was explicitly configured with
     both `Tool.SYNC` and `LocalAccess.allow_write=True`.
@@ -335,14 +469,14 @@ def get_effective_persist(requested: bool, config: MCPConfig) -> bool:
     return requested and config.local.allow_write
 
 
-def get_effectivestream(requested: bool, config: MCPConfig) -> bool:
+def get_effective_stream(requested: bool, config: MCPConfig) -> bool:
     streaming: Streaming = config.streaming
     if not streaming.allow_override:
         return streaming.default
     return requested
 
 
-async def _handle_search(
+async def handle_search(
     args: SearchArgs,
     runtime: Runtime,
     config: MCPConfig,
@@ -350,7 +484,7 @@ async def _handle_search(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    stream = get_effectivestream(args.stream, config)
+    stream = get_effective_stream(args.stream, config)
     started_at = time.monotonic()
     async with runtime.acquire(source) as (db, session):
         results: list[dict[str, typing.Any]] = []
@@ -362,8 +496,14 @@ async def _handle_search(
             source=source,
             topic=args.topic,
             start_letter=args.start_letter,
+            language=args.language,
             limit=args.limit,
+            mode=args.mode,
+            relevance_threshold=args.relevance_threshold,
+            exclude=args.exclude or None,
             persist=get_effective_persist(args.persist, config),
+            persist_batch_size=args.persist_batch_size,
+            persist_on_error=args.persist_on_error,
             fuzzy=args.fuzzy,
         ):
             result = {
@@ -383,7 +523,7 @@ async def _handle_search(
     }
 
 
-async def _handle_get_term(
+async def handle_get_term(
     args: GetTermArgs,
     runtime: Runtime,
     config: MCPConfig,
@@ -397,12 +537,19 @@ async def _handle_get_term(
             db=db,
             session=session,
             source=source,
+            language=args.language,
+            topic=args.topic,
+            with_similar=args.with_similar,
+            similar_pool_size=args.similar_pool_size,
+            max_similar_terms=args.max_similar_terms,
             persist=get_effective_persist(args.persist, config),
         )
-    return term_lookup_to_dict(lookup)
+    if args.with_similar:
+        return similar_lookup_to_dict(typing.cast(QueryResult[SimilarResult], lookup))
+    return term_lookup_to_dict(typing.cast(QueryResult[SearchResult | None], lookup))
 
 
-async def _handle_terms_on(
+async def handle_terms_on(
     args: TermsOnArgs,
     runtime: Runtime,
     config: MCPConfig,
@@ -410,7 +557,7 @@ async def _handle_terms_on(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    stream = get_effectivestream(args.stream, config)
+    stream = get_effective_stream(args.stream, config)
     started_at = time.monotonic()
     async with runtime.acquire(source) as (db, session):
         results: list[dict[str, typing.Any]] = []
@@ -421,8 +568,12 @@ async def _handle_terms_on(
             session=session,
             source=source,
             start_letter=args.start_letter,
+            language=args.language,
             limit=args.limit,
+            exclude=args.exclude or None,
             persist=get_effective_persist(args.persist, config),
+            persist_batch_size=args.persist_batch_size,
+            persist_on_error=args.persist_on_error,
             fuzzy=args.fuzzy,
         ):
             results.append(result.asdict())
@@ -437,7 +588,7 @@ async def _handle_terms_on(
     }
 
 
-async def _handle_terms_urls(
+async def handle_terms_urls(
     args: TermsUrlsArgs,
     runtime: Runtime,
     config: MCPConfig,
@@ -455,14 +606,16 @@ async def _handle_terms_urls(
                 query=args.query,
                 topic=args.topic,
                 start_letter=args.start_letter,
+                language=args.language,
                 limit=args.limit,
+                exclude=args.exclude or None,
                 fuzzy=args.fuzzy,
             )
         ]
     return {"urls": urls, "count": len(urls), "source": source.value}
 
 
-async def _handle_topics(
+async def handle_topics(
     args: TopicsArgs,
     runtime: Runtime,
     config: MCPConfig,
@@ -471,11 +624,13 @@ async def _handle_topics(
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
     async with runtime.acquire(source) as (db, session):
-        topics = await query.get_topics(db=db, session=session, source=source)
+        topics = await query.get_topics(
+            db=db, session=session, source=source, language=args.language
+        )
     return {"topics": topics, "count": len(topics), "source": source.value}
 
 
-async def _handle_related_terms(
+async def handle_related_terms(
     args: RelatedTermsArgs,
     runtime: Runtime,
     config: MCPConfig,
@@ -489,12 +644,14 @@ async def _handle_related_terms(
             db=db,
             session=session,
             source=source,
+            language=args.language,
+            topic=args.topic,
             persist=get_effective_persist(args.persist, config),
         )
     return related_lookup_to_dict(lookup)
 
 
-async def _handle_random_term(
+async def handle_random_term(
     args: RandomTermArgs,
     runtime: Runtime,
     config: MCPConfig,
@@ -514,7 +671,7 @@ async def _handle_random_term(
     return term_lookup_to_dict(lookup)
 
 
-async def _handle_compare(
+async def handle_compare(
     args: CompareArgs,
     runtime: Runtime,
     config: MCPConfig,
@@ -528,12 +685,16 @@ async def _handle_compare(
             db=db,
             session=session,
             source=source,
+            language=args.language,
+            concurrency=args.concurrency,
+            with_similar=args.with_similar,
             persist=get_effective_persist(args.persist, config),
         )
-    return {term: term_lookup_to_dict(lookup) for term, lookup in lookups.items()}
+    to_dict = similar_lookup_to_dict if args.with_similar else term_lookup_to_dict
+    return {term: to_dict(lookup) for term, lookup in lookups.items()}  # type: ignore[arg-type]
 
 
-async def _handle_sync(
+async def handle_sync(
     args: SyncArgs,
     runtime: Runtime,
     config: MCPConfig,
@@ -620,11 +781,11 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
             "keyword/partial-name queries, to check whether a term exists, or when you're not "
             "sure of a term's exact name. Returns the glossary's own published definitions "
             "(never generated), best match first. If you already know the exact term name, "
-            "use glossary_get_term instead - it's cheaper and more precise."
+            "use glossary_get_term instead. It's cheaper and more precise."
         ),
         args_type=SearchArgs,
         tags=frozenset({"read", "search"}),
-        handler=_handle_search,
+        handler=handle_search,
         supports_streaming=True,
     )
     add(
@@ -639,7 +800,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         ),
         args_type=GetTermArgs,
         tags=frozenset({"read", "lookup"}),
-        handler=_handle_get_term,
+        handler=handle_get_term,
     )
     add(
         Tool.GET_TERMS_ON,
@@ -652,7 +813,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         ),
         args_type=TermsOnArgs,
         tags=frozenset({"read", "topic"}),
-        handler=_handle_terms_on,
+        handler=handle_terms_on,
         supports_streaming=True,
     )
     add(
@@ -660,13 +821,13 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         name="glossary_get_terms_urls",
         description=(
             "List glossary term detail-page URLs matching a query/topic/starting letter, "
-            "without fetching full definitions. Lighter-weight than glossary_search - use "
+            "without fetching full definitions. Lighter-weight than glossary_search. Use "
             "this when you only need to enumerate or count candidates, or want a citable "
             "source URL without pulling the whole definition."
         ),
         args_type=TermsUrlsArgs,
         tags=frozenset({"read", "search"}),
-        handler=_handle_terms_urls,
+        handler=handle_terms_urls,
     )
     add(
         Tool.GET_TOPICS,
@@ -679,7 +840,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         ),
         args_type=TopicsArgs,
         tags=frozenset({"read", "topic"}),
-        handler=_handle_topics,
+        handler=handle_topics,
     )
     add(
         Tool.RELATED_TERMS,
@@ -691,7 +852,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         ),
         args_type=RelatedTermsArgs,
         tags=frozenset({"read", "lookup"}),
-        handler=_handle_related_terms,
+        handler=handle_related_terms,
     )
     add(
         Tool.RANDOM_TERM,
@@ -699,11 +860,11 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         description=(
             "Get one randomly chosen glossary term (with its authoritative definition), "
             "optionally restricted to a topic. Use this for exploration/discovery/quizzing, "
-            "not for looking up something specific - use glossary_get_term for that."
+            "not for looking up something specific. Use glossary_get_term for that."
         ),
         args_type=RandomTermArgs,
         tags=frozenset({"read", "discovery"}),
-        handler=_handle_random_term,
+        handler=handle_random_term,
     )
     add(
         Tool.COMPARE,
@@ -715,7 +876,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         ),
         args_type=CompareArgs,
         tags=frozenset({"read", "lookup"}),
-        handler=_handle_compare,
+        handler=handle_compare,
     )
     add(
         Tool.SYNC,
@@ -728,7 +889,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         ),
         args_type=SyncArgs,
         tags=frozenset({"write", "sync"}),
-        handler=_handle_sync,
+        handler=handle_sync,
         writes=True,
         supports_source=False,
     )

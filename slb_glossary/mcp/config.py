@@ -10,7 +10,7 @@ config = MCPConfig.default().update(
 ```
 
 Every nested config is a frozen, `slots=True`, keyword-only dataclass, so
-instances are hashable-by-value-where-possible, cannot be mutated out
+instances are hashable by value where possible, cannot be mutated out
 from under a running server, and are cheap to copy with `.update(...)`.
 """
 
@@ -23,9 +23,7 @@ from fastmcp.server.auth import AuthProvider
 
 from slb_glossary.config import BrowserSessionOptions, DatabaseOptions
 from slb_glossary.logging import SinksSpec
-from slb_glossary.mcp.auth import AuthBackend
 from slb_glossary.mcp.errors import MCPConfigError
-from slb_glossary.mcp.ratelimit import RateLimiter
 from slb_glossary.mcp.types import AfterToolHook, BeforeToolHook, LifecycleHook, ToolErrorHook
 from slb_glossary.query import Source
 from slb_glossary.types import Language, Updatable
@@ -42,6 +40,7 @@ __all__ = [
     "Logging",
     "MCPConfig",
     "RateLimit",
+    "RateLimitAlgorithm",
     "RateLimitScope",
     "ServerInfo",
     "SessionAccess",
@@ -66,32 +65,32 @@ class Tool(enum.Flag):
     """
 
     SEARCH = enum.auto()
-    """`glossary_search` - free-text search, local and/or live."""
+    """`glossary_search`: free-text search, local and/or live."""
 
     GET_TERM = enum.auto()
-    """`glossary_get_term` - exact-name or URL single-term lookup."""
+    """`glossary_get_term`: exact-name or URL single-term lookup."""
 
     GET_TERMS_ON = enum.auto()
-    """`glossary_get_terms_on` - every term filed under a topic."""
+    """`glossary_get_terms_on`: every term filed under a topic."""
 
     GET_TERMS_URLS = enum.auto()
-    """`glossary_get_terms_urls` - lightweight URL-only listing."""
+    """`glossary_get_terms_urls`: lightweight URL-only listing."""
 
     GET_TOPICS = enum.auto()
-    """`glossary_get_topics` - topic name to term-count mapping."""
+    """`glossary_get_topics`: topic name to term-count mapping."""
 
     RELATED_TERMS = enum.auto()
-    """`glossary_related_terms` - related-term links for a single term."""
+    """`glossary_related_terms`: related-term links for a single term."""
 
     RANDOM_TERM = enum.auto()
-    """`glossary_random_term` - one randomly chosen term."""
+    """`glossary_random_term`: one randomly chosen term."""
 
     COMPARE = enum.auto()
-    """`glossary_compare` - side-by-side lookup of several terms."""
+    """`glossary_compare`: side-by-side lookup of several terms."""
 
     SYNC = enum.auto()
     """
-    `glossary_sync` - fetch from the live glossary and write into the local
+    `glossary_sync`: fetch from the live glossary and write into the local
     database. This is the only tool that writes anything, and is only ever 
     registered when both this flag *and* `LocalAccess.allow_write` are set.
     
@@ -242,7 +241,7 @@ class LocalAccess(Updatable):
     Whether any tool call may write to the local database. **Off by default**:
     with this as `False`, every read tool's `persist` argument is silently
     ignored (never actually persists), and `Tool.SYNC` is never registered
-    even if requested in `MCPConfig.tools` - see `MCPConfig.resolved_tools`.
+    even if requested in `MCPConfig.tools`. See `MCPConfig.resolved_tools`.
 
     Set this to `True` to let the server cache/persists live lookups, or
     run explicit syncs.
@@ -279,8 +278,7 @@ class SourcePolicy(Updatable):
     """
     Whether tool schemas even include a `source` argument. `False` hides
     it entirely from callers/LLMs; every call then uses `default` (still
-    narrowed by `allowed`, `SessionAccess.enabled`, and
-    `LocalAccess.enabled`).
+    narrowed by `allowed`, `SessionAccess.enabled`, and `LocalAccess.enabled`).
     """
 
 
@@ -311,64 +309,88 @@ class Timeout(Updatable):
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
 class Auth(Updatable):
-    """Controls authentication/authorization (*mainly authorization*) for tool calls."""
+    """
+    Controls authentication/authorization for tool calls, via FastMCP's own auth layer.
 
-    backend: AuthBackend | None = None
-    """
-    The `slb_glossary.mcp.auth.AuthBackend` used to resolve a caller
-    into a `Principal`, for this application's use (rate-limit keys, hooks,
-    call logging). 
-    
-    `None` disables this layer and every caller is treated as
-    the anonymous `Principal`.
-    """
+    This is deliberately thin. `FastMCP` already has a full auth story
+    (`AuthProvider`/`TokenVerifier` for authentication, scope-based
+    authorization middleware for authorization), so this just configures
+    that rather than reimplementing any of it.
 
-    required: bool = False
-    """
-    If `True` and `backend` is set, calls with no token, or a token that
-    doesn't resolve to a `Principal`, are rejected. If `False`, an
-    unresolved token just falls back to the anonymous principal (still
-    subject to rate limiting/hooks under whatever key that resolves to).
+    See `slb_glossary.mcp.auth` for `StaticTokenVerifier` (a ready-made
+    `AuthProvider` for simple fixed API keys) and `import_provider` (load
+    one from a dotted path).
     """
 
     provider: AuthProvider | None = None
     """
-    A FastMCP `fastmcp.server.auth.AuthProvider` (e.g. a `TokenVerifier`
-    subclass), forwarded straight to `fastmcp.FastMCP(auth=...)`. This
-    protects the transport itself. Hence, an HTTP request that fails this check
-    never reaches a tool call, let alone `backend` above. The two layers
-    can share one underlying identity store: have your `TokenVerifier`
-    and your `AuthBackend` both read from the same store/database, or wrap
-    one in a small adapter.
+    A FastMCP `fastmcp.server.auth.AuthProvider`, forwarded straight to
+    `fastmcp.FastMCP(auth=...)`. This secures the transport itself: an
+    unauthenticated (or invalidly authenticated) request never reaches a
+    tool call at all. `None` (the default) disables auth entirely - every
+    caller is anonymous, and `required_scopes` must be empty.
+    """
+
+    required_scopes: tuple[str, ...] = ()
+    """
+    If non-empty, every tool call must carry all of these OAuth scopes,
+    enforced by FastMCP's own scope-based authorization middleware
+    (`fastmcp.server.middleware.AuthMiddleware`) ahead of the call ever
+    reaching a tool body. Requires `provider` to be set - there's nothing
+    to check scopes against otherwise.
+    """
+
+
+class RateLimitAlgorithm(enum.Enum):
+    """Which of FastMCP's built-in rate-limiting algorithms `RateLimit` uses."""
+
+    TOKEN_BUCKET = "token_bucket"
+    """
+    Allows short bursts above the steady-state rate, up to `RateLimit.limit`
+    tokens, refilling continuously. Supports any `RateLimit.window`, since
+    the underlying rate is expressed per-second internally.
+    """
+
+    SLIDING_WINDOW = "sliding_window"
+    """
+    Exactly `RateLimit.limit` requests in any trailing `RateLimit.window` -
+    no burst allowance beyond that. The default. `RateLimit.window` is
+    rounded up to whole minutes, since FastMCP's sliding-window middleware
+    only supports minute granularity; use `TOKEN_BUCKET` for sub-minute windows.
     """
 
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
 class RateLimit(Updatable):
-    """Controls optional per-tool/per-client request-rate limiting."""
+    """
+    Controls optional per-tool/per-client request-rate limiting.
+
+    Backed by FastMCP's own rate-limiting middleware (`fastmcp.server.middleware.rate_limiting`).
+
+    This config just selects an algorithm and builds it.
+    For an algorithm FastMCP doesn't offer, add your own
+    `fastmcp.server.middleware.Middleware` directly to a hand-built
+    `FastMCP` server instead of going through `MCPConfig`.
+    """
 
     enabled: bool = False
     """Whether rate limiting is enforced at all. Off by default."""
 
-    limiter: RateLimiter | None = None
-    """
-    The `slb_glossary.mcp.ratelimit.RateLimiter` to consult. 
-    
-    `None` while `enabled=True` builds a default in-memory
-    from `limit`/`window`.
-    """
+    algorithm: RateLimitAlgorithm = RateLimitAlgorithm.SLIDING_WINDOW
+    """Which FastMCP rate-limiting algorithm to use. See `RateLimitAlgorithm`."""
 
     limit: int = 60
-    """
-    Requests allowed per `window` per rate-limit key, used only
-    when `limiter` is left `None` for the default limiter to be built from.
-    """
+    """Requests allowed per `window`, per rate-limit key (see `scope`)."""
 
     window: float = 60.0
-    """Sliding window size, in seconds, used only when `limiter` is left `None`."""
+    """
+    Window size in seconds. For `RateLimitAlgorithm.SLIDING_WINDOW` this
+    is rounded up to whole minutes; `TOKEN_BUCKET` supports any value
+    (it's converted to a per-second rate internally).
+    """
 
     scope: RateLimitScope = RateLimitScope.CLIENT_TOOL
-    """What key `limiter` is consulted under. See `RateLimitScope`."""
+    """What key each rate limit is tracked under. See `RateLimitScope`."""
 
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
@@ -513,7 +535,7 @@ class MCPConfig(Updatable):
     ```
 
     Every field has a default, so `MCPConfig()` alone is a valid,
-    read-only, local-and-live, unauthenticated, unlimited-rate server
+    read-only, local and live, unauthenticated, unlimited-rate server
     configuration. Validated at construction time.
 
     Build with `.update(...)` to change one field without re-specifying the rest.
@@ -599,6 +621,11 @@ class MCPConfig(Updatable):
             )
         if self.rate_limit.enabled and self.rate_limit.limit <= 0:
             raise MCPConfigError(f"{type(self).__name__}: `rate_limit.limit` must be positive.")
+        if self.auth.required_scopes and self.auth.provider is None:
+            raise MCPConfigError(
+                f"{type(self).__name__}: `auth.required_scopes` is set but `auth.provider` "
+                f"is None - there's no authenticated caller to check scopes against."
+            )
         if self.session.max_concurrent < 1:
             raise MCPConfigError(
                 f"{type(self).__name__}: `session.max_concurrent` must be at least 1."
@@ -642,7 +669,7 @@ class MCPConfig(Updatable):
         ```
 
         :param language: Glossary language edition the default session
-            should search - `"en"`/`"es"`, or a `Language` member. `None`
+            should search. `"en"`/`"es"`, or a `Language` member. `None`
             (the default) leaves `SessionAccess.browser.language` at its
             own default (`"en"`).
         :return: A fresh `MCPConfig`, defaults throughout except for

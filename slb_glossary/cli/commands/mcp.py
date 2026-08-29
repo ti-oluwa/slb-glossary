@@ -22,8 +22,11 @@ _APP_PATH_IGNORED_OPTIONS = (
     "allow_write",
     "timeout",
     "auth_tokens",
-    "auth_backend_path",
+    "auth_provider_path",
+    "require_scopes",
     "limit",
+    "rate_limit_window",
+    "rate_limit_algorithm",
     "language",
 )
 """
@@ -105,24 +108,50 @@ def mcp() -> None:
     "--auth-token",
     "auth_tokens",
     multiple=True,
-    help="A 'token' or 'token:principal_id' pair to accept as a valid caller, backed by "
-    "StaticTokenAuth. May be given more than once. Mutually exclusive with --auth-backend.",
+    help="A 'token' or 'token:client_id' pair to accept as a valid caller, backed by "
+    "FastMCP's own auth layer (slb_glossary.mcp.auth.StaticTokenVerifier). May be given "
+    "more than once. Mutually exclusive with --auth-provider.",
 )
 @click.option(
-    "--auth-backend",
-    "auth_backend_path",
+    "--auth-provider",
+    "auth_provider_path",
     default=None,
-    help="Dotted import path ('module:ClassName' or 'package.module.ClassName') to a custom "
-    "AuthBackend, instantiated with no constructor arguments. For a backend that needs "
-    "constructor arguments (a DB pool, API client, etc.), build the `MCPApp` in Python "
-    "yourself instead of going through this flag. Mutually exclusive with --auth-token.",
+    help="Dotted import path ('module:ClassName' or 'package.module.ClassName') to a "
+    "FastMCP AuthProvider (e.g. a TokenVerifier subclass), instantiated with no "
+    "constructor arguments. For one that needs constructor arguments (a DB pool, API "
+    "client, etc.), build the `MCPApp` in Python yourself instead of going through this "
+    "flag. Mutually exclusive with --auth-token.",
+)
+@click.option(
+    "--require-scope",
+    "require_scopes",
+    multiple=True,
+    help="An OAuth scope every caller must have, checked by FastMCP's own authorization "
+    "middleware ahead of every tool call. May be given more than once. Requires "
+    "--auth-token or --auth-provider (there's no authenticated caller to check "
+    "scopes against otherwise).",
 )
 @click.option(
     "--rate-limit",
     "limit",
     type=int,
     default=None,
-    help="Enable rate limiting: max requests per client per tool per minute.",
+    help="Enable rate limiting: max requests per client per tool per --rate-limit-window.",
+)
+@click.option(
+    "--rate-limit-window",
+    type=float,
+    default=60.0,
+    show_default=True,
+    help="Rate-limit window in seconds. Only used when --rate-limit is set.",
+)
+@click.option(
+    "--rate-limit-algorithm",
+    type=click.Choice(["sliding_window", "token_bucket"], case_sensitive=False),
+    default="sliding_window",
+    show_default=True,
+    help="Rate-limiting algorithm. 'sliding_window' allows no burst above the limit; "
+    "'token_bucket' allows short bursts above it. Only used when --rate-limit is set.",
 )
 @click.option(
     "--language",
@@ -156,8 +185,11 @@ def serve(
     allow_write: bool,
     timeout: float,
     auth_tokens: tuple[str, ...],
-    auth_backend_path: str | None,
+    auth_provider_path: str | None,
+    require_scopes: tuple[str, ...],
     limit: int | None,
+    rate_limit_window: float,
+    rate_limit_algorithm: str,
     language: str | None,
     log_level: str | None,
 ) -> None:
@@ -192,20 +224,26 @@ def serve(
         run_async(app.run_async(**transport_kwargs))
         return
 
-    from slb_glossary.mcp.auth import StaticTokenAuth, import_backend
+    from slb_glossary.mcp.auth import StaticTokenVerifier, import_provider
     from slb_glossary.mcp.config import (
         Auth,
         LocalAccess,
         MCPConfig,
         RateLimit,
+        RateLimitAlgorithm,
         SessionAccess,
         SourcePolicy,
         Timeout,
         resolve_tools,
     )
 
-    if auth_tokens and auth_backend_path:
-        raise click.UsageError("--auth-token and --auth-backend are mutually exclusive.")
+    if auth_tokens and auth_provider_path:
+        raise click.UsageError("--auth-token and --auth-provider are mutually exclusive.")
+    if require_scopes and not (auth_tokens or auth_provider_path):
+        raise click.UsageError(
+            "--require-scope needs --auth-token or --auth-provider - there's no "
+            "authenticated caller to check scopes against otherwise."
+        )
 
     glossary_config = Config.load(config_path) if config_path is not None else Config()
     session_browser = glossary_config.session
@@ -222,17 +260,22 @@ def serve(
     if auth_tokens:
         token_map: dict[str, str] = {}
         for entry in auth_tokens:
-            token, _, principal_id = entry.partition(":")
-            token_map[token] = principal_id or token
-
-        auth_config = Auth(backend=StaticTokenAuth(token_map), required=True)
-    elif auth_backend_path:
-        auth_config = Auth(backend=import_backend(auth_backend_path), required=True)
+            token, _, client_id = entry.partition(":")
+            token_map[token] = client_id or token
+        auth_provider = StaticTokenVerifier(token_map)
+    elif auth_provider_path:
+        auth_provider = import_provider(auth_provider_path)
     else:
-        auth_config = Auth()
+        auth_provider = None
+    auth_config = Auth(provider=auth_provider, required_scopes=tuple(require_scopes))
 
     if limit is not None:
-        rate_limit = RateLimit(enabled=True, limit=limit)
+        rate_limit = RateLimit(
+            enabled=True,
+            limit=limit,
+            window=rate_limit_window,
+            algorithm=RateLimitAlgorithm(rate_limit_algorithm),
+        )
     else:
         rate_limit = RateLimit()
 

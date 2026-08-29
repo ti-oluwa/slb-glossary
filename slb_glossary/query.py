@@ -53,7 +53,7 @@ from slb_glossary.errors import QueryError
 from slb_glossary.live.browser import Session
 from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
-from slb_glossary.natural_language import clean_query
+from slb_glossary.phrasing import clean_query
 from slb_glossary.types import RelatedTerm, SearchMode, SearchResult
 
 logger = logging.getLogger(__name__)

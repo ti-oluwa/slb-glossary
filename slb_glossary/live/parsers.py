@@ -79,6 +79,41 @@ TERM_IMAGE_CAPTION_SELECTOR = ".bordered-img .desc"
 """Caption text accompanying `TERM_IMAGE_SELECTOR`, scoped the same way."""
 
 
+INVISIBLE_CHAR_REPLACEMENTS: dict[str, str] = {
+    "\u00a0": " ",  # non-breaking space - renders as a space, but isn't
+    # treated as one by whitespace-based splitting/matching, so it can
+    # silently break a word-boundary search or just look like a stray
+    # gap in a definition. Common in scraped web text (browsers insert
+    # it next to units, inline elements, etc.).
+    "\u200b": "",  # zero-width space
+    "\ufeff": "",  # zero-width no-break space / byte-order mark
+    "\u00ad": "",  # soft hyphen - invisible unless the browser wrapped a line there
+}
+
+
+def clean_text(text: str) -> str:
+    """
+    Replace/remove invisible characters DOM text extraction can leave behind.
+
+    Most commonly U+00A0 (non-breaking space) which is visually identical to a
+    normal space, but not treated as whitespace by string
+    splitting/matching, so it can silently break a word-boundary search
+    or just look like a stray gap in a definition. Also handles a few
+    other invisible characters that turn up in scraped web content for
+    similar reasons. See `INVISIBLE_CHAR_REPLACEMENTS`.
+
+    Only touches characters invisible in normal rendering and doesn't
+    collapse legitimate internal whitespace or change casing.
+
+    :param text: Raw text extracted from the page.
+    :return: `text` with invisible characters replaced/removed and ends trimmed.
+    """
+    for char, replacement in INVISIBLE_CHAR_REPLACEMENTS.items():
+        if char in text:
+            text = text.replace(char, replacement)
+    return text.strip()
+
+
 async def get_element_text(page: Page, selector: str, *, timeout: float = 5_000) -> str:
     """
     Return the trimmed text content of the first element matching `selector`.
@@ -95,7 +130,7 @@ async def get_element_text(page: Page, selector: str, *, timeout: float = 5_000)
     except Exception as exc:
         logger.debug("Selector %r had no text within %sms", selector, timeout, exc_info=exc)
         return ""
-    return (text or "").strip()
+    return clean_text(text or "")
 
 
 async def get_facet_topics(page: Page) -> dict[str, int]:
@@ -129,7 +164,7 @@ async def get_facet_topics(page: Page) -> dict[str, int]:
     topics: dict[str, int] = {}
     for name, count in entries:
         try:
-            topics[name] = parse_int(count)
+            topics[clean_text(name)] = parse_int(clean_text(count))
         except ValueError:
             logger.debug("Could not parse term count %r for topic %r", count, name)
             continue
@@ -247,9 +282,10 @@ async def get_term_detail_blocks(page: Page) -> list[list[TermBlock]]:
     return [
         [
             TermBlock(
-                text=block["text"],
+                text=clean_text(block["text"]),
                 links=tuple(
-                    RelatedTerm(term=link["term"], url=link["url"]) for link in block["links"]
+                    RelatedTerm(term=clean_text(link["term"]), url=link["url"])
+                    for link in block["links"]
                 ),
             )
             for block in section
@@ -302,7 +338,7 @@ async def get_term_images(page: Page) -> list[TermImage | None]:
         return []
 
     return [
-        TermImage(url=urljoin(BASE_URL, section["src"]), caption=section["caption"])
+        TermImage(url=urljoin(BASE_URL, section["src"]), caption=clean_text(section["caption"]))
         if section is not None
         else None
         for section in sections

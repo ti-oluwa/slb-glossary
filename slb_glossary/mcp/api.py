@@ -21,20 +21,27 @@ server = app.server(...)
 
 import asyncio
 import contextlib
-import dataclasses
 import importlib
 import inspect
 import logging
+import math
 import typing
 
+from fastmcp.server.auth import require_scopes
 from fastmcp.server.context import Context
+from fastmcp.server.dependencies import get_access_token
+from fastmcp.server.middleware import AuthMiddleware, Middleware, MiddlewareContext
+from fastmcp.server.middleware.rate_limiting import (
+    RateLimitingMiddleware,
+    SlidingWindowRateLimitingMiddleware,
+)
 from fastmcp.server.server import FastMCP
 
 from slb_glossary.constants import constants
 from slb_glossary.logging import configure_logging
-from slb_glossary.mcp.config import MCPConfig
+from slb_glossary.mcp.auth import Principal, get_principal_from_token
+from slb_glossary.mcp.config import Auth, MCPConfig, RateLimit, RateLimitAlgorithm, RateLimitScope
 from slb_glossary.mcp.middleware import MCPMiddleware
-from slb_glossary.mcp.ratelimit import SlidingWindowRateLimiter
 from slb_glossary.mcp.runtime import Runtime
 from slb_glossary.mcp.tools import DEFAULT_INSTRUCTIONS, ToolSpec, build_tool_specs
 from slb_glossary.mcp.types import NamedComponent
@@ -42,6 +49,49 @@ from slb_glossary.mcp.types import NamedComponent
 logger = logging.getLogger(__name__)
 
 __all__ = ["MCPApp", "load_app"]
+
+
+def get_rate_limit_key(scope: RateLimitScope, principal: Principal, tool_name: str) -> str:
+    if scope is RateLimitScope.GLOBAL:
+        return "global"
+    if scope is RateLimitScope.CLIENT:
+        return principal.id
+    if scope is RateLimitScope.TOOL:
+        return tool_name
+    assert scope is RateLimitScope.CLIENT_TOOL, f"Unexpected RateLimitScope member {scope!r}."
+    return f"{principal.id}:{tool_name}"
+
+
+def _build_rate_limit_middleware(config: RateLimit) -> Middleware | None:
+    """Build the FastMCP rate-limiting middleware `config` describes, or `None` if disabled."""
+    if not config.enabled:
+        return None
+
+    def get_client_id(context: MiddlewareContext) -> str:
+        tool_name = getattr(context.message, "name", "<unknown>")
+        principal = get_principal_from_token(get_access_token())
+        return get_rate_limit_key(config.scope, principal, tool_name)
+
+    if config.algorithm is RateLimitAlgorithm.TOKEN_BUCKET:
+        return RateLimitingMiddleware(
+            max_requests_per_second=config.limit / config.window,
+            burst_capacity=config.limit,
+            get_client_id=get_client_id,
+        )
+
+    window_minutes = max(1, math.ceil(config.window / 60))
+    return SlidingWindowRateLimitingMiddleware(
+        max_requests=config.limit,
+        window_minutes=window_minutes,
+        get_client_id=get_client_id,
+    )
+
+
+def _build_authorization_middleware(config: Auth) -> Middleware | None:
+    """Build FastMCP's scope-based authorization middleware for `config.required_scopes`, if any."""
+    if not config.required_scopes:
+        return None
+    return AuthMiddleware(auth=require_scopes(*config.required_scopes))
 
 
 class MCPApp(NamedComponent):
@@ -71,24 +121,36 @@ class MCPApp(NamedComponent):
         """
         Build (if not already built) and return the underlying `fastmcp.FastMCP` server.
 
-        Idempotent: repeated calls return the same instance. Building
-        registers every tool `self.config.resolve_tools()` selects and
-        attaches `slb_glossary.mcp.middleware.MCPMiddleware`, but does
-        not open any resources yet (database/session). That happens in `start()`.
+        Idempotent. Repeated calls return the same instance.
+
+        Building registers every tool `self.config.resolve_tools()` selects and
+        attaches `slb_glossary.mcp.middleware.MCPMiddleware` (hooks and
+        call logging) plus, when configured, FastMCP's own scope-based
+        authorization (`self.config.auth.required_scopes`) and
+        rate-limiting (`self.config.rate_limit`) middleware.
+
+        This does not open any resources yet (database/session). That happens in `start()`.
         """
         if self._server is not None:
             return self._server
 
-        self._ensure_rate_limiter()
-
         from slb_glossary import __version__
+
+        middleware: list[Middleware] = [MCPMiddleware(self.config)]
+        authorization_middleware = _build_authorization_middleware(self.config.auth)
+        if authorization_middleware is not None:
+            middleware.append(authorization_middleware)
+
+        rate_limit_middleware = _build_rate_limit_middleware(self.config.rate_limit)
+        if rate_limit_middleware is not None:
+            middleware.append(rate_limit_middleware)
 
         kwargs = {
             "name": self.config.server.name,
             "version": self.config.server.version or __version__,
             "instructions": self.config.server.instructions or DEFAULT_INSTRUCTIONS,
             "auth": self.config.auth.provider,
-            "middleware": [MCPMiddleware(self.config)],
+            "middleware": middleware,
             **server_kwargs,
         }
         server = FastMCP(**kwargs)
@@ -99,23 +161,13 @@ class MCPApp(NamedComponent):
         self._server = server
         return server
 
-    def _ensure_rate_limiter(self) -> None:
-        """Fill in `RateLimit.limiter` with a default in-memory limiter if left unset."""
-        rate_limit = self.config.rate_limit
-        if rate_limit.enabled and rate_limit.limiter is None:
-            limiter = SlidingWindowRateLimiter(limit=rate_limit.limit, window=rate_limit.window)
-            self.config = dataclasses.replace(
-                self.config, rate_limit=dataclasses.replace(rate_limit, limiter=limiter)
-            )
-            self.runtime.config = self.config
-
     def _add_tool(self, server: FastMCP, spec: ToolSpec) -> None:
         """Wrap `spec.handler` into a `FastMCP` tool function and register it on `server`."""
         args_type = spec.args_type
         timeout = self.config.timeouts.for_tool(spec.name)
         annotations = {"readOnlyHint": not spec.writes, "destructiveHint": spec.writes}
 
-        async def _tool(args: args_type, ctx: Context) -> dict[str, typing.Any]:  # type: ignore[valid-type]
+        async def tool(args: args_type, ctx: Context) -> dict[str, typing.Any]:  # type: ignore[valid-type]
             async def report_progress(count: int, total: int | None) -> None:
                 await ctx.report_progress(progress=count, total=total)
 
@@ -123,10 +175,10 @@ class MCPApp(NamedComponent):
                 args, self.runtime, self.config, report_progress=report_progress
             )
 
-        _tool.__name__ = spec.name
-        _tool.__doc__ = spec.description
+        tool.__name__ = spec.name
+        tool.__doc__ = spec.description
         server.tool(
-            _tool,
+            tool,
             name=spec.name,
             description=spec.description,
             tags=set(spec.tags),

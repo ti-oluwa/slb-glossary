@@ -7,7 +7,7 @@ from collections.abc import Collection
 
 from slb_glossary.constants import constants
 from slb_glossary.local.types import Database
-from slb_glossary.natural_language import clean_query
+from slb_glossary.phrasing import clean_query
 from slb_glossary.types import SearchResult
 from slb_glossary.utils import normalize_text
 

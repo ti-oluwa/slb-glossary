@@ -23,7 +23,7 @@ from slb_glossary.constants import constants
 from slb_glossary.embeddings import build_embed_text, embed, embedding_dim
 from slb_glossary.errors import DatabaseError
 from slb_glossary.local.types import Database
-from slb_glossary.natural_language import clean_query
+from slb_glossary.phrasing import clean_query
 from slb_glossary.types import SearchResult
 
 logger = logging.getLogger(__name__)

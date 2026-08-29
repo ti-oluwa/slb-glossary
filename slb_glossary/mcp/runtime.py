@@ -5,6 +5,7 @@ import contextlib
 import logging
 import pathlib
 import time
+import typing
 from collections.abc import AsyncIterator
 
 from slb_glossary.config import DatabaseOptions
@@ -49,7 +50,7 @@ class Runtime(NamedComponent):
 
     async def start(self) -> None:
         """
-        Perform startup-time work: open a local DB connection (if enabled), eagerly
+        Perform startup-time work. Opens a local DB connection (if enabled), eagerly
         open the live session if `SessionMode.EAGER` is configured, and start the
         idle-session reaper if `idle_timeout` is set.
 
@@ -125,9 +126,20 @@ class Runtime(NamedComponent):
         async with self._session_lock:
             if self._session is None:
                 kwargs = self.config.session.browser.session_kwargs()
+                # Runtime only ever opens a session because a live call is
+                # imminent (EAGER, at startup) or already in flight (LAZY/
+                # PER_CALL, on first/every use). The decision to go live at
+                # all has already been made by the time we get here, so
+                # there's no reason to defer the topics/size load further.
+                # This overrides whatever `initialize` session_kwargs()
+                # otherwise resolved to (the global lazy-by-default, which
+                # exists for `slb_glossary.query`'s own local-vs-live
+                # choice, not for a runtime that's already committed to a
+                # live session).
+                kwargs["initialize"] = True
                 self._session = await open_session(**kwargs)
             self._session_last_used = time.monotonic()
-            return self._session
+            return typing.cast(Session, self._session)
 
     async def _reap_idle_session(self) -> None:
         """Background task. Closes the shared session after it's sat idle past `idle_timeout`."""
@@ -137,7 +149,7 @@ class Runtime(NamedComponent):
             f"`{type(self).__name__}.start()` should never have scheduled this task in that case."
         )
         assert self.config.session.mode is not SessionMode.PER_CALL, (
-            f"[{self.name}] `_reap_idle_session` started under SessionMode.PER_CALL, which never "
+            f"[{self.name}] `_reap_idle_session` started under `SessionMode.PER_CALL`, which never "
             f"maintains a shared session for it to reap; `{type(self).__name__}.start()` should never have "
             f"scheduled this task in that case."
         )
@@ -197,6 +209,9 @@ class Runtime(NamedComponent):
         if self.config.session.mode is SessionMode.PER_CALL:
             async with self._session_semaphore:
                 kwargs = self.config.session.browser.session_kwargs()
+                # A session opened here is about to be used for this call's
+                # live fetch, so there's no reason to defer initialization further.
+                kwargs["initialize"] = True
                 session = await open_session(**kwargs)
                 try:
                     yield db, session

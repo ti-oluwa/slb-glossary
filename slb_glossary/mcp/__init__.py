@@ -8,6 +8,8 @@ The MCP application is fully configurable through `MCPConfig`.
 You can configure which sources are reachable, whether
 local writes are allowed, which tools are built, timeouts, auth, rate
 limiting, hooks, logging, and streaming - see `slb_glossary.mcp.config`.
+Auth and rate limiting are FastMCP's own middleware under the hood, not
+reimplemented here - `MCPConfig` just configures them.
 
 ```python
 from slb_glossary.mcp import MCPApp, MCPConfig
@@ -26,12 +28,10 @@ Requires the `mcp` extra: `pip install slb-glossary[mcp]`.
 from slb_glossary.mcp.api import MCPApp
 from slb_glossary.mcp.auth import (
     ANONYMOUS,
-    AuthBackend,
-    AuthRequest,
-    NullAuth,
     Principal,
-    StaticTokenAuth,
-    import_backend,
+    StaticTokenVerifier,
+    get_principal_from_token,
+    import_provider,
 )
 from slb_glossary.mcp.config import (
     Auth,
@@ -40,6 +40,7 @@ from slb_glossary.mcp.config import (
     Logging,
     MCPConfig,
     RateLimit,
+    RateLimitAlgorithm,
     RateLimitScope,
     ServerInfo,
     SessionAccess,
@@ -50,13 +51,7 @@ from slb_glossary.mcp.config import (
     Tool,
     resolve_tools,
 )
-from slb_glossary.mcp.errors import (
-    AuthenticationError,
-    MCPConfigError,
-    MCPError,
-    RateLimitExceededError,
-)
-from slb_glossary.mcp.ratelimit import RateLimiter, SlidingWindowRateLimiter
+from slb_glossary.mcp.errors import MCPConfigError, MCPError
 from slb_glossary.mcp.runtime import Runtime
 from slb_glossary.mcp.types import (
     AfterToolHook,
@@ -71,9 +66,6 @@ __all__ = [
     "ANONYMOUS",
     "AfterToolHook",
     "Auth",
-    "AuthBackend",
-    "AuthRequest",
-    "AuthenticationError",
     "BeforeToolHook",
     "Hooks",
     "LifecycleHook",
@@ -84,24 +76,22 @@ __all__ = [
     "MCPConfigError",
     "MCPError",
     "NamedComponent",
-    "NullAuth",
     "Principal",
     "RateLimit",
-    "RateLimitExceededError",
+    "RateLimitAlgorithm",
     "RateLimitScope",
-    "RateLimiter",
     "Runtime",
     "ServerInfo",
     "SessionAccess",
     "SessionMode",
-    "SlidingWindowRateLimiter",
     "SourcePolicy",
-    "StaticTokenAuth",
+    "StaticTokenVerifier",
     "Streaming",
     "Timeout",
     "Tool",
     "ToolErrorHook",
     "ToolRunContext",
-    "import_backend",
+    "get_principal_from_token",
+    "import_provider",
     "resolve_tools",
 ]
