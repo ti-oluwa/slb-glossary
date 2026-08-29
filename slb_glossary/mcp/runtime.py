@@ -59,6 +59,7 @@ class Runtime(NamedComponent):
         if self._started:
             return
         self._started = True
+        started_at = time.monotonic()
 
         if self.config.local.enabled:
             await self._open_db()
@@ -75,13 +76,14 @@ class Runtime(NamedComponent):
                 self._reap_idle_session(), name=f"{self.name}:session-reaper"
             )
 
-        logger.info("[%s] Runtime started", self.name)
+        logger.info("[%s] Runtime started in %.3fs", self.name, time.monotonic() - started_at)
 
     async def aclose(self) -> None:
         """Tear down every resource this runtime opened. Safe to call more than once."""
         if self._closed:
             return
         self._closed = True
+        started_at = time.monotonic()
 
         if self._reaper_task is not None:
             self._reaper_task.cancel()
@@ -99,7 +101,7 @@ class Runtime(NamedComponent):
                 await close_db(self._db)
                 self._db = None
 
-        logger.info("[%s] Runtime closed", self.name)
+        logger.info("[%s] Runtime closed in %.3fs", self.name, time.monotonic() - started_at)
 
     async def open_local_db(self) -> Database:
         """
@@ -119,12 +121,17 @@ class Runtime(NamedComponent):
     async def _open_db(self) -> Database:
         async with self._db_lock:
             if self._db is None:
+                opened_at = time.monotonic()
                 self._db = await open_db(get_db_path(self.config.local.database))
+                logger.info(
+                    "[%s] Local database opened in %.3fs", self.name, time.monotonic() - opened_at
+                )
             return self._db
 
     async def _open_session(self) -> Session:
         async with self._session_lock:
             if self._session is None:
+                opened_at = time.monotonic()
                 kwargs = self.config.session.options.session_kwargs()
                 # Runtime only ever opens a session because a live call is
                 # imminent (EAGER, at startup) or already in flight (LAZY/
@@ -138,6 +145,12 @@ class Runtime(NamedComponent):
                 # live session).
                 kwargs["initialize"] = True
                 self._session = await open_session(**kwargs)
+                logger.info(
+                    "[%s] Live session opened in %.3fs (mode=%s)",
+                    self.name,
+                    time.monotonic() - opened_at,
+                    self.config.session.mode.value,
+                )
             self._session_last_used = time.monotonic()
             return typing.cast(Session, self._session)
 
@@ -208,15 +221,27 @@ class Runtime(NamedComponent):
 
         if self.config.session.mode is SessionMode.PER_CALL:
             async with self._session_semaphore:
+                opened_at = time.monotonic()
                 kwargs = self.config.session.options.session_kwargs()
                 # A session opened here is about to be used for this call's
                 # live fetch, so there's no reason to defer initialization further.
                 kwargs["initialize"] = True
                 session = await open_session(**kwargs)
+                logger.debug(
+                    "[%s] Per-call session opened in %.3fs",
+                    self.name,
+                    time.monotonic() - opened_at,
+                )
                 try:
                     yield db, session
                 finally:
+                    closed_at = time.monotonic()
                     await close_session(session)
+                    logger.debug(
+                        "[%s] Per-call session closed in %.3fs",
+                        self.name,
+                        time.monotonic() - closed_at,
+                    )
             return
 
         session = await self._open_session()

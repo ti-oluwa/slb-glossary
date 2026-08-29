@@ -48,8 +48,8 @@ def supports_color() -> bool:
     Whether the banner should include ANSI color.
 
     Off if `NO_COLOR` is set (https://no-color.org, any non-empty value)
-    or stdout isn't a terminal, unless `FORCE_COLOR` is set, so a script 
-    piping this command's output, or a user who's globally disabled color, 
+    or stdout isn't a terminal, unless `FORCE_COLOR` is set, so a script
+    piping this command's output, or a user who's globally disabled color,
     gets plain text rather than raw escape codes.
     """
     if os.environ.get("NO_COLOR"):

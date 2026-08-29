@@ -20,13 +20,19 @@ server = app.server(...)
 """
 
 import asyncio
+import base64
 import contextlib
 import importlib
 import inspect
 import logging
 import math
+import mimetypes
+import pathlib
+import time
 import typing
+from urllib.parse import urlsplit
 
+import mcp.types
 from fastmcp.server.auth import require_scopes
 from fastmcp.server.context import Context
 from fastmcp.server.dependencies import get_access_token
@@ -41,6 +47,7 @@ from slb_glossary.constants import constants
 from slb_glossary.logging import configure_logging
 from slb_glossary.mcp.auth import Principal, get_principal_from_token
 from slb_glossary.mcp.config import Auth, MCPConfig, RateLimit, RateLimitAlgorithm, RateLimitScope
+from slb_glossary.mcp.errors import MCPConfigError
 from slb_glossary.mcp.middleware import MCPMiddleware
 from slb_glossary.mcp.runtime import Runtime
 from slb_glossary.mcp.tools import DEFAULT_INSTRUCTIONS, ToolSpec, build_tool_specs
@@ -48,7 +55,42 @@ from slb_glossary.mcp.types import NamedComponent
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["MCPApp", "load_app"]
+__all__ = ["MCPApp", "load_app", "resolve_icon"]
+
+
+def resolve_icon(logo: str | None) -> list[mcp.types.Icon] | None:
+    """
+    Resolve `slb_glossary.mcp.config.ServerInfo.logo` into an `icons` list for `fastmcp.FastMCP`.
+
+    An `http(s)://` URL is passed straight through as the icon's `src`.
+    Anything else is treated as a local file path and inlined as a
+    base64 data URI, so the icon doesn't depend on that file still being
+    reachable by whatever eventually connects, only on it existing
+    right now, at server-build time.
+
+    :param logo: `ServerInfo.logo`.
+    :return: A single-item icon list, or `None` if `logo` is `None`.
+    :raises MCPConfigError: If `logo` looks like a local path but doesn't
+        exist or can't be read.
+    """
+    if logo is None:
+        return None
+
+    if urlsplit(logo).scheme in ("http", "https"):
+        mime_type, _ = mimetypes.guess_type(logo)
+        return [mcp.types.Icon(src=logo, mimeType=mime_type)]
+
+    path = pathlib.Path(logo)
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise MCPConfigError(f"Could not read `server.logo` at {path}: {exc}") from exc
+
+    mime_type, _ = mimetypes.guess_type(path.name)
+    mime_type = mime_type or "application/octet-stream"
+    encoded = base64.b64encode(data).decode("ascii")
+    logger.debug("Inlined server.logo (%s, %d byte(s)) from %s", mime_type, len(data), path)
+    return [mcp.types.Icon(src=f"data:{mime_type};base64,{encoded}", mimeType=mime_type)]
 
 
 def get_rate_limit_key(scope: RateLimitScope, principal: Principal, tool_name: str) -> str:
@@ -127,7 +169,8 @@ class MCPApp(NamedComponent):
         attaches `slb_glossary.mcp.middleware.MCPMiddleware` (hooks and
         call logging) plus, when configured, FastMCP's own scope-based
         authorization (`self.config.auth.required_scopes`) and
-        rate-limiting (`self.config.rate_limit`) middleware.
+        rate-limiting (`self.config.rate_limit`) middleware. Also
+        resolves `self.config.server.logo` into an icon (see `resolve_icon`) if set.
 
         This does not open any resources yet (database/session). That happens in `start()`.
         """
@@ -140,25 +183,42 @@ class MCPApp(NamedComponent):
         authorization_middleware = _build_authorization_middleware(self.config.auth)
         if authorization_middleware is not None:
             middleware.append(authorization_middleware)
+            logger.info(
+                "[%s] Authorization enabled: required scopes = %s",
+                self.name,
+                sorted(self.config.auth.required_scopes),
+            )
 
         rate_limit_middleware = _build_rate_limit_middleware(self.config.rate_limit)
         if rate_limit_middleware is not None:
             middleware.append(rate_limit_middleware)
+            logger.info(
+                "[%s] Rate limiting enabled: %d req / %.0fs, algorithm=%s, scope=%s",
+                self.name,
+                self.config.rate_limit.limit,
+                self.config.rate_limit.window,
+                self.config.rate_limit.algorithm.value,
+                self.config.rate_limit.scope.value,
+            )
 
         kwargs = {
             "name": self.config.server.name,
             "version": self.config.server.version or __version__,
             "instructions": self.config.server.instructions or DEFAULT_INSTRUCTIONS,
             "auth": self.config.auth.provider,
+            "icons": resolve_icon(self.config.server.logo),
             "middleware": middleware,
             **server_kwargs,
         }
         server = FastMCP(**kwargs)
 
+        tool_count = 0
         for spec in build_tool_specs(self.config):
             self.add_tool(server, spec)
+            tool_count += 1
 
         self._server = server
+        logger.info("[%s] Server built: %d tool(s) registered", self.name, tool_count)
         return server
 
     def add_tool(self, server: FastMCP, spec: ToolSpec) -> None:
@@ -166,14 +226,34 @@ class MCPApp(NamedComponent):
         args_type = spec.args_type
         timeout = self.config.timeouts.for_tool(spec.name)
         annotations = {"readOnlyHint": not spec.writes, "destructiveHint": spec.writes}
+        log_calls = self.config.logging.log_tool_calls
 
         async def tool(args: args_type, ctx: Context) -> dict[str, typing.Any]:  # type: ignore[valid-type]
             async def report_progress(count: int, total: int | None) -> None:
                 await ctx.report_progress(progress=count, total=total)
 
-            return await spec.handler(
-                args, self.runtime, self.config, report_progress=report_progress
-            )
+            started_at = time.monotonic()
+            try:
+                result = await spec.handler(
+                    args, self.runtime, self.config, report_progress=report_progress
+                )
+            except Exception:
+                if log_calls:
+                    logger.debug(
+                        "[%s] %s handler raised after %.3fs",
+                        self.name,
+                        spec.name,
+                        time.monotonic() - started_at,
+                    )
+                raise
+            if log_calls:
+                logger.debug(
+                    "[%s] %s handler completed in %.3fs",
+                    self.name,
+                    spec.name,
+                    time.monotonic() - started_at,
+                )
+            return result
 
         tool.__name__ = spec.name
         tool.__doc__ = spec.description
@@ -193,18 +273,24 @@ class MCPApp(NamedComponent):
 
         Idempotent: safe to call before `run_async`, which also calls this.
         """
+        started_at = time.monotonic()
         self.configure_logging()
         await self.runtime.start()
         for hook in self.config.hooks.on_startup:
             await hook()
-        logger.info("[%s] MCP application started", self.name)
+        logger.info(
+            "[%s] MCP application started in %.3fs", self.name, time.monotonic() - started_at
+        )
 
     async def aclose(self) -> None:
         """Tear down every resource opened by `start()` and run `Hooks.on_shutdown` hooks."""
+        started_at = time.monotonic()
         await self.runtime.aclose()
         for hook in self.config.hooks.on_shutdown:
             await hook()
-        logger.info("[%s] MCP application closed", self.name)
+        logger.info(
+            "[%s] MCP application closed in %.3fs", self.name, time.monotonic() - started_at
+        )
 
     def configure_logging(self) -> None:
         """

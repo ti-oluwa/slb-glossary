@@ -519,6 +519,18 @@ class ServerInfo(Updatable):
     See `slb_glossary.mcp.tools.DEFAULT_INSTRUCTIONS`.
     """
 
+    logo: str | None = None
+    """
+    An icon shown to MCP clients that render one: a local file path, or
+    an `http(s)://` URL. `None` (the default): no icon advertised.
+
+    A local path is read and inlined as a base64 data URI when the
+    server is built (`MCPApp.server`), so the icon doesn't depend on
+    that file still being reachable by whatever eventually connects. 
+    It's only read once, at server-build time. A URL is passed through
+    as-is. See `slb_glossary.mcp.api.resolve_icon`.
+    """
+
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
 class MCPConfig(Updatable):

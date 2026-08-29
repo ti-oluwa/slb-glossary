@@ -25,7 +25,7 @@ Or from the command line: `slb mcp serve` (see `slb_glossary.cli.commands.mcp`).
 Requires the `mcp` extra: `pip install slb-glossary[mcp]`.
 """
 
-from slb_glossary.mcp.api import MCPApp
+from slb_glossary.mcp.api import MCPApp, resolve_icon
 from slb_glossary.mcp.auth import (
     ANONYMOUS,
     Principal,
@@ -93,5 +93,6 @@ __all__ = [
     "ToolRunContext",
     "get_principal_from_token",
     "import_provider",
+    "resolve_icon",
     "resolve_tools",
 ]
