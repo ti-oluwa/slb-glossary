@@ -250,7 +250,7 @@ def serve(
     if language is not None:
         session_browser = session_browser.update(language=Language(language).value)
 
-    session = SessionAccess(enabled=not no_live, browser=session_browser)
+    session = SessionAccess(enabled=not no_live, options=session_browser)
     local = LocalAccess(
         enabled=not no_local, allow_write=allow_write, database=glossary_config.local
     )

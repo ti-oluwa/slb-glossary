@@ -1,6 +1,6 @@
 # SLB Energy Glossary
 
-A small Python library and CLI for searching the [SLB Energy Glossary](https://glossary.slb.com/), in English and Spanish. It can search the live site directly, keep a local SQLite cache of terms you've already looked up, or do both and prefer whichever already has an answer.
+A Python library and CLI for searching the [SLB Energy Glossary](https://glossary.slb.com/), in English and Spanish. It can search the live site directly, keep a local SQLite cache of terms you've already looked up, or do both and prefer whichever already has an answer.
 
 This started as a hobby project to help with SPE PetroBowl prep (see [Credits](#credits)), so don't expect enterprise polish. It does what it needs to do and tries to do that reliably.
 
@@ -191,7 +191,7 @@ See [Command-line interface](#command-line-interface) for the full command refer
 
 ### `Session`: one session, many searches
 
-`slb_glossary` has no `Glossary` class. Instead, `open_session` (or the `session` context manager) launches a browser and loads the glossary's topic list once, returning a `Session`. That's a plain dataclass holding the live browser session and that metadata. Every live search function takes this session as its first argument.
+`slb_glossary` has no central class to initialize. Instead, `open_session` (or the `session` context manager) launches a browser and loads the glossary's topic list once, returning a `Session`. That's a plain dataclass holding the live browser session and that metadata. Every live search function takes this session as its first argument.
 
 ```python
 session = await slb.open_session(language=slb.Language.ENGLISH)
@@ -266,6 +266,7 @@ class SearchResult(typing.NamedTuple):
     image: str | None = None
     image_caption: str | None = None
     related: tuple[RelatedTerm, ...] | None = None
+    language: str = "en"
 ```
 
 It's a plain `NamedTuple` underneath, so indexing and unpacking work as you'd expect, and if you already know a namedtuple's own methods, those work too. It also adds `result.fields` and `result.asdict()`, which is what [`slb_glossary.writers`](#saving-results-to-a-file-slb_glossarywriters) and the CLI's output actually use. `related` holds `RelatedTerm(term, url)` pairs parsed from a definition's "See related terms" list, when present.
