@@ -125,7 +125,7 @@ class Runtime(NamedComponent):
     async def _open_session(self) -> Session:
         async with self._session_lock:
             if self._session is None:
-                kwargs = self.config.session.browser.session_kwargs()
+                kwargs = self.config.session.options.session_kwargs()
                 # Runtime only ever opens a session because a live call is
                 # imminent (EAGER, at startup) or already in flight (LAZY/
                 # PER_CALL, on first/every use). The decision to go live at
@@ -208,7 +208,7 @@ class Runtime(NamedComponent):
 
         if self.config.session.mode is SessionMode.PER_CALL:
             async with self._session_semaphore:
-                kwargs = self.config.session.browser.session_kwargs()
+                kwargs = self.config.session.options.session_kwargs()
                 # A session opened here is about to be used for this call's
                 # live fetch, so there's no reason to defer initialization further.
                 kwargs["initialize"] = True

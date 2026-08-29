@@ -21,7 +21,7 @@ from collections.abc import Iterable, Mapping
 
 from fastmcp.server.auth import AuthProvider
 
-from slb_glossary.config import BrowserSessionOptions, DatabaseOptions
+from slb_glossary.config import DatabaseOptions, SessionOptions
 from slb_glossary.logging import SinksSpec
 from slb_glossary.mcp.errors import MCPConfigError
 from slb_glossary.mcp.types import AfterToolHook, BeforeToolHook, LifecycleHook, ToolErrorHook
@@ -218,11 +218,11 @@ class SessionAccess(Updatable):
     concurrent tool calls can each want their own session.
     """
 
-    browser: BrowserSessionOptions = dataclasses.field(default_factory=BrowserSessionOptions)
+    options: SessionOptions = dataclasses.field(default_factory=SessionOptions)
     """
-    Options forwarded to `slb_glossary.live.browser.open_session` -
+    Options forwarded to `slb_glossary.live.browser.open_session`. These include 
     language, browser type, headless, resource blocking, retry policy, and so on.
-    See `slb_glossary.config.BrowserSessionOptions`.
+    See `slb_glossary.config.SessionOptions`.
     """
 
 
@@ -655,7 +655,7 @@ class MCPConfig(Updatable):
         Equivalent to `MCPConfig()` when `language` is omitted. `language`
         exists as a shortcut for the one setting that's awkward to reach
         even through `.update(...)` alone, since it's nested three levels
-        down (`session.browser.language`):
+        down (`session.options.language`):
 
         ```python
         config = MCPConfig.default(language="es")
@@ -663,7 +663,7 @@ class MCPConfig(Updatable):
         # instead of:
         config = MCPConfig.default().update(
             session=SessionAccess().update(
-                browser=BrowserSessionOptions().update(language="es"),
+                options=SessionOptions().update(language="es"),
             ),
         )
         ```
@@ -673,7 +673,7 @@ class MCPConfig(Updatable):
             (the default) leaves `SessionAccess.browser.language` at its
             own default (`"en"`).
         :return: A fresh `MCPConfig`, defaults throughout except for
-            `session.browser.language` if `language` was given.
+            `session.options.language` if `language` was given.
         :raises MCPConfigError: If `language` is a string that isn't a
             valid `Language` value.
         """
@@ -694,6 +694,6 @@ class MCPConfig(Updatable):
 
         return config.update(
             session=config.session.update(
-                browser=config.session.browser.update(language=language_value),
+                browser=config.session.options.update(language=language_value),
             ),
         )

@@ -6,8 +6,8 @@ config = slb_mcp.MCPConfig(
     session=slb_mcp.SessionAccess(
         enabled=True,
         max_concurrent=3,
-        mode=slb_mcp.SessionMode.EAGER,
-        browser=slb.config.BrowserSessionOptions(
+        mode=slb_mcp.SessionMode.LAZY,
+        options=slb.config.SessionOptions(
             use_stealth=False,
             log_sink=slb.log.FileSink("./example.mcp.browser.log"),
         ),
@@ -16,7 +16,9 @@ config = slb_mcp.MCPConfig(
     tools=slb_mcp.Tool.ALL,
     streaming=slb_mcp.Streaming(allow_override=False),
     timeouts=slb_mcp.Timeout(default=300),
-    logging=slb_mcp.Logging(sinks=[slb.log.FileSink("./example.mcp.log"), slb.log.StderrSink()]),
+    logging=slb_mcp.Logging(
+        sinks=[slb.log.FileSink("./example.mcp.log"), slb.log.StderrSink()], level="debug"
+    ),
 )
 app = slb_mcp.MCPApp(config)
 

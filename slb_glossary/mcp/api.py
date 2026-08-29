@@ -156,12 +156,12 @@ class MCPApp(NamedComponent):
         server = FastMCP(**kwargs)
 
         for spec in build_tool_specs(self.config):
-            self._add_tool(server, spec)
+            self.add_tool(server, spec)
 
         self._server = server
         return server
 
-    def _add_tool(self, server: FastMCP, spec: ToolSpec) -> None:
+    def add_tool(self, server: FastMCP, spec: ToolSpec) -> None:
         """Wrap `spec.handler` into a `FastMCP` tool function and register it on `server`."""
         args_type = spec.args_type
         timeout = self.config.timeouts.for_tool(spec.name)
@@ -193,7 +193,7 @@ class MCPApp(NamedComponent):
 
         Idempotent: safe to call before `run_async`, which also calls this.
         """
-        self._configure_logging()
+        self.configure_logging()
         await self.runtime.start()
         for hook in self.config.hooks.on_startup:
             await hook()
@@ -206,7 +206,7 @@ class MCPApp(NamedComponent):
             await hook()
         logger.info("[%s] MCP application closed", self.name)
 
-    def _configure_logging(self) -> None:
+    def configure_logging(self) -> None:
         """
         Apply `MCPConfig.logging` via `slb_glossary.logging.configure_logging`.
         """

@@ -28,11 +28,11 @@ else:
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "BrowserSessionOptions",
     "Config",
     "DatabaseOptions",
     "OutputOptions",
     "RetryOptions",
+    "SessionOptions",
 ]
 
 
@@ -93,7 +93,7 @@ class RetryOptions(Updatable):
 
 
 @dataclasses.dataclass(slots=True, kw_only=True)
-class BrowserSessionOptions(Updatable):
+class SessionOptions(Updatable):
     """Serializable counterpart of the options `slb_glossary.browser.open_session` takes."""
 
     language: str = "en"
@@ -160,7 +160,7 @@ class BrowserSessionOptions(Updatable):
     """
     Whether to apply Playwright stealth patches to the browser context.
     `None` (the default) resolves this automatically instead, based on
-    `session.headless`: applied when headless, skipped when headed.
+    `session.headless` and applied when headless, skipped when headed.
     Stealth patches have been observed to be counterproductive in headed
     mode, making the glossary consistently harder to scrape reliably,
     not easier. See `slb_glossary.browser.open_session`.
@@ -358,7 +358,7 @@ def _strip_none(data: typing.Any) -> typing.Any:
     TOML has no null type, so `tomlkit.dumps` raises on any `None` value
     anywhere in the structure. `Config.to_dict()` includes several
     `Optional` fields that default to `None` (e.g.
-    `BrowserSessionOptions.executable_path`, `DatabaseOptions.data_dir`), so those
+    `SessionOptions.executable_path`, `DatabaseOptions.data_dir`), so those
     need to be dropped rather than written before a TOML dump can succeed.
 
     A dropped key round-trips safely as `_load_dataclass` falls back
@@ -431,7 +431,7 @@ class Config(Updatable):
     ```
     """
 
-    session: BrowserSessionOptions = dataclasses.field(default_factory=BrowserSessionOptions)
+    session: SessionOptions = dataclasses.field(default_factory=SessionOptions)
     """Browser/session options."""
 
     local: DatabaseOptions = dataclasses.field(default_factory=DatabaseOptions)
@@ -601,7 +601,7 @@ def _cast(value: typing.Any, *, like: typing.Any, field_type: typing.Any = None)
         `dataclasses.Field.type`), used only as a fallback when `like` is
         `None`. This matters for a field that legitimately defaults to
         `None` while still being fundamentally `bool`-shaped, e.g.
-        `BrowserSessionOptions.use_stealth: bool | None = None`, whose
+        `SessionOptions.use_stealth: bool | None = None`, whose
         `None` means "resolve automatically" rather than "no type at
         all" - without this, `--set session.use_stealth false` would
         silently store the literal (truthy!) string `"false"` instead of
