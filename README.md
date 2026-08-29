@@ -29,7 +29,7 @@ This README is a tutorial, not a full API reference. It introduces what each par
     - [Querying the local database](#querying-the-local-database)
     - [Fuzzy topic matching](#fuzzy-topic-matching)
     - [Importing your own data](#importing-your-own-data)
-    - [Bring-your-own-embedding vector search](#bring-your-own-embedding-vector-search)
+    - [Semantic and hybrid search](#semantic-and-hybrid-search)
   - [Source-aware queries: `slb_glossary.query`](#source-aware-queries-slb_glossaryquery)
   - [Configuration: `slb_glossary.config`](#configuration-slb_glossaryconfig)
   - [Saving results to a file: `slb_glossary.store`](#saving-results-to-a-file-slb_glossarystore)
@@ -82,6 +82,7 @@ Optional extras, installed as needed:
 | `config`| TOML/YAML config files (`config.toml`/`.yaml`). JSON always works with no extra. | `uv add "slb-glossary[config]"`    |
 | `tui`   | The interactive `--tui` mode for every CLI command.                   | `uv add "slb-glossary[tui]"`       |
 | `mcp`   | The MCP server (`slb mcp serve`, `slb_glossary.mcp`). See [MCP server](#mcp-server-slb_glossarymcp). | `uv add "slb-glossary[mcp]"`       |
+| `semantic` | Semantic and hybrid local search (`mode="semantic"`/`"hybrid"`). See [Semantic and hybrid search](#semantic-and-hybrid-search). | `uv add "slb-glossary[semantic]"`  |
 | `all`   | Every extra above.                                                     | `uv add "slb-glossary[all]"`       |
 
 ### As a CLI tool
@@ -349,10 +350,10 @@ topics = await slb.local.get_topics(db)  # {topic: term_count}
 total = await slb.local.count(db)
 ```
 
-`search` ranks results best match first. SQLite FTS5 picks candidates, then each one is scored directly against your query so an actual term-name match always beats a word that just happens to show up in a definition. If you need the scores themselves, to decide if the results are good enough to trust for example, use `scored_search` instead, which returns `(result, score)` pairs, `score` from `0.0` to `1.0`:
+`search` ranks results best match first. By default it uses lexical (bm25 full-text) ranking: SQLite FTS5 picks candidates, then each one is scored directly against your query so an actual term-name match always beats a word that just happens to show up in a definition. Pass `mode="semantic"` or `mode="hybrid"` to rank by embedding similarity instead, or both fused. See [Semantic and hybrid search](#semantic-and-hybrid-search) below. Pass `scored=True` to get each result's score alongside it, as `(result, score)` pairs, instead of calling the mode's underlying function separately:
 
 ```python
-for result, score in await slb.local.scored_search(db, "porosity", limit=10):
+for result, score in await slb.local.search(db, "porosity", limit=10, scored=True):
     print(f"{score:.2f}", result.term)
 ```
 
@@ -382,27 +383,44 @@ await slb.local.load_file(
     "my_terms.csv",
     term_field="Term",
     definition_field="Definition",
-    embedding_field="Embedding",  # optional, see below
+    topic_field="Topic",
 )
 ```
 
-Rows need at least a term name. Every other field is optional. A row with no URL gets a stable synthetic `local://imported/<slug>` one, since `url` is the database's primary key.
+Rows need at least a term name, matched via `term_field`. Every other field (`definition_field`, `topic_field`, `url_field`, `grammatical_label_field`, `language_field`, `image_field`, `image_caption_field`, `related_field`) is optional and can be set to `None` to skip it entirely. A row with no URL gets a stable synthetic `local://imported/<slug>` one, since `url` is half of the database's primary key (the other half being `topic`). On the CLI, this is `slb-glossary local import my_terms.csv`. The reverse direction, writing what's stored locally back out to a file (optionally ranked by a search, rather than a raw dump) is `slb-glossary local export`, backed by [`slb_glossary.store`](#saving-results-to-a-file-slb_glossarystore).
 
-### Bring-your-own-embedding vector search
+### Semantic and hybrid search
 
-`slb_glossary.local` doesn't bundle an embedding model, since that would drag in a heavy ML dependency most callers won't use. Instead, `slb_glossary.local.vectors` stores whatever embedding vector you've already computed and ranks stored vectors by cosine similarity against a query vector you supply:
+Plain `search`/`lexical_search` only match terms that share words with your query. `slb_glossary.local` also has an embedding-based semantic search, and a hybrid mode that fuses the two, for when a paraphrase or a related concept should surface a term even if it shares no words with the query. Both need the `semantic` extra (`uv add "slb-glossary[semantic]"`), which pulls in [`model2vec`](https://github.com/MinishLab/model2vec) for embeddings and [`sqlite-vec`](https://github.com/asg017/sqlite-vec) for nearest-neighbor search inside SQLite itself. `slb_glossary` manages the embedding model for you: it's a small, package-chosen static model, downloaded once from Hugging Face and cached locally by `model2vec`, not something you bring or configure per call.
+
+Before semantic or hybrid search can find anything, the terms already in your local database need embedding, with `embed_terms`:
 
 ```python
-await slb.local.upsert_vector(db, result.url, my_embedding, model="text-embedding-3-small")
-
-matches = await slb.local.vector_search(
-    db, my_query_embedding, model="text-embedding-3-small", limit=5
-)
-for result, similarity in matches:
-    print(f"{similarity:.3f}", result.term)
+await slb.local.embed_terms(db)  # embeds every term not already embedded
 ```
 
-This is a brute-force scan. Fine for a glossary-sized dataset, but not built for million-row corpora.
+Call it again after every sync or import to embed whatever's new; it skips terms already embedded by default (`only_missing=True`), so a repeat call only pays for what changed. There's no CLI command for this step yet; it's Python-only for now.
+
+Once terms are embedded, search with a `mode`:
+
+```python
+# Semantic only: ranked purely by embedding similarity to the query
+matches = await slb.local.vector_search(db, "rock that lets fluid through", limit=5)
+for result, similarity in matches:
+    print(f"{similarity:.3f}", result.term)
+
+# Lexical and semantic, fused by reciprocal rank fusion
+matches = await slb.local.hybrid_search(db, "rock that lets fluid through", limit=5)
+for result, score in matches:
+    print(f"{score:.3f}", result.term)
+
+# Or through the same `search` entrypoint used for plain lexical search
+matches = await slb.local.search(db, "rock that lets fluid through", mode="hybrid", scored=True)
+```
+
+`hybrid_search` still puts an exact or prefix name match ahead of everything else, exactly like lexical search does on its own, so a semantically related but differently named term never outranks the term actually named that. Everything past that tier is ranked by reciprocal rank fusion between the lexical (bm25) and semantic (embedding) orderings; see `constants.rrf_k`/`lexical_weight`/`semantic_weight` to tune the fusion. `slb_glossary.types.SearchMode` (`LEXICAL`, `SEMANTIC`, `HYBRID`) is the enum backing every `mode` argument across the package, including live-result scoring (`slb_glossary.live.score_result`) and [source-aware queries](#source-aware-queries-slb_glossaryquery)'s own `mode` parameter. `constants.default_search_mode` stays `"lexical"` out of the box, so a plain `search(db, query)` call keeps working on a database that's never had `embed_terms` run on it, and without forcing the `semantic` extra on every install.
+
+On the CLI, this is `--mode lexical`/`semantic`/`hybrid` on `slb-glossary search`, `slb-glossary local search`, and `slb-glossary local export`.
 
 ## Source-aware queries: `slb_glossary.query`
 
@@ -422,11 +440,13 @@ At least one of `db` or `session` must be given to every function here, since th
 | `LIVE`           | The live glossary only. Never touches the local database. Requires `session`.                   |
 | `AUTO`    | (Default when both `db` and `session` are given.) Try `db` first. `get_term`, `get_terms_on`, `get_terms_urls`, `get_topics`, `related_terms`, `get_random_term`, and `compare` fall back to `session` if `db` came back with nothing at all. `search` is scored instead of just checked for emptiness, see below. Pass `persist=True` to cache whatever came back live. |
 
-`search`'s `AUTO` behavior goes a step further than the rest. Each local result is scored against the query (`local.scored_search`), and if even the best of them isn't a confident match, `session` is queried too and its results are added on rather than replacing the local ones. `relevance_threshold` (`0.0` to `1.0`, default `0.55`) sets how confident is confident enough. This is what lets a search stay accurate without silently trusting a weak local match just because it happened to return something.
+`search`'s `AUTO` behavior goes a step further than the rest. Each local result is scored against the query (`local.search(..., scored=True)`), and if even the best of them isn't a confident match, `session` is queried too, ahead of the unconfident local results, on the theory that a live result is generally more trustworthy than a local match that wasn't confident enough to stand alone. Local results aren't thrown away though; they still fill out any remaining `limit`, just listed after the live ones. `relevance_threshold` (`0.0` to `1.0`, default `0.55`) sets how confident is confident enough. This is what lets a search stay accurate without silently trusting a weak local match just because it happened to return something.
+
+`search` also takes a `mode` (`"lexical"`, `"semantic"`, or `"hybrid"`, see [Semantic and hybrid search](#semantic-and-hybrid-search)), which scores both a local read and a live one, with one restriction: a live read can't be scored `"hybrid"`, since that needs a whole result set's ranks up front and live results stream in one at a time, so use `"lexical"` or `"semantic"` when a live fetch might happen. Every yielded result carries its `score` on the returned `QueryResult`.
 
 When only one of `db`/`session` is given, `AUTO` simply behaves like whichever of `LOCAL`/`LIVE` that one supports. The available functions mirror `slb_glossary.live`/`slb_glossary.local`'s own shapes. `search`, `get_terms_on`, `get_terms_urls`, and `get_topics` stream/return several results; `get_term`, `related_terms`, and `get_random_term` return one; `compare` looks up several terms at once. Each accepts a `fuzzy=True` flag that, for any local read, tolerates minor misspellings/partial names in `topic` (see [Fuzzy topic matching](#fuzzy-topic-matching); live reads already fuzzy-match topics unconditionally).
 
-`get_term`, `related_terms`, and `get_random_term` return a `QueryResult(value, source, persisted)`, so callers can tell where a result actually came from and whether it was written back to `db`.
+Every function here returns/yields a `QueryResult(value, source, persisted, score)`, so callers can tell where a result actually came from, whether it was written back to `db`, and how it scored.
 
 ## Configuration: `slb_glossary.config`
 
@@ -531,7 +551,7 @@ config = MCPConfig(
 | `session`          | Whether/how the live `Session` is used: `SessionMode.EAGER`/`LAZY`/`PER_CALL`, idle timeout, concurrency, and every `open_session` option (via `browser`). |
 | `local`            | Whether the local database is reachable, and whether **writes** are allowed (`allow_write`, off by default). |
 | `source_policy`    | Which `Source` values (`LOCAL`/`LIVE`/`AUTO`) a tool call may resolve to, and the default when a caller doesn't specify one. |
-| `tools`            | Which tools to build, a `Tool` flag combination, e.g. `Tool.SEARCH | Tool.GET_TERM`, or`Tool.READ_ONLY`/`Tool.ALL`. |
+| `tools`            | Which tools to build, a `Tool` flag combination, e.g. `Tool.SEARCH | Tool.GET_TERM`, or `Tool.READ_ONLY`/`Tool.ALL`. |
 | `timeouts`         | A global per-call timeout, plus per-tool overrides.                                            |
 | `auth`             | An `AuthBackend` for per-call caller identity, and/or a FastMCP `AuthProvider` for transport-level auth. See [Auth, rate limiting, and hooks](#auth-rate-limiting-and-hooks). |
 | `rate_limit`       | Per-client/per-tool request-rate limiting.                                                     |
@@ -645,10 +665,9 @@ Run `slb --help`, or `--help` after any subcommand, for the full set of options.
 
 | Command            | Talks to                       | What it does                                                                                     |
 | -------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `search`             | Local, live, or auto               | Free-text search of the whole glossary. See [Choosing a source](#choosing-a-source---local----live----auto). |
+| `search`             | Local, live, or auto               | Free-text search of the whole glossary, `--mode` for lexical/semantic/hybrid ranking. See [Choosing a source](#choosing-a-source---local----live----auto). |
 | `terms`              | Local, live, or auto               | Every term filed under a topic.                                                                  |
 | `topics list`        | Local, live, or auto               | List every topic (discipline) with term counts.                                                  |
-| `topics refresh`     | Live only                          | Reload the topic list directly from the site.                                                    |
 | `urls list`          | Local, live, or auto               | List term detail-page URLs matching a query/topic/letter.                                        |
 | `urls fetch`         | Live only                          | Fetch every definition on one term detail-page URL.                                               |
 | `define`             | Local, live, or auto               | Look up a single term's definition.                                                               |
@@ -656,18 +675,19 @@ Run `slb --help`, or `--help` after any subcommand, for the full set of options.
 | `compare`            | Local, live, or auto               | Look up several terms side by side.                                                               |
 | `random`             | Local, live, or auto               | Print one or more randomly chosen terms.                                                          |
 | `sync`               | Live, then local                   | Check the browser engine is installed, then refresh the local database.                          |
-| `update`             | Live, then local                   | Refresh the local database, assumes the browser is already installed.                            |
 | `local path`         | Local only                          | Print the resolved database/metadata file paths.                                                 |
 | `local stats`        | Local only                          | Term counts, topic breakdown, and last-sync info.                                                |
-| `local search`       | Local only                          | Full-text search the local database (`--fuzzy` for typo-tolerant `--topic`).                     |
+| `local search`       | Local only                          | Full-text search the local database, `--fuzzy` for typo-tolerant `--topic`, `--mode` for lexical/semantic/hybrid ranking. |
 | `local get`          | Local only                          | Look up a single term by exact name/URL, locally.                                                |
+| `local import`       | Local only                          | Import a CSV/JSON/XLSX file into the local database. See [Importing your own data](#importing-your-own-data). |
+| `local export`       | Local only                          | Write locally stored terms back out to a file, optionally ranked by a search. See [Importing your own data](#importing-your-own-data). |
 | `local flush`        | Local only                          | Delete every stored term, keeping sync history.                                                  |
 | `local reset`        | Local only                          | Flush the database and forget its sync history too.                                              |
 | `config`             | n/a                                | Interactive wizard for the config file (see [Configuration](#configuration-slb_glossaryconfig)). |
 | `install`            | n/a                                | Install/list/remove/update the browser engines patchright launches.                              |
 | `mcp serve`          | n/a                                | Run an MCP server for LLM agents (see [MCP server](#mcp-server-slb_glossarymcp)). Requires the `mcp` extra. |
 
-Every command in the "Local, live, or auto" rows is built on `slb_glossary.query`, so they all take the same `--local`/`--live`/`--auto` trio described below. `topics refresh` and `urls fetch` are the two holdouts that stay live-only by design: a "refresh" is explicitly asking for a fresh copy from the site, and fetching one specific URL doesn't have a meaningful local equivalent. `local search`/`local get` read the cached copy exclusively, with no live fallback at all. Reach for those when you want a hard guarantee that nothing will touch the network.
+Every command in the "Local, live, or auto" rows is built on `slb_glossary.query`, so they all take the same `--local`/`--live`/`--auto` trio described below. `urls fetch` is a holdout that stays live-only by design, since fetching one specific URL doesn't have a meaningful local equivalent. `local search`/`local get`/`local import`/`local export` read or write the local copy exclusively, with no live fallback at all. Reach for those when you want a hard guarantee that nothing will touch the network. Reloading the topic list directly from the site (`slb.refresh_topics(session)`) is Python-only for now; there's no CLI subcommand for it yet.
 
 ### Choosing a source: `--local` / `--live` / `--auto`
 
@@ -721,15 +741,17 @@ A few things `slb_glossary` does on its own to keep things fast. Image, font, an
 
 The rest is on you, and it's mostly about not paying for a browser more than once. Open one `Session` and reuse it for every live search you need instead of opening a new one per query. Most of a session's cost is the one-time browser launch and topic fetch. A session drives a single browser page, though, so it isn't safe to share across concurrent coroutines. For parallel searches, either open one session per task, or use a function's `concurrency` argument to open extra pages on the same session (keep this modest, it's still one site being asked for more at once).
 
-Past that, lean on the local database. `slb_glossary.query`'s `Source.AUTO` (the CLI's `--auto`, the default) tries the local database first, so a search you've already cached costs nothing beyond an SQLite read on a repeat run and only touches the network the first time. `search` specifically only trusts that local read alone if its best match is actually a good one (see `relevance_threshold` in [Source-aware queries](#source-aware-queries-slb_glossaryquery)). If it isn't, it augments with a live search instead of pretending the network step isn't needed, but the results still favor whatever's already local. If you know you'll need a topic or query a lot, `slb-glossary local sync`/`update` (or `slb_glossary.local.sync`) let you build up the cache ahead of time in one batch, so day-to-day lookups afterward stay entirely local.
+Past that, lean on the local database. `slb_glossary.query`'s `Source.AUTO` (the CLI's `--auto`, the default) tries the local database first, so a search you've already cached costs nothing beyond an SQLite read on a repeat run and only touches the network the first time. `search` specifically only trusts that local read alone if its best match is actually a good one (see `relevance_threshold` in [Source-aware queries](#source-aware-queries-slb_glossaryquery)). If it isn't, it augments with a live search instead of pretending the network step isn't needed, but the results still favor whatever's already local. If you know you'll need a topic or query a lot, `slb-glossary sync` (or `slb_glossary.local.sync`) lets you build up the cache ahead of time in one batch, so day-to-day lookups afterward stay entirely local.
 
 ## Exceptions
 
 - `slb_glossary.NetworkError`: the glossary site could not be reached.
 - `slb_glossary.BrowserError`: the browser failed to launch or crashed outside of a network issue, including an unsupported `browser_type`.
+- `slb_glossary.SessionNotInitializedError`: a live search function was called on a `Session` whose topics/size haven't been loaded yet. Call `session.initialize()` first, or open it with `initialize=True`.
 - `slb_glossary.ParsingError`: reserved for glossary pages that don't match the markup the parser expects.
 - `slb_glossary.ConfigError`: a config file or dotted key (`Config.get`/`Config.set`) was invalid.
-- `slb_glossary.DatabaseError`: the local database failed to open, query, or import from a file.
+- `slb_glossary.DatabaseError`: the local database failed to open, query, or import from a file, or (for `mode="semantic"`/`"hybrid"`) `sqlite-vec` isn't installed or its extension couldn't be loaded.
+- `slb_glossary.EmbeddingError`: `slb_glossary.local` couldn't compute a text embedding for semantic search, e.g. the `semantic` extra isn't installed.
 - `slb_glossary.QueryError`: `slb_glossary.query` can't satisfy a lookup with the source(s) it was given (e.g. `Source.LOCAL` with no `db`).
 - `slb_glossary.LoggingError`: a custom `log_sink` (see [Logging](#logging)) couldn't be set up.
 - `slb_glossary.store.UnsupportedFormatError`: `save` was asked for a format with no registered writer.
