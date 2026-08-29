@@ -4,7 +4,7 @@ import typing
 
 import click
 
-from slb_glossary.cli.banner import BANNER
+from slb_glossary.cli.banner import get_banner
 from slb_glossary.cli.commands import (
     compare,
     config,
@@ -27,21 +27,21 @@ __all__ = ["cli", "main"]
 
 
 class BannerGroup(click.Group):
-    """A `click.Group` that prints `slb_glossary.cli.banner.BANNER` above the usual `--help` text."""
+    """A `click.Group` that prints `slb_glossary.cli.banner.get_banner()` above the usual `--help` text."""
 
     def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
-        formatter.write(BANNER + "\n\n")
+        formatter.write(get_banner() + "\n\n")
         super().format_help(ctx, formatter)
 
 
 def _print_version(ctx: click.Context, param: click.Parameter, value: bool) -> None:
-    """Eager `--version` callback: print `BANNER` plus the package version, then exit."""
+    """Eager `--version` callback: print the banner plus the package version, then exit."""
     if not value or ctx.resilient_parsing:
         return
 
     from slb_glossary import __version__
 
-    click.echo(BANNER)
+    click.echo(get_banner())
     click.echo()
     click.echo(f"slb-glossary, version {__version__}")
     ctx.exit()
