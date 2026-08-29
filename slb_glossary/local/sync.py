@@ -166,6 +166,10 @@ async def sync_topics(db: Database, session: Session) -> SyncSummary:
     :param session: An open `Session` to read topic counts from.
     :return: A summary of the sync (`terms_written` is always `0`).
     """
+    if not session.initialized:
+        logger.debug("Session not yet initialized; loading topics before recording them")
+        await session.initialize()
+
     logger.debug("Syncing topic list only (%d topic(s) known to session)", len(session.topics))
     return await _record_sync(db, terms_written=0, language=session.language.value)
 
@@ -459,8 +463,18 @@ async def sync_all(
     :return: A summary of the sync.
     """
     started_at = time.monotonic()
+    if not session.initialized:
+        logger.debug("Session not yet initialized; loading topics before syncing")
+        await session.initialize()
+
     topic_names = sorted(session.topics)
     topics_count = len(topic_names)
+    if not topic_names:
+        logger.warning(
+            "Session reports no topics; nothing to sync. This usually means "
+            "the glossary's topic list failed to load. Try again, or pass "
+            "a higher --retry-attempts."
+        )
     logger.info("Syncing entire glossary (%d topics) to local database", topics_count)
     total_written = 0
     interrupted = False

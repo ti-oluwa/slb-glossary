@@ -55,7 +55,7 @@ def sync_filter_options(func: F) -> F:
         "--all",
         "sync_everything",
         is_flag=True,
-        help="Update the entire glossary. Heavy - see the command's --help notes.",
+        help="Update the entire glossary. Heavy. See the command's --help notes.",
     )(func)
     func = click.option(
         "--start-letter",
