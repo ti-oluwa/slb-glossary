@@ -40,9 +40,7 @@ class TestConstantResolution:
         """An env value failing `validator` raises `EnvVarError`."""
 
         class _ValidatedHolder:
-            value: Constant = Constant(
-                10, env_var=ENV_VAR, validator=lambda v: v > 0
-            )
+            value: Constant = Constant(10, env_var=ENV_VAR, validator=lambda v: v > 0)
 
         monkeypatch.setenv(ENV_VAR, "-5")
         with pytest.raises(EnvVarError):

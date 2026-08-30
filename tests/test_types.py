@@ -149,12 +149,8 @@ async def test_materialize_records_collects_async_iterator_of_recordlike(anyio_b
     """`materialize_records` collects an async generator of `SearchResult`s into a plain list, in order."""
 
     async def _generate():
-        yield SearchResult(
-            term="A", definition=None, grammatical_label=None, topic=None, url=None
-        )
-        yield SearchResult(
-            term="B", definition=None, grammatical_label=None, topic=None, url=None
-        )
+        yield SearchResult(term="A", definition=None, grammatical_label=None, topic=None, url=None)
+        yield SearchResult(term="B", definition=None, grammatical_label=None, topic=None, url=None)
 
     materialized = await materialize_records(_generate())
     assert isinstance(materialized, list)

@@ -34,9 +34,7 @@ class TestRetryPolicyDelayForAttempt:
         """`LOGARITHMIC` backoff grows by `base_delay * log(attempt + 1, factor)`."""
         import math
 
-        policy = RetryPolicy.logarithmic(
-            base_delay=100, factor=2.0, jitter=False, max_delay=None
-        )
+        policy = RetryPolicy.logarithmic(base_delay=100, factor=2.0, jitter=False, max_delay=None)
         for attempt in (1, 2, 5):
             expected = 100 * math.log(attempt + 1, 2.0)
             assert policy.delay_for_attempt(attempt) == pytest.approx(expected)
@@ -121,9 +119,7 @@ class TestRetry:
                 raise ValueError("not yet")
             return "ok"
 
-        result = await retry(
-            func, policy=RetryPolicy.constant(base_delay=0, attempts=5)
-        )
+        result = await retry(func, policy=RetryPolicy.constant(base_delay=0, attempts=5))
         assert result == "ok"
         assert calls == 3
 

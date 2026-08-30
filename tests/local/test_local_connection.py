@@ -68,9 +68,7 @@ class TestOpenDb:
         finally:
             await close_db(db)
 
-    async def test_default_paths_used_when_path_is_none(
-        self, tmp_data_dir: pathlib.Path
-    ):
+    async def test_default_paths_used_when_path_is_none(self, tmp_data_dir: pathlib.Path):
         """With no `path` given, both db and metadata paths resolve to the app's default data dir."""
         db = await open_db()
         try:
@@ -79,9 +77,7 @@ class TestOpenDb:
         finally:
             await close_db(db)
 
-    async def test_discards_and_recreates_on_schema_version_mismatch(
-        self, tmp_path: pathlib.Path
-    ):
+    async def test_discards_and_recreates_on_schema_version_mismatch(self, tmp_path: pathlib.Path):
         """A database whose metadata reports an older schema version is discarded and rebuilt."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
@@ -150,9 +146,7 @@ class TestOpenDb:
             opened_connections.append(connection)
             return connection
 
-        monkeypatch.setattr(
-            "slb_glossary.local.connection.aiosqlite.connect", _tracking_connect
-        )
+        monkeypatch.setattr("slb_glossary.local.connection.aiosqlite.connect", _tracking_connect)
         try:
             with pytest.raises(DatabaseError):
                 await open_db(tmp_path / "t.db")

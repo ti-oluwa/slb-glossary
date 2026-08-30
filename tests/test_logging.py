@@ -159,9 +159,7 @@ class TestSinkHandler:
     def test_mapping_routes_records_by_filter(self):
         """With a `{filter: sink}` mapping, only matching records reach each sink."""
         query_sink, other_sink = _RecordingSink(), _RecordingSink()
-        handler = SinkHandler(
-            {"slb_glossary.query*": query_sink, "*": other_sink}
-        )
+        handler = SinkHandler({"slb_glossary.query*": query_sink, "*": other_sink})
         handler.setFormatter(logging.Formatter("%(message)s"))
         handler.emit(_make_record(logger_name="slb_glossary.query.search", message="q"))
         handler.emit(_make_record(logger_name="slb_glossary.local.sync", message="l"))
@@ -367,7 +365,9 @@ class TestConfigureLogging:
         """A record logged through the configured logger reaches the sink's `write`."""
         logger_name = "slb_glossary.test.configure5"
         sink = _RecordingSink()
-        handler = configure_logging(sinks=sink, logger_name=logger_name, level="INFO", fmt="%(message)s")
+        handler = configure_logging(
+            sinks=sink, logger_name=logger_name, level="INFO", fmt="%(message)s"
+        )
         try:
             logging.getLogger(logger_name).info("hello from test")
             assert sink.messages == ["hello from test"]

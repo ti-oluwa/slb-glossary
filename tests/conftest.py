@@ -16,9 +16,7 @@ ASYNCIO_ONLY_BACKENDS = [
     pytest.param(
         ("asyncio", {"use_uvloop": True}),
         id="asyncio+uvloop",
-        marks=pytest.mark.skipif(
-            sys.platform == "win32", reason="uvloop is Unix-only"
-        ),
+        marks=pytest.mark.skipif(sys.platform == "win32", reason="uvloop is Unix-only"),
     ),
 ]
 
@@ -95,9 +93,7 @@ def no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
     def _forbidden_async_playwright(*args: object, **kwargs: object) -> object:
         raise AssertionError("network access attempted in a non-live test")
 
-    monkeypatch.setattr(
-        patchright_async_api, "async_playwright", _forbidden_async_playwright
-    )
+    monkeypatch.setattr(patchright_async_api, "async_playwright", _forbidden_async_playwright)
     yield
 
 

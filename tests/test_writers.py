@@ -118,9 +118,7 @@ class TestWriteJson:
 
 @pytest.mark.anyio
 class TestWriteJsonl:
-    async def test_writes_one_json_object_per_line_in_original_order(
-        self, tmp_path: pathlib.Path
-    ):
+    async def test_writes_one_json_object_per_line_in_original_order(self, tmp_path: pathlib.Path):
         """Each line is one record's dict, unmodified field order, not re-keyed."""
         destination = tmp_path / "out.jsonl"
         results = make_search_results(2)
@@ -131,9 +129,7 @@ class TestWriteJsonl:
         first_obj = json.loads(lines[0])
         assert list(first_obj.keys()) == results[0].fields
 
-    async def test_duplicate_first_field_values_are_not_deduplicated(
-        self, tmp_path: pathlib.Path
-    ):
+    async def test_duplicate_first_field_values_are_not_deduplicated(self, tmp_path: pathlib.Path):
         """Unlike `write_json`, repeated `term` values both appear as separate lines."""
         destination = tmp_path / "out.jsonl"
         first = make_search_result(term="Porosity", definition="first")
@@ -185,9 +181,7 @@ class TestSave:
         await save(make_search_results(1), destination)
         assert destination.exists()
 
-    async def test_format_argument_overrides_destination_extension(
-        self, tmp_path: pathlib.Path
-    ):
+    async def test_format_argument_overrides_destination_extension(self, tmp_path: pathlib.Path):
         """An explicit `format=` overrides whatever the destination's extension implies."""
         destination = tmp_path / "out.data"
         await save(make_search_results(1), destination, format="json")

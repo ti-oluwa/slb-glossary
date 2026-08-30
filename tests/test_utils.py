@@ -27,9 +27,7 @@ class TestEnv:
         monkeypatch.delenv(ENV_VAR, raising=False)
         assert env(ENV_VAR, "fallback") == "fallback"
 
-    @pytest.mark.parametrize(
-        "raw", ["1", "true", "yes", "on", "TRUE", "Yes"]
-    )
+    @pytest.mark.parametrize("raw", ["1", "true", "yes", "on", "TRUE", "Yes"])
     def test_casts_truthy_strings_to_bool_true(self, monkeypatch: pytest.MonkeyPatch, raw: str):
         """Recognized truthy string forms cast to `True` for a `bool` default."""
         monkeypatch.setenv(ENV_VAR, raw)
