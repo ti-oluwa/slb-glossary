@@ -1,0 +1,136 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # Allow manual triggering
+  workflow_call: # Allow referencing from other workflows (e.g. publish.yaml)
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Main test matrix. No external services needed: the local database is
+  # SQLite (file-based), and tests marked 'live' (real browser/network) or
+  # 'slow' (real embedding model) are opt-in only, see tests/conftest.py -
+  # a plain `pytest` run here never touches either.
+  test:
+    name: Test Python ${{ matrix.python-version }} on Linux
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies (every extra, so no optional test is skipped)
+        run: uv sync --group test --extra all --inexact
+
+      - name: Run test suite with coverage
+        run: |
+          uv run pytest \
+            --cov=slb_glossary \
+            --cov-branch \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --tb=short \
+            -v
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  # Windows and macOS, a narrower Python matrix and without the heavier
+  # optional extras (semantic/mcp) for speed - those paths are already
+  # covered on Linux above, and tests that need them skip cleanly via
+  # pytest.importorskip when the extra isn't installed.
+  test-cross-platform:
+    name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        python-version: ["3.10", "3.12", "3.14"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --group test --inexact
+
+      - name: Run test suite
+        run: uv run pytest -v --tb=short
+
+  # Build the package and make sure it actually imports and the CLI
+  # entrypoint runs once installed, catching packaging mistakes
+  # (missing package data, bad entry_points, etc.) that unit tests
+  # run against the source tree wouldn't catch.
+  test-install:
+    name: Test Package Installation
+    runs-on: ubuntu-latest
+    needs: [test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Build package
+        run: uv build
+
+      - name: Install built wheel
+        run: |
+          cd dist
+          uv pip install --system slb_glossary-*.whl
+
+      - name: Test installation
+        run: |
+          python -c "
+          import slb_glossary
+          print(f'slb_glossary {slb_glossary.__version__} imported successfully')
+          "
+          slb --help > /dev/null
+          echo "CLI entrypoint runs successfully"

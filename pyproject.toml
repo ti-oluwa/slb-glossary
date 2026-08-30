@@ -48,6 +48,27 @@ Issues = "https://github.com/ti-oluwa/slb_glossary/issues"
 
 [dependency-groups]
 dev = ["ruff>=0.13", "mypy>=1.10"]
+test = [
+    "pytest>=8.0",
+    "anyio>=4.0",
+    "trio>=0.26",
+    "uvloop>=0.20; sys_platform != 'win32'",
+    "pytest-cov>=5.0",
+    "click", # already a runtime dep; CliRunner comes from it
+    "faker>=25.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "unit: Fast, isolated, no real I/O (no real db file, no network, no subprocess).",
+    "integration: Exercises more than one real component together, still fully offline.",
+    "cli: Any test driving a command through click.testing.CliRunner.",
+    "mcp: Any test exercising slb_glossary.mcp.",
+    "live: Touches the real glossary site or a real browser. Skipped by default.",
+    "slow: Downloads/loads the real embedding model, or is otherwise noticeably slow. Skipped by default.",
+]
 
 [build-system]
 requires = ["hatchling"]

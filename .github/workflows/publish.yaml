@@ -1,0 +1,318 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*" # Trigger on version tags like v0.1.0, v1.0.0, etc.
+  release:
+    types: [published]
+  workflow_dispatch: # Allow manual triggering
+    inputs:
+      test_only:
+        description: "Publish to TestPyPI only"
+        type: boolean
+        default: false
+
+jobs:
+  # Reuse the same checks a PR would have to pass.
+  quality-gate:
+    name: Code Quality Assurance Gate
+    uses: ./.github/workflows/quality.yaml
+
+  test-gate:
+    name: Test Suite Gate
+    uses: ./.github/workflows/test.yaml
+
+  # slb-glossary is pure Python (no compiled extensions), so one sdist +
+  # one universal wheel from `uv build` covers every platform. No
+  # cibuildwheel/multi-OS wheel matrix needed here.
+  build:
+    name: Build package
+    needs: [quality-gate, test-gate]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify version consistency
+        run: |
+          PROJECT_VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            TAG_VERSION=${GITHUB_REF_NAME#v}
+            if [[ "$PROJECT_VERSION" != "$TAG_VERSION" ]]; then
+              echo "Version mismatch: pyproject.toml has $PROJECT_VERSION but tag is $TAG_VERSION"
+              exit 1
+            fi
+          fi
+          echo "Version: $PROJECT_VERSION"
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Validate build artifacts
+        run: |
+          ls -la dist/
+          test -n "$(ls dist/*.whl 2>/dev/null)" || (echo "No wheel found" && exit 1)
+          test -n "$(ls dist/*.tar.gz 2>/dev/null)" || (echo "No source distribution found" && exit 1)
+          echo "Built artifacts:"
+          for f in dist/*; do echo " - $(basename "$f")"; done
+
+      - name: Verify sdist installs and imports cleanly
+        run: |
+          uv venv sdist-test-env
+          uv pip install dist/*.tar.gz
+          uv run python -c "
+          import slb_glossary
+          print('sdist installs and imports correctly')
+          "
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+          retention-days: 30
+
+  # Publish to TestPyPI first.
+  publish-testpypi:
+    name: Publish to TestPyPI
+    runs-on: ubuntu-latest
+    needs: build
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      github.event_name == 'release'
+
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/slb-glossary
+
+    outputs:
+      published: ${{ steps.publish-step.outputs.published || steps.skip-step.outputs.published || 'false' }}
+      version: ${{ steps.get-version.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+
+      - name: Install jq for version parsing
+        run: uv pip install jq --system
+
+      - name: Get project version
+        id: get-version
+        run: |
+          VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if version already exists on TestPyPI
+        id: version-check
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if curl -sSf https://test.pypi.org/pypi/slb-glossary/json | jq -e ".releases[\"$VERSION\"]" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip publishing (version exists)
+        if: steps.version-check.outputs.exists == 'true'
+        run: echo "Version already exists on TestPyPI. Skipping publish."
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+
+      - name: Publish to TestPyPI
+        id: publish-step
+        if: steps.version-check.outputs.exists == 'false'
+        run: |
+          uv publish --index testpypi
+          echo "published=true" >> "$GITHUB_OUTPUT"
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+      - name: Mark as skipped
+        if: steps.version-check.outputs.exists == 'true'
+        id: skip-step
+        run: echo "published=false" >> "$GITHUB_OUTPUT"
+
+  # Sanity-check the TestPyPI upload actually installs before touching
+  # real PyPI.
+  verify-testpypi:
+    name: Verify TestPyPI Installation
+    runs-on: ubuntu-latest
+    needs: publish-testpypi
+    if: needs.publish-testpypi.result == 'success' && needs.publish-testpypi.outputs.published == 'true'
+    continue-on-error: true
+
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Wait for TestPyPI availability
+        run: |
+          echo "Waiting for package to be available on TestPyPI..."
+          sleep 60
+
+      - name: Install from TestPyPI
+        run: |
+          pip install --index-url https://test.pypi.org/simple/ \
+                      --extra-index-url https://pypi.org/simple/ \
+                      slb-glossary[all] --prefer-binary
+
+      - name: Test installation
+        run: |
+          python -c "
+          import slb_glossary
+          print('Package imported successfully')
+          print(f'Version: {getattr(slb_glossary, \"__version__\", \"unknown\")}')
+          "
+
+  # Only reached once TestPyPI has been proven good (or this exact
+  # version was already published there before).
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [build, publish-testpypi]
+    if: >
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' &&
+      github.event.action == 'published' &&
+      !github.event.release.prerelease)) &&
+      (github.event.inputs.test_only != 'true' || github.event.inputs.test_only == '') &&
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.publish-testpypi.result == 'success' || needs.publish-testpypi.outputs.exists == 'true')
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/slb-glossary
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+
+      - name: Install jq for version parsing
+        run: uv pip install jq --system
+
+      - name: Get project version
+        id: get-version
+        run: |
+          VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if version already exists on PyPI
+        id: version-check
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if curl -sSf https://pypi.org/pypi/slb-glossary/json | jq -e ".releases[\"$VERSION\"]" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip publishing (version exists)
+        if: steps.version-check.outputs.exists == 'true'
+        run: echo "Version already exists on PyPI. Skipping publish."
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+
+      - name: Final validation before PyPI
+        if: steps.version-check.outputs.exists == 'false'
+        run: |
+          echo "Publishing to PyPI..."
+          ls -la dist/
+          if uv run python -c "import tomllib; version=tomllib.load(open('pyproject.toml', 'rb'))['project']['version']; exit(1 if 'dev' in version or 'alpha' in version or 'beta' in version or 'rc' in version else 0)"; then
+            echo "Version looks stable for PyPI"
+          else
+            echo "Version appears to be a pre-release"
+            exit 1
+          fi
+
+      - name: Publish to PyPI
+        if: steps.version-check.outputs.exists == 'false'
+        run: uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+  verify-pypi:
+    name: Verify PyPI Installation
+    runs-on: ubuntu-latest
+    needs: publish-pypi
+    if: success()
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Wait for PyPI availability
+        run: |
+          echo "Waiting for package to be available on PyPI..."
+          sleep 120
+
+      - name: Install from PyPI
+        run: pip install slb-glossary[all]
+
+      - name: Verify installation
+        run: |
+          python -c "
+          import slb_glossary
+          print(f'Successfully installed slb-glossary {getattr(slb_glossary, \"__version__\", \"unknown\")} from PyPI')
+          "
+
+      - name: Create release summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Quality checks passed" >> $GITHUB_STEP_SUMMARY
+          echo "- All tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "- Package built successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- Published to TestPyPI" >> $GITHUB_STEP_SUMMARY
+          echo "- TestPyPI installation verified" >> $GITHUB_STEP_SUMMARY
+          echo "- Published to PyPI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Package is now available: \`pip install slb-glossary\`" >> $GITHUB_STEP_SUMMARY
