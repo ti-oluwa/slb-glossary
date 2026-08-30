@@ -1,0 +1,112 @@
+site_name: slb-glossary
+site_description: Search the SLB Energy Glossary from Python, the command line, or an AI agent.
+site_author: ti-oluwa
+site_url: https://ti-oluwa.github.io/slb-glossary/
+repo_url: https://github.com/ti-oluwa/slb-glossary
+repo_name: ti-oluwa/slb-glossary
+copyright: Copyright &copy; 2026 ti-oluwa
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.path
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+    - toc.follow
+
+  font:
+    text: Manrope
+    code: Fira Code
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - abbr
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: [docs]
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      title: On this page
+  - footnotes
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ti-oluwa/slb-glossary
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/slb-glossary/
+
+extra_css:
+  - assets/css/custom.css
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+  - Using the CLI:
+      - Overview: cli/index.md
+      - Searching and Defining Terms: cli/searching.md
+      - Local Cache and Sync: cli/sync.md
+      - Saving, Output and Config Files: cli/configuration.md
+  - Using the Library:
+      - Overview: library/index.md
+      - Live Search: library/live-search.md
+      - Local Search and Cache: library/local-search.md
+      - Combined Search with slb_glossary.query: library/query.md
+      - Saving Results and Config Objects: library/configuration.md
+  - Core Concepts:
+      - Sessions and the Browser: concepts/sessions.md
+      - Search Modes: concepts/search-modes.md
+      - The Data Model: concepts/data-model.md
+  - Connecting an AI Agent:
+      - Running an MCP Server: agent/mcp-server.md
+      - Building an Agent with Pydantic AI: agent/pydantic-ai.md
+  - API Reference:
+      - CLI Commands: api/cli.md
+      - Library API: api/library.md
+  - Troubleshooting and FAQ: faq.md

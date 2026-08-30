@@ -47,7 +47,8 @@ def make_search_results(n: int, **overrides: typing.Any) -> list[SearchResult]:
 
 
 def make_config(**overrides: typing.Any) -> Config:
-    """Build a `Config` with every nested section at sane test defaults.
+    """
+    Build a `Config` with every nested section at sane test defaults.
 
     Pass a full replacement for a nested section (`session=SessionOptions(...)`)
     or, for the common case of just pointing the local database at a

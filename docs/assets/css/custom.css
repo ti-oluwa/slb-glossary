@@ -1,0 +1,37 @@
+:root > * {
+  --md-primary-fg-color: #0C1F8F;
+  --md-primary-fg-color--light: #2E45A8;
+  --md-primary-fg-color--dark: #081560;
+  --md-primary-bg-color: #FFFFFF;
+  --md-accent-fg-color: #C9852B;
+  --md-accent-fg-color--transparent: #C9852B1A;
+  --md-accent-bg-color: #FFFFFF;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #1B2FA8;
+  --md-primary-fg-color--light: #3348C2;
+  --md-primary-fg-color--dark: #0C1F8F;
+  --md-accent-fg-color: #E0A24E;
+}
+
+/* Home page hero */
+.hero {
+  margin: 1.5rem 0 2.5rem;
+}
+
+.hero p {
+  font-size: 1.1rem;
+  max-width: 46rem;
+}
+
+.hero .md-button {
+  margin-top: 0.75rem;
+  margin-right: 0.5rem;
+}
+
+.hero .md-button--primary {
+  background-color: var(--md-primary-fg-color);
+  border-color: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
