@@ -1,6 +1,10 @@
 """Root-level fixtures shared by every test module."""
 
+import asyncio
+import datetime
 import sys
+import time
+import typing
 
 import pytest
 
@@ -29,13 +33,14 @@ def anyio_backend(request: pytest.FixtureRequest) -> tuple[str, dict]:
 
 @pytest.fixture(params=ASYNCIO_ONLY_BACKENDS)
 def anyio_backend_asyncio_only(request: pytest.FixtureRequest) -> tuple[str, dict]:
-    """asyncio and asyncio+uvloop only.
+    """
+    `asyncio` and `asyncio+uvloop` only.
 
     Use for anything touching aiosqlite/patchright/FastMCP, none of which
     are trio-safe (verified empirically: opening a real
-    ``local.connection.database()`` under a trio ``anyio_backend`` fails
+    `local.connection.database()` under a trio `anyio_backend` fails
     before any test logic runs, because aiosqlite's connection thread
-    hands work back via a raw ``asyncio.Future`` that trio's run loop
+    hands work back via a raw `asyncio.Future` that trio's run loop
     can't recognize). That failure is a fact about the dependency, not
     a bug worth chasing down per test.
     """
@@ -44,7 +49,8 @@ def anyio_backend_asyncio_only(request: pytest.FixtureRequest) -> tuple[str, dic
 
 @pytest.fixture(autouse=True)
 def reset_constants():
-    """Snapshot every `Constant` on `Constants` and reset it after each test.
+    """
+    Snapshot every `Constant` on `Constants` and reset it after each test.
 
     `Constants` is a process-wide singleton, so a test that overrides a
     constant (`constants.relevance_threshold = 0.9`) or leaves an env var
@@ -61,7 +67,8 @@ def reset_constants():
 
 @pytest.fixture(autouse=True)
 def no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
-    """Fail loudly if a non-`live` test reaches the real network.
+    """
+    Fail loudly if a non-`live` test reaches the real network.
 
     Monkeypatches the lowest-level entry points real network access
     would go through (`asyncio.open_connection`, the primitive
@@ -77,12 +84,10 @@ def no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
         yield
         return
 
-    import asyncio
-
-    async def _forbidden_open_connection(*args: object, **kwargs: object) -> object:
+    async def forbidden_open_connection(*args: object, **kwargs: object) -> object:
         raise AssertionError("network access attempted in a non-live test")
 
-    monkeypatch.setattr(asyncio, "open_connection", _forbidden_open_connection)
+    monkeypatch.setattr(asyncio, "open_connection", forbidden_open_connection)
 
     try:
         import patchright.async_api as patchright_async_api
@@ -90,16 +95,17 @@ def no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
         yield
         return
 
-    def _forbidden_async_playwright(*args: object, **kwargs: object) -> object:
+    def forbidden_async_playwright(*args: object, **kwargs: object) -> object:
         raise AssertionError("network access attempted in a non-live test")
 
-    monkeypatch.setattr(patchright_async_api, "async_playwright", _forbidden_async_playwright)
+    monkeypatch.setattr(patchright_async_api, "async_playwright", forbidden_async_playwright)
     yield
 
 
 @pytest.fixture
 def tmp_data_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    """A `tmp_path` subdirectory used as the app's data/config dir for a test.
+    """
+    A `tmp_path` subdirectory used as the app's data/config dir for a test.
 
     Monkeypatches `SLB_GLOSSARY_DATA_DIR`/`SLB_GLOSSARY_CONFIG_DIR` so
     `slb_glossary.paths.default_db_path()` and friends never touch the
@@ -114,28 +120,24 @@ def tmp_data_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def freeze_time(monkeypatch: pytest.MonkeyPatch):
-    """Freeze `time.monotonic` and `datetime.now(UTC)` to a fixed instant.
+    """
+    Freeze `time.monotonic` and `datetime.now(UTC)` to a fixed instant.
 
     Returns the frozen `datetime.datetime` (UTC) so a test can assert on
     e.g. a `Metadata.last_synced_at` timestamp it expects to have been
     stamped during the test.
     """
-    import datetime
-    import time
-
     frozen_monotonic = 1_000_000.0
     frozen_datetime = datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
 
     monkeypatch.setattr(time, "monotonic", lambda: frozen_monotonic)
 
-    real_datetime = datetime.datetime
-
-    class _FrozenDatetime(real_datetime):
+    class FrozenDatetime(datetime.datetime):
         @classmethod
-        def now(cls, tz: datetime.timezone | None = None) -> "_FrozenDatetime":
+        def now(cls, tz: datetime.timezone | None = None) -> typing.Self:  # type: ignore
             if tz is not None:
                 return frozen_datetime.astimezone(tz)  # type: ignore[return-value]
             return frozen_datetime  # type: ignore[return-value]
 
-    monkeypatch.setattr(datetime, "datetime", _FrozenDatetime)
+    monkeypatch.setattr(datetime, "datetime", FrozenDatetime)
     return frozen_datetime

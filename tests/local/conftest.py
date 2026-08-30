@@ -7,7 +7,8 @@ import pytest
 from slb_glossary.local.connection import database
 
 MOCK_EMBED_DIM = 4
-"""Dimensionality used by the `mock_embeddings` fixture's fake vectors.
+"""
+Dimensionality used by the `mock_embeddings` fixture's fake vectors.
 
 Real semantic search needs `model2vec` to download and load a real
 embedding model from Hugging Face, which this sandbox has no network
@@ -20,9 +21,11 @@ coverage while avoiding a live model download.
 """
 
 
-def _text_to_unit_vector(text: str):
-    """Deterministically hash `text` into a fixed-size unit vector (the fallback for
-    any text not explicitly `.set()` on the `mock_embeddings` fixture)."""
+def text_to_unit_vector(text: str):
+    """
+    Deterministically hash `text` into a fixed-size unit vector (the fallback for
+    any text not explicitly `.set()` on the `mock_embeddings` fixture).
+    """
     import numpy as np
 
     digest = hashlib.sha256(text.encode()).digest()
@@ -32,10 +35,12 @@ def _text_to_unit_vector(text: str):
     return vector / norm if norm else vector
 
 
-class _MockEmbeddings:
-    """Controller for the `mock_embeddings` fixture: register exact vectors for
+class MockEmbeddings:
+    """
+    Controller for the `mock_embeddings` fixture: register exact vectors for
     specific texts (e.g. a query and a term's embed-text), falling back to a
-    deterministic hash-based vector for anything not explicitly registered."""
+    deterministic hash-based vector for anything not explicitly registered.
+    """
 
     def __init__(self) -> None:
         self._overrides: dict = {}
@@ -49,20 +54,20 @@ class _MockEmbeddings:
     def embed(self, texts):
         import numpy as np
 
-        return np.stack(
-            [self._overrides.get(text, _text_to_unit_vector(text)) for text in texts]
-        )
+        return np.stack([self._overrides.get(text, text_to_unit_vector(text)) for text in texts])
 
 
 @pytest.fixture
-def mock_embeddings(monkeypatch: pytest.MonkeyPatch) -> _MockEmbeddings:
-    """Fake `slb_glossary.local.vector.embed`/`embedding_dim`, avoiding a real
-    (network-dependent) `model2vec` model load. See `MOCK_EMBED_DIM`'s docstring."""
-    from slb_glossary.local import vector as vector_module
+def mock_embeddings(monkeypatch: pytest.MonkeyPatch) -> MockEmbeddings:
+    """
+    Fake `slb_glossary.local.vector.embed`/`embedding_dim`, avoiding a real
+    (network-dependent) `model2vec` model load. See `MOCK_EMBED_DIM`'s docstring.
+    """
+    from slb_glossary.local import vector
 
-    controller = _MockEmbeddings()
-    monkeypatch.setattr(vector_module, "embedding_dim", lambda: MOCK_EMBED_DIM)
-    monkeypatch.setattr(vector_module, "embed", controller.embed)
+    controller = MockEmbeddings()
+    monkeypatch.setattr(vector, "embedding_dim", lambda: MOCK_EMBED_DIM)
+    monkeypatch.setattr(vector, "embed", controller.embed)
     return controller
 
 

@@ -1,5 +1,7 @@
-"""`local.connection.open_db`/`close_db`/`database`: WAL mode, schema-mismatch
-discard-and-recreate, metadata file creation, and cleanup on exit."""
+"""
+`local.connection.open_db`/`close_db`/`database`: WAL mode, schema-mismatch
+discard-and-recreate, metadata file creation, and cleanup on exit.
+"""
 
 import pathlib
 

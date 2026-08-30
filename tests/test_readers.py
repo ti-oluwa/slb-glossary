@@ -76,11 +76,11 @@ class TestReadRows:
         """`read_rows` dispatches to the reader registered for `format`."""
         called_with: list[pathlib.Path] = []
 
-        def _fake_reader(path: pathlib.Path):
+        def mock_reader(path: pathlib.Path):
             called_with.append(path)
             yield {"term": "Porosity"}
 
-        monkeypatch.setitem(READERS, format, _fake_reader)
+        monkeypatch.setitem(READERS, format, mock_reader)
         path = tmp_path / f"terms.{format}"
         rows = list(read_rows(path))
         assert rows == [{"term": "Porosity"}]
@@ -91,10 +91,10 @@ class TestReadRows:
     ):
         """An explicit `format=` overrides whatever `path`'s extension implies."""
 
-        def _fake_reader(path: pathlib.Path):
+        def mock_reader(path: pathlib.Path):
             yield {"term": "Porosity"}
 
-        monkeypatch.setitem(READERS, "csv", _fake_reader)
+        monkeypatch.setitem(READERS, "csv", mock_reader)
         path = tmp_path / "terms.data"
         rows = list(read_rows(path, format="csv"))
         assert rows == [{"term": "Porosity"}]
@@ -108,10 +108,10 @@ class TestReadRows:
         """`@reader(format)` registers a throwaway format and makes it available immediately."""
 
         @reader("throwaway-test-format")
-        def _throwaway_reader(path: pathlib.Path):
+        def throwaway_reader(path: pathlib.Path):
             yield {"term": "Porosity"}
 
         try:
-            assert READERS["throwaway-test-format"] is _throwaway_reader
+            assert READERS["throwaway-test-format"] is throwaway_reader
         finally:
             del READERS["throwaway-test-format"]

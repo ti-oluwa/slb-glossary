@@ -1,5 +1,7 @@
-"""`Config` and its nested options: retry-policy conversion, session kwargs,
-file round-trips (JSON/TOML/YAML), dotted `get`/`set`, and value coercion."""
+"""
+`Config` and its nested options: retry-policy conversion, session kwargs,
+file round-trips (JSON/TOML/YAML), dotted `get`/`set`, and value coercion.
+"""
 
 import dataclasses
 import json

@@ -12,12 +12,12 @@ pytestmark = pytest.mark.unit
 ENV_VAR = "SLB_GLOSSARY_TEST_CONSTANT"
 
 
-class _Choice(enum.Enum):
+class Choice(enum.Enum):
     A = "a"
     B = "b"
 
 
-class _Holder:
+class Holder:
     """A standalone class carrying one `Constant`, isolated from the real `Constants`."""
 
     value: Constant = Constant(10, env_var=ENV_VAR)
@@ -27,13 +27,13 @@ class TestConstantResolution:
     def test_uses_default_when_env_var_unset(self, monkeypatch: pytest.MonkeyPatch):
         """A `Constant` resolves to its `default` when its `env_var` isn't set."""
         monkeypatch.delenv(ENV_VAR, raising=False)
-        holder = _Holder()
+        holder = Holder()
         assert holder.value == 10
 
     def test_env_var_overrides_default(self, monkeypatch: pytest.MonkeyPatch):
         """Setting the env var overrides `default`."""
         monkeypatch.setenv(ENV_VAR, "42")
-        holder = _Holder()
+        holder = Holder()
         assert holder.value == 42
 
     def test_validator_rejects_invalid_env_value(self, monkeypatch: pytest.MonkeyPatch):
@@ -52,7 +52,7 @@ class TestConstantResolution:
             (bool, False, "true", True),
             (int, 0, "7", 7),
             (float, 0.0, "1.5", 1.5),
-            (_Choice, _Choice.A, "b", _Choice.B),
+            (Choice, Choice.A, "b", Choice.B),
         ],
     )
     def test_type_casts_env_value_correctly(
@@ -60,11 +60,11 @@ class TestConstantResolution:
     ):
         """The env string is cast per the constant's type: `bool`/`int`/`float`/`Enum`."""
 
-        class _TypedHolder:
+        class TypedHolder:
             value: Constant = Constant(default, env_var=ENV_VAR, type=constant_type)
 
         monkeypatch.setenv(ENV_VAR, raw)
-        assert _TypedHolder().value == expected
+        assert TypedHolder().value == expected
 
 
 class TestConstantCaching:
@@ -83,10 +83,10 @@ class TestConstantCaching:
     def test_cache_true_reads_env_var_only_once(self, monkeypatch: pytest.MonkeyPatch):
         """`cache=True` resolves the env var once, then holds that value."""
 
-        class _CachedHolder:
+        class CachedHolder:
             value: Constant = Constant(10, env_var=ENV_VAR, cache=True)
 
-        holder = _CachedHolder()
+        holder = CachedHolder()
         monkeypatch.setenv(ENV_VAR, "1")
         assert holder.value == 1
         monkeypatch.setenv(ENV_VAR, "2")
@@ -99,10 +99,10 @@ class TestConstantOverride:
     ):
         """An explicit `instance.constant = value` assignment wins over the env var."""
 
-        class _OverriddenHolder:
+        class OverriddenHolder:
             value: Constant = Constant(10, env_var=ENV_VAR, cache=False)
 
-        holder = _OverriddenHolder()
+        holder = OverriddenHolder()
         monkeypatch.setenv(ENV_VAR, "99")
         holder.value = 5
         assert holder.value == 5
@@ -110,10 +110,10 @@ class TestConstantOverride:
     def test_reset_clears_override_and_cache(self, monkeypatch: pytest.MonkeyPatch):
         """`reset()` clears an explicit override, going back to default/env resolution."""
 
-        class _ResettableHolder:
+        class ResettableHolder:
             value: Constant = Constant(10, env_var=ENV_VAR, cache=False)
 
-        holder = _ResettableHolder()
+        holder = ResettableHolder()
         holder.value = 5
         assert holder.value == 5
         type(holder).__dict__["value"].reset()
@@ -123,10 +123,10 @@ class TestConstantOverride:
     def test_set_runs_validator_and_rejects_invalid_value(self):
         """An explicit `__set__` still runs `validator` and raises on failure."""
 
-        class _ValidatedSetHolder:
+        class ValidatedSetHolder:
             value: Constant = Constant(10, validator=lambda v: v > 0)
 
-        holder = _ValidatedSetHolder()
+        holder = ValidatedSetHolder()
         with pytest.raises(ValueError):
             holder.value = -1
 

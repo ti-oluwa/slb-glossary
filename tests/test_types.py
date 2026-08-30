@@ -71,13 +71,13 @@ class TestRelatedTerm:
 
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
-class _FrozenThing(Updatable):
+class FrozenThing(Updatable):
     a: int = 1
     b: str = "x"
 
 
 @dataclasses.dataclass(slots=True, kw_only=True)
-class _MutableThing(Updatable):
+class MutableThing(Updatable):
     a: int = 1
     b: str = "x"
 
@@ -85,7 +85,7 @@ class _MutableThing(Updatable):
 class TestUpdatable:
     def test_update_returns_new_instance_with_changes_applied(self):
         """`.update(x=1)` on a frozen `Updatable` subclass returns a new object, original untouched."""
-        original = _FrozenThing(a=1, b="x")
+        original = FrozenThing(a=1, b="x")
         updated = original.update(a=2)
         assert updated is not original
         assert updated.a == 2
@@ -93,20 +93,20 @@ class TestUpdatable:
 
     def test_update_with_no_changes_returns_equal_instance(self):
         """Calling `.update()` with no changes returns an equal (here, identical) instance."""
-        original = _FrozenThing(a=1, b="x")
+        original = FrozenThing(a=1, b="x")
         updated = original.update()
         assert updated is original
         assert updated == original
 
     def test_update_rejects_unknown_field(self):
         """`.update(unknown=1)` raises `TypeError` naming the bad field."""
-        original = _FrozenThing(a=1, b="x")
+        original = FrozenThing(a=1, b="x")
         with pytest.raises(TypeError, match="unknown"):
             original.update(unknown=1)
 
     def test_update_mutates_a_non_frozen_dataclass_in_place(self):
         """`.update()` on a non-frozen dataclass mutates `self` and returns it."""
-        original = _MutableThing(a=1, b="x")
+        original = MutableThing(a=1, b="x")
         updated = original.update(a=5)
         assert updated is original
         assert original.a == 5
@@ -148,11 +148,11 @@ class TestSearchMode:
 async def test_materialize_records_collects_async_iterator_of_recordlike(anyio_backend):
     """`materialize_records` collects an async generator of `SearchResult`s into a plain list, in order."""
 
-    async def _generate():
+    async def generate():
         yield SearchResult(term="A", definition=None, grammatical_label=None, topic=None, url=None)
         yield SearchResult(term="B", definition=None, grammatical_label=None, topic=None, url=None)
 
-    materialized = await materialize_records(_generate())
+    materialized = await materialize_records(generate())
     assert isinstance(materialized, list)
     assert [r.term for r in materialized] == ["A", "B"]
 

@@ -2656,6 +2656,7 @@ dependencies = [
     { name = "platformdirs" },
     { name = "playwright-stealth" },
     { name = "rich" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 
 [package.optional-dependencies]
@@ -2668,7 +2669,6 @@ all = [
     { name = "textual" },
     { name = "tomlkit" },
     { name = "trogon" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 config = [
     { name = "pyyaml" },
@@ -2676,7 +2676,6 @@ config = [
 ]
 mcp = [
     { name = "fastmcp" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 semantic = [
     { name = "model2vec" },
@@ -2722,7 +2721,7 @@ requires-dist = [
     { name = "textual", marker = "extra == 'tui'", specifier = ">=0.58" },
     { name = "tomlkit", marker = "extra == 'config'", specifier = ">=0.12" },
     { name = "trogon", marker = "extra == 'tui'", specifier = ">=0.6.0" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11' and extra == 'mcp'", specifier = ">=4.6" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.6" },
 ]
 provides-extras = ["xlsx", "tui", "config", "mcp", "semantic", "all"]
 

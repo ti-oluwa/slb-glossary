@@ -27,7 +27,7 @@ class TestBuildFtsQuery:
     def test_punctuation_in_a_token_is_quoted_safely(self):
         """Punctuation within a token doesn't break out of its quotes."""
         result = build_fts_query("don't")
-        assert result.startswith('"') and result.endswith('*')
+        assert result.startswith('"') and result.endswith("*")
 
 
 @pytest.mark.anyio
@@ -123,10 +123,7 @@ class TestLexicalSearch:
         """`limit` caps the number of results."""
         await upsert_results(
             db,
-            [
-                make_search_result(url=f"https://x.com/{i}", term=f"Porosity {i}")
-                for i in range(5)
-            ],
+            [make_search_result(url=f"https://x.com/{i}", term=f"Porosity {i}") for i in range(5)],
         )
         results = await lexical_search(db, "porosity", limit=2)
         assert len(results) == 2

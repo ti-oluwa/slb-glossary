@@ -1,8 +1,8 @@
 # SLB Energy Glossary
 
-A Python library and CLI for searching the [SLB Energy Glossary](https://glossary.slb.com/), in English and Spanish. It can search the live site directly, keep a local SQLite cache of terms you've already looked up, or do both and prefer whichever already has an answer.
+A Python library and CLI for searching the [SLB Energy Glossary](https://glossary.slb.com/), in English and Spanish. It can search the live site directly, keep a local SQLite cache of terms you've already looked up, or do both and intelligently uses whichever (local cache or live site) to return results.
 
-This started as a hobby project to help with SPE PetroBowl prep (see [Credits](#credits)), so don't expect enterprise polish. It does what it needs to do and tries to do that reliably.
+This began as a hobby project to help with SPE PetroBowl prep (see [Credits](#credits)), so don't expect production polish. It does what it needs to do and tries to do that reliably.
 
 > [!IMPORTANT]
 > This package is intended for research or instructional use only. See [Attribution and disclaimer](#attribution-and-disclaimer).
@@ -355,7 +355,7 @@ topics = await slb.local.get_topics(db)  # {topic: term_count}
 total = await slb.local.count(db)
 ```
 
-`search` ranks results best match first. By default it uses lexical (bm25 full-text) ranking: SQLite FTS5 picks candidates, then each one is scored directly against your query so an actual term-name match always beats a word that just happens to show up in a definition. Pass `mode="semantic"` or `mode="hybrid"` to rank by embedding similarity instead, or both fused. See [Semantic and hybrid search](#semantic-and-hybrid-search) below. Pass `scored=True` to get each result's score alongside it, as `(result, score)` pairs, instead of calling the mode's underlying function separately:
+`search` ranks results best match first. By default it uses lexical (bm25 full-text) ranking. SQLite FTS5 picks candidates, then each one is scored directly against your query so an actual term-name match always beats a word that just happens to show up in a definition. Pass `mode="semantic"` or `mode="hybrid"` to rank by embedding similarity instead, or both fused. See [Semantic and hybrid search](#semantic-and-hybrid-search) below. Pass `scored=True` to get each result's score alongside it, as `(result, score)` pairs, instead of calling the mode's underlying function separately:
 
 ```python
 for result, score in await slb.local.search(db, "porosity", limit=10, scored=True):
@@ -504,7 +504,7 @@ Add support for a new format with the `writer` decorator, no subclassing require
 import pathlib
 import yaml
 
-from slb_glossary import RecordLike  # just a type hint, so a direct import is fine here
+from slb_glossary.types import RecordLike  # just a type hint, so a direct import is fine here
 
 
 @slb.writer("yaml")
@@ -534,7 +534,7 @@ Or from the command line:
 slb mcp serve
 ```
 
-Both do the same thing: build an MCP server from an `MCPConfig` and serve it. `MCPConfig()` alone (or `slb mcp serve` with no flags) is already a valid server. Read-only, local database and live site both reachable, no auth, no rate limiting.
+Both do the same thing. They build an MCP server from an `MCPConfig` and serve it. `MCPConfig()` alone (or `slb mcp serve` with no flags) is already a valid server. Read-only, local database and live site both reachable, no auth, no rate limiting.
 
 ### Configuring the server
 

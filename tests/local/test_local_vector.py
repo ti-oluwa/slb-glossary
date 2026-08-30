@@ -1,9 +1,13 @@
-"""`local.vector`: vector-table lifecycle (`check_table_exists`/`ensure_table`/`clear`),
+"""
+`local.vector`: vector-table lifecycle (`check_table_exists`/`ensure_table`/`clear`),
 `embed_terms`, `delete_embeddings`, and `vector_search`'s cosine-similarity ranking.
 
 Uses the `mock_embeddings` fixture (see `tests/local/conftest.py`) to avoid a
 real, network-dependent `model2vec` model load - real `sqlite-vec`/`vec0`
-k-NN search still runs for real against the faked vectors."""
+k-NN search still runs for real against the faked vectors.
+"""
+
+import builtins
 
 import pytest
 
@@ -20,6 +24,7 @@ from slb_glossary.local.vector import (
     vector_search,
 )
 from tests.factories import make_search_result
+from tests.local.conftest import MockEmbeddings
 
 pytestmark = pytest.mark.unit
 
@@ -35,16 +40,14 @@ class TestLoadExtension:
         self, db, monkeypatch: pytest.MonkeyPatch
     ):
         """A missing `sqlite_vec` package raises `DatabaseError`."""
-        import builtins
-
         real_import = builtins.__import__
 
-        def _fake_import(name, *args, **kwargs):
+        def mock_import(name, *args, **kwargs):
             if name == "sqlite_vec":
                 raise ImportError("no such module")
             return real_import(name, *args, **kwargs)
 
-        monkeypatch.setattr(builtins, "__import__", _fake_import)
+        monkeypatch.setattr(builtins, "__import__", mock_import)
         with pytest.raises(DatabaseError, match="sqlite-vec"):
             await load_extension(db)
 
@@ -96,10 +99,10 @@ class TestClear:
         """If the table exists but `sqlite-vec` can't be loaded, logs and returns quietly."""
         await ensure_table(db)
 
-        async def _broken_load_extension(db):
+        async def bad_load_extension(db):
             raise DatabaseError("cannot load")
 
-        monkeypatch.setattr("slb_glossary.local.vector.load_extension", _broken_load_extension)
+        monkeypatch.setattr("slb_glossary.local.vector.load_extension", bad_load_extension)
         await clear(db)  # should not raise
 
 
@@ -183,7 +186,9 @@ class TestDeleteEmbeddings:
 
 @pytest.mark.anyio
 class TestVectorSearch:
-    async def test_ranks_by_cosine_similarity_best_first(self, db, mock_embeddings):
+    async def test_ranks_by_cosine_similarity_best_first(
+        self, db, mock_embeddings: MockEmbeddings
+    ):
         """Results come back ordered by cosine similarity to the query, best first."""
         await upsert_results(
             db,
@@ -191,9 +196,7 @@ class TestVectorSearch:
                 make_search_result(
                     url="https://x.com/a", term="Close", definition=None, topic=None
                 ),
-                make_search_result(
-                    url="https://x.com/b", term="Far", definition=None, topic=None
-                ),
+                make_search_result(url="https://x.com/b", term="Far", definition=None, topic=None),
             ],
         )
         mock_embeddings.set("Close", [1.0, 0.0, 0.0, 0.0])
@@ -220,9 +223,7 @@ class TestVectorSearch:
 
     async def test_only_embedded_terms_are_considered(self, db, mock_embeddings):
         """A term never passed through `embed_terms` is invisible to `vector_search`."""
-        await upsert_results(
-            db, [make_search_result(url="https://x.com/a", term="Unembedded")]
-        )
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Unembedded")])
         results = await vector_search(db, "query")
         assert results == []
 

@@ -8,7 +8,7 @@ from slb_glossary import errors
 
 pytestmark = pytest.mark.unit
 
-_ALL_ERROR_CLASSES = [
+ALL_ERROR_CLASSES = [
     getattr(errors, name)
     for name in dir(errors)
     if isinstance(getattr(errors, name), type)
@@ -17,7 +17,7 @@ _ALL_ERROR_CLASSES = [
 
 
 class TestExceptionHierarchy:
-    @pytest.mark.parametrize("error_class", _ALL_ERROR_CLASSES)
+    @pytest.mark.parametrize("error_class", ALL_ERROR_CLASSES)
     def test_every_error_is_an_slb_glossary_error(self, error_class: type[Exception]):
         """Every exported exception class is a subclass of `SLBGlossaryError`."""
         assert issubclass(error_class, errors.SLBGlossaryError)

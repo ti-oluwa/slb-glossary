@@ -1,7 +1,7 @@
 [project]
 name = "slb-glossary"
 version = "0.1.0"
-description = "Search the SLB Energy Glossary in Python."
+description = "Search the SLB Energy Glossary"
 readme = "README.md"
 license = { text = "BSD-3-Clause" }
 authors = [{ name = "Daniel T. Afolayan", email = "tioluwa.dev@gmail.com" }]
@@ -27,13 +27,14 @@ dependencies = [
     "click>=8.1.7",
     "aiosqlite>=0.20.0",
     "platformdirs>=4.0",
+    "typing-extensions>=4.6; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
 xlsx = ["openpyxl>=3.1"]
 tui = ["trogon>=0.6.0", "textual>=0.58"]
 config = ["tomlkit>=0.12", "pyyaml>=6.0"]
-mcp = ["fastmcp>=2.9,<4", "typing-extensions>=4.6; python_version < '3.11'"]
+mcp = ["fastmcp>=2.9,<4"]
 semantic = ["model2vec>=0.4,<1", "sqlite-vec>=0.1.3,<1"]
 all = ["slb-glossary[xlsx,tui,config,mcp,semantic]"]
 
@@ -54,7 +55,7 @@ test = [
     "trio>=0.26",
     "uvloop>=0.20; sys_platform != 'win32'",
     "pytest-cov>=5.0",
-    "click", # already a runtime dep; CliRunner comes from it
+    "click",
     "faker>=25.0",
 ]
 

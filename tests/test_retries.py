@@ -1,6 +1,7 @@
 """`RetryPolicy` delay math and the `retry()` helper's control flow."""
 
 import asyncio
+import math
 
 import pytest
 
@@ -32,7 +33,6 @@ class TestRetryPolicyDelayForAttempt:
 
     def test_logarithmic_delay_grows_by_log_of_attempt(self):
         """`LOGARITHMIC` backoff grows by `base_delay * log(attempt + 1, factor)`."""
-        import math
 
         policy = RetryPolicy.logarithmic(base_delay=100, factor=2.0, jitter=False, max_delay=None)
         for attempt in (1, 2, 5):

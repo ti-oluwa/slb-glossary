@@ -9,14 +9,14 @@ from slb_glossary.local.schema import initialize
 pytestmark = pytest.mark.unit
 
 
-async def _table_names(connection: aiosqlite.Connection) -> set[str]:
+async def table_names(connection: aiosqlite.Connection) -> set[str]:
     cursor = await connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
     rows = await cursor.fetchall()
     await cursor.close()
     return {row[0] for row in rows}
 
 
-async def _trigger_names(connection: aiosqlite.Connection) -> set[str]:
+async def trigger_names(connection: aiosqlite.Connection) -> set[str]:
     cursor = await connection.execute("SELECT name FROM sqlite_master WHERE type='trigger'")
     rows = await cursor.fetchall()
     await cursor.close()
@@ -29,19 +29,19 @@ class TestInitialize:
         """Creates the `terms` table."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
-            assert "terms" in await _table_names(connection)
+            assert "terms" in await table_names(connection)
 
     async def test_creates_fts_table(self, tmp_path):
         """Creates the `terms_fts` FTS5 virtual table."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
-            assert "terms_fts" in await _table_names(connection)
+            assert "terms_fts" in await table_names(connection)
 
     async def test_creates_sync_triggers(self, tmp_path):
         """Creates the `terms_ai`/`terms_ad`/`terms_au` FTS sync triggers."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
-            triggers = await _trigger_names(connection)
+            triggers = await trigger_names(connection)
             assert {"terms_ai", "terms_ad", "terms_au"} <= triggers
 
     async def test_is_idempotent_when_run_twice(self, tmp_path):
@@ -49,7 +49,7 @@ class TestInitialize:
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
             await initialize(connection)  # should not raise
-            assert "terms" in await _table_names(connection)
+            assert "terms" in await table_names(connection)
 
     async def test_fts_trigger_keeps_index_in_sync_on_insert(self, tmp_path):
         """Inserting into `terms` is mirrored into `terms_fts` via the AFTER INSERT trigger."""

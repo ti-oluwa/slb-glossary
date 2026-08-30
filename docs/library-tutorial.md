@@ -48,8 +48,8 @@ Each item `slb.live.search` yields is a `SearchResult`. It is a plain
 
 ```python
 async for result in slb.live.search(session, "porosity"):
-    print(result.term)              # by name
-    term, definition, *_ = result   # or unpacked positionally, ignoring the rest
+    print(result.term)  # by name
+    term, definition, *_ = result  # or unpacked positionally, ignoring the rest
 ```
 
 ## Caching what you look up locally
@@ -72,9 +72,7 @@ async def main() -> None:
         # `persist=True` writes any live result back to `db` as it
         # arrives, so the next run of this exact script does not need
         # the network at all.
-        async for lookup in slb.search(
-            "water saturation", db=db, session=session, persist=True
-        ):
+        async for lookup in slb.search("water saturation", db=db, session=session, persist=True):
             print(lookup.source, ":", lookup.value.term, "-", lookup.value.definition)
 
 

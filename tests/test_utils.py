@@ -16,7 +16,7 @@ pytestmark = pytest.mark.unit
 ENV_VAR = "SLB_GLOSSARY_TEST_UTILS_ENV"
 
 
-class _Choice(enum.Enum):
+class Choice(enum.Enum):
     A = "a"
     B = "b"
 
@@ -57,7 +57,7 @@ class TestEnv:
     def test_casts_to_enum_by_value(self, monkeypatch: pytest.MonkeyPatch):
         """An `Enum` subclass is matched by its member value."""
         monkeypatch.setenv(ENV_VAR, "b")
-        assert env(ENV_VAR, _Choice.A, type=_Choice) is _Choice.B
+        assert env(ENV_VAR, Choice.A, type=Choice) is Choice.B
 
     def test_raises_env_var_error_on_uncastable_value(self, monkeypatch: pytest.MonkeyPatch):
         """An uncastable value raises `EnvVarError`."""

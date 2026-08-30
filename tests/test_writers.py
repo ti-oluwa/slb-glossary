@@ -224,10 +224,10 @@ class TestSave:
     ):
         """A writer that raises is wrapped in `WriterError`, chaining the original as `__cause__`."""
 
-        async def _failing_writer(records, destination):
+        async def bad_writer(records, destination):
             raise OSError("disk full")
 
-        monkeypatch.setitem(WRITERS, "json", _failing_writer)
+        monkeypatch.setitem(WRITERS, "json", bad_writer)
         destination = tmp_path / "out.json"
         with pytest.raises(WriterError) as exc_info:
             await save(make_search_results(1), destination)
@@ -241,7 +241,7 @@ class TestSave:
         written: list[pathlib.Path] = []
 
         @writer("throwaway-test-format")
-        async def _throwaway_writer(records, destination):
+        async def throwaway_writer(records, destination):
             written.append(destination)
             destination.write_text("ok", encoding="utf-8")
 
