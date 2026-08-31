@@ -17,7 +17,7 @@ retention, refresh, and deletion in compliance with SLB's terms of use linked ab
 
 import logging as py_logging
 
-from . import live, local, query
+from . import live, local, query, readers, writers
 from . import logging as log
 from .config import Config
 from .errors import (
@@ -58,6 +58,7 @@ from .query import (
     related_terms,
     search,
 )
+from .readers import READERS, Reader, read_rows, reader
 from .retries import BackoffType, RetryPolicy
 from .types import (
     Language,
@@ -67,7 +68,7 @@ from .types import (
     SearchResult,
 )
 from .utils import get_topic_match, print_async_records, print_records
-from .writers import WRITERS, Writer, records_to_dicts, save, supported_formats, writer
+from .writers import WRITERS, Writer, records_to_dicts, save, writer
 
 py_logging.basicConfig(
     format="%(levelname)s  %(asctime)s  [%(name)s.%(funcName)s:%(lineno)d]:  %(message)s",
@@ -76,6 +77,7 @@ py_logging.basicConfig(
 
 __version__ = "0.1.0"
 __all__ = [
+    "READERS",
     "WRITERS",
     "BackoffType",
     "BrowserError",
@@ -90,6 +92,7 @@ __all__ = [
     "ParsingError",
     "QueryError",
     "QueryResult",
+    "Reader",
     "RecordLike",
     "RelatedTerm",
     "ResourceType",
@@ -120,6 +123,9 @@ __all__ = [
     "print_async_records",
     "print_records",
     "query",
+    "read_rows",
+    "reader",
+    "readers",
     "records_to_dicts",
     "refresh_topics",
     "related_terms",
@@ -127,6 +133,6 @@ __all__ = [
     "search",
     "session",
     "session_from_config",
-    "supported_formats",
     "writer",
+    "writers",
 ]

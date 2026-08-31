@@ -31,10 +31,10 @@ asyncio.run(main())
 
 ```python
 async with slb.live.session(
-    language="es",              # search the Spanish edition instead of English
-    browser_type="firefox",     # "chromium" (default), "firefox", or "webkit"
-    headless=False,             # show the browser window, for debugging
-    timeout=90_000,             # milliseconds to wait for page loads/elements
+    language="es",  # search the Spanish edition instead of English
+    browser_type="firefox",  # "chromium" (default), "firefox", or "webkit"
+    headless=False,  # show the browser window, for debugging
+    timeout=90_000,  # milliseconds to wait for page loads/elements
 ) as session:
     ...
 ```
@@ -44,7 +44,7 @@ A few more that matter once you're running this somewhere other than your own la
 ```python
 async with slb.live.session(
     proxy={"server": "http://myproxy:3128"},
-    executable_path="/opt/chrome/chrome",   # use a specific browser build
+    executable_path="/opt/chrome/chrome",  # use a specific browser build
     viewport={"width": 1920, "height": 1080},
 ) as session:
     ...
@@ -59,7 +59,7 @@ Opening a session doesn't, by itself, load anything from the glossary; the first
 
 ```python
 async with slb.live.session(initialize=False) as session:
-    await session.initialize()   # do this now, explicitly, on your own terms
+    await session.initialize()  # do this now, explicitly, on your own terms
     async for result in slb.live.search(session, "porosity"):
         ...
 ```
@@ -108,8 +108,8 @@ Every function in `slb_glossary.live` (and everywhere else in this library) hand
 
 ```python
 async for result in slb.live.search(session, "porosity"):
-    print(result.term)              # by name
-    term, definition, *_ = result   # or positionally, ignoring the rest
+    print(result.term)  # by name
+    term, definition, *_ = result  # or positionally, ignoring the rest
 ```
 
 See [The Data Model](../concepts/data-model.md#searchresult) for the full field list, including `related` (a tuple of `RelatedTerm`s) and the two-language support (`language`).

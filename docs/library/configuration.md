@@ -26,7 +26,7 @@ await slb.save(slb.live.search(session, "flooding", limit=None), "flooding.json"
 `.xlsx` needs the `xlsx` extra installed (`uv add "slb-glossary[xlsx]"`), since it depends on `openpyxl`; `.json` and `.csv` work with no extra at all.
 
 ```python
-print(slb.supported_formats())   # ['csv', 'json', 'xlsx'] on a base install
+print(slb.supported_formats())  # ['csv', 'json', 'xlsx'] on a base install
 ```
 
 ---
@@ -39,9 +39,9 @@ Everything the CLI's [`config` command](../cli/configuration.md#the-config-comma
 from slb_glossary import Config
 
 config = Config()
-print(config.session.browser_type)   # "chromium"
-print(config.local.data_dir)         # None -> OS-appropriate default
-print(config.output.show_related)    # False
+print(config.session.browser_type)  # "chromium"
+print(config.local.data_dir)  # None -> OS-appropriate default
+print(config.output.show_related)  # False
 ```
 
 - **`config.session`** (`SessionOptions`): everything `slb_glossary.live.session()` takes as keyword arguments — `language`, `browser_type`, `headless`, `timeout`, `retry`, and so on.
@@ -51,11 +51,11 @@ print(config.output.show_related)    # False
 ### Loading and saving
 
 ```python
-config = Config.load()                    # the default config path if it exists, else built-in defaults
+config = Config.load()  # the default config path if it exists, else built-in defaults
 config = Config.from_file("my-config.toml")  # a specific file; raises if it doesn't exist
 
 config.session.headless = False
-config.to_file("my-config.toml")          # format inferred from the extension
+config.to_file("my-config.toml")  # format inferred from the extension
 ```
 
 `Config.load()` is the one you'll reach for most: unlike `from_file`, it never raises `FileNotFoundError`, so a script can always call it and get *something* usable back, config file or not.
@@ -63,7 +63,7 @@ config.to_file("my-config.toml")          # format inferred from the extension
 ### Reading and writing one setting at a time
 
 ```python
-print(config.get("session.headless"))     # True
+print(config.get("session.headless"))  # True
 config.set("local.sync_max_age_days", 3.5)
 ```
 

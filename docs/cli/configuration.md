@@ -117,6 +117,18 @@ Every one of these follows the same `SLB_GLOSSARY_<NAME>` pattern, and each is d
 
 ---
 
+## Logging
+
+Every command accepts `--log-level`, `--log-to`, and `--log-sink`, for seeing (or saving) what actually happened during a run beyond the command's own printed output:
+
+```bash
+slb search porosity --log-level debug --log-to run.log
+```
+
+`--log-to` accepts a file path, or the literal `stderr`/`stdout`. `--log-sink module:ClassName` points at your own sink class instead (see [Logging](../library/logging.md#sinks) for what a sink needs to implement), and takes priority over `--log-to` if both are given. These three flags are a thin wrapper over `slb_glossary.logging.configure_logging`; see [Logging](../library/logging.md) for the full library-side API, including routing different parts of the library to different sinks at once, which the CLI's flags don't expose.
+
+---
+
 ## Where to go from here
 
 For the same settings, but reached from Python instead of a config file or environment variable, see [Saving Results and Config Objects](../library/configuration.md). For every flag on every command in one place, see [CLI Commands](../api/cli.md).

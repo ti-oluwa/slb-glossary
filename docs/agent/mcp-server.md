@@ -66,7 +66,22 @@ slb mcp serve --no-local                # live-only: never reads the cache
 slb mcp serve --source local --source live   # both allowed; can still be requested per call
 ```
 
-`--no-local`/`--no-live` are the blunt instrument. For finer control — letting an agent choose `source` per call, but only from a narrower set than the server could technically support — see `SourcePolicy` in [Embedding the server yourself](#embedding-the-server-in-your-own-python-app).
+`--no-local`/`--no-live` are the blunt instrument, each toggling `session.enabled`/`local.enabled` on the underlying `MCPConfig`. For finer control — letting an agent choose `source` per call, but only from a narrower set than the server could technically support, or hiding the choice from the tool schema entirely — build `SourcePolicy` directly:
+
+```python
+import slb_glossary.mcp as slb_mcp
+from slb_glossary import Source
+
+config = slb_mcp.MCPConfig(
+    source_policy=slb_mcp.SourcePolicy(
+        allowed=frozenset({Source.LOCAL, Source.AUTO}),  # never let a call force a live fetch
+        default=Source.AUTO,
+        expose_choice=True,  # False hides the `source` argument from every tool's schema
+    ),
+)
+```
+
+Leaving `allowed` unset computes it automatically from `session.enabled`/`local.enabled`: both enabled allows all three (`LOCAL`/`LIVE`/`AUTO`), either alone restricts to just that one plus `AUTO`.
 
 ## Locking it down for anything beyond local, trusted use
 
@@ -82,24 +97,63 @@ slb mcp serve --rate-limit 30 --rate-limit-window 60
 
 ## Embedding the server in your own Python app
 
-For anything the CLI's flags don't cover — a custom `AuthProvider` that needs constructor arguments, wiring the server into an existing FastAPI app's lifespan, or just preferring config-as-code — build the `MCPApp` directly:
+The CLI's flags cover the common cases. `MCPConfig` itself is considerably deeper — per-tool timeouts, lifecycle/per-call hooks, structured logging sinks, progress streaming, and a real `AuthProvider` rather than a bare token — and building it directly in code is how you reach the rest of it:
 
 ```python
-from slb_glossary.mcp.config import MCPConfig, LocalAccess, SessionAccess, Tool
+import slb_glossary as slb
+import slb_glossary.mcp as slb_mcp
 
-config = MCPConfig(
-    tools=Tool.ALL,
-    local=LocalAccess(allow_write=True),
-    session=SessionAccess(enabled=True),
+config = slb_mcp.MCPConfig(
+    server=slb_mcp.ServerInfo(name="my-glossary-mcp", version="1.0.0"),
+    session=slb_mcp.SessionAccess(
+        enabled=True,
+        mode=slb_mcp.SessionMode.LAZY,  # open the shared browser on first use, not at startup
+        max_concurrent=3,
+        options=slb.config.SessionOptions(use_stealth=False),
+    ),
+    local=slb_mcp.LocalAccess(allow_write=True),
+    tools=slb_mcp.Tool.ALL,
+    timeouts=slb_mcp.Timeout(default=60.0, per_tool={"glossary_sync": 300.0}),
+    rate_limit=slb_mcp.RateLimit(enabled=True, limit=30, window=60.0),
+    streaming=slb_mcp.Streaming(default=True),
+    logging=slb_mcp.Logging(
+        sinks=[slb.log.FileSink("./mcp.log"), slb.log.StderrSink()],
+        level="info",
+    ),
 )
+app = slb_mcp.MCPApp(config)
 
-from slb_glossary.mcp.api import MCPApp
-
-app = MCPApp(config)
-app.run()   # or app.run_async() inside an existing event loop
+if __name__ == "__main__":
+    app.run(transport="streamable-http")
 ```
 
-`MCPApp(config)` is cheap and does no I/O; the underlying `fastmcp.FastMCP` server and its tools are only assembled on the first `server()`/`run()`/`run_async()` call. `MCPConfig()` alone (no arguments) is a fully valid default: read-only, local and live both enabled, unauthenticated, unlimited rate — exactly what `slb mcp serve` with no flags gives you.
+`MCPApp(config)` is cheap and does no I/O; the underlying `fastmcp.FastMCP` server and its tools are only assembled on the first `server()`/`run()`/`run_async()` call. `MCPConfig()` alone (no arguments) is a fully valid default: read-only, local and live both enabled, unauthenticated, unlimited rate, `SessionMode.LAZY` — exactly what `slb mcp serve` with no flags gives you. Every section is independently optional; the CLI's own flags (`--tools`, `--allow-write`, `--rate-limit`, ...) each set one narrow slice of this same config for you.
+
+A few fields worth knowing about that the CLI has no flag for at all:
+
+- **`session.mode`** (`SessionMode.EAGER`/`LAZY`/`PER_CALL`): when the shared browser session is opened. `LAZY` (the default) opens nothing until the first call that needs it; `PER_CALL` opens and closes a fresh session for every call needing one, for full isolation under multi-tenant auth.
+- **`timeouts.per_tool`**: a per-tool override map, since a `glossary_sync` call over a large topic legitimately needs longer than a `glossary_get_term` call.
+- **`hooks`** (`Hooks(before_tool=..., after_tool=..., on_error=..., on_startup=..., on_shutdown=...)`): run your own code around every tool call or around server startup/shutdown, without subclassing anything.
+- **`logging`**: routes `slb_glossary`'s own logging (the same sinks/levels covered in [Saving, Output and Config Files](../cli/configuration.md)) for this server process specifically, separate from whatever logging your surrounding app already has configured.
+
+See [`slb_glossary.mcp`](../api/library.md#slb_glossarymcp) for the full field list of every one of these.
+
+### A real `AuthProvider`, not just a bare token
+
+The CLI's `--auth-token` is a convenience for `slb_mcp.StaticTokenVerifier`. For anything past a handful of fixed keys, build a real `AuthProvider` (FastMCP's own auth abstraction) and pass it as `auth.provider`:
+
+```python
+config = slb_mcp.MCPConfig(
+    auth=slb_mcp.Auth(
+        provider=slb_mcp.StaticTokenVerifier(
+            {"a-long-token": "client-a", "another-token": "client-b"}
+        ),
+        required_scopes=(),
+    ),
+)
+```
+
+`slb_mcp.import_provider("myapp.auth:build_provider")` loads one from a dotted path instead, if you'd rather keep the provider construction elsewhere in your codebase.
 
 ### Loading an app this way from the CLI
 
@@ -109,8 +163,50 @@ slb mcp serve app.main:app
 
 `app.main:app` is a uvicorn-style import path: `app/main.py` containing a module-level `app = MCPApp(...)` (or a zero-argument factory function returning one). When `APP_PATH` is given this way, every flag except `--transport`/`--host`/`--port`/`--log-level` is ignored, since the app is already fully configured in code; passing one of the ignored flags alongside `APP_PATH` is an error, specifically so you can't accidentally think a flag did something it didn't.
 
+## Logging
+
+`MCPConfig.logging` (a `slb_mcp.Logging`) controls this server process's own logging, separately from any logging your surrounding application already has configured:
+
+```python
+config = slb_mcp.MCPConfig(
+    logging=slb_mcp.Logging(
+        sinks=[slb.log.FileSink("./mcp.log"), slb.log.StderrSink()],
+        level="info",
+        log_tool_calls=True,  # the default: log every call's name, caller, duration, outcome
+    ),
+)
+```
+
+This mirrors `slb_glossary.logging.configure_logging` closely enough that anything covered in [Logging](../library/logging.md) — routing different loggers to different sinks, a custom `LogSink` class, changing the format string — applies here too, just scoped to the `logging=` field instead of a direct function call. Leave it unset (the default) to inherit whatever logging setup, if any, is already in place when the server starts.
+
+## Getting the underlying FastMCP instance
+
+`MCPApp` doesn't hide the `fastmcp.FastMCP` server it builds. `app.server()` returns it directly, built (once, lazily) from your `MCPConfig` — from there, it's a regular FastMCP app you can extend with anything FastMCP itself supports, beyond what `MCPConfig` has a dedicated field for:
+
+```python
+app = slb_mcp.MCPApp(config)
+mcp = app.server()  # the actual fastmcp.FastMCP instance
+
+
+@mcp.tool()
+def internal_note(text: str) -> str:
+    """A tool that has nothing to do with the glossary at all."""
+    return f"noted: {text}"
+
+
+@mcp.resource("glossary://about")
+def about() -> str:
+    return "An MCP server for the SLB Energy Glossary."
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")  # run the FastMCP instance directly, not app.run()
+```
+
+This is the escape hatch for anything `MCPConfig` doesn't model directly: extra tools/resources/prompts unrelated to the glossary, FastMCP middleware, or mounting this server inside a larger ASGI app's own routing. `app.server()` is idempotent — calling it again returns the same instance rather than rebuilding it — so mixing this with `app.run()`/`app.run_async()` afterward is safe.
+
 ---
 
 ## Where to go from here
 
-For a worked example connecting this server to an actual agent framework, see [Building an Agent with Pydantic AI](pydantic-ai.md). For the full config surface (`SessionAccess`, `LocalAccess`, `SourcePolicy`, `ServerInfo`), see [`slb_glossary.mcp.config`](../api/library.md#slb_glossarymcp).
+For a worked example connecting this server to an actual agent framework, see [Building an Agent with Pydantic AI](pydantic-ai.md). For the full config surface, see [`slb_glossary.mcp`](../api/library.md#slb_glossarymcp). For a complete, runnable server built with several of these fields together, see [`examples/mcp_app.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/mcp_app.py) in the repository.

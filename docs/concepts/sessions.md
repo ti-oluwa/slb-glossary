@@ -30,7 +30,8 @@ A `Session` doesn't just hold one browser tab; it holds a small pool of them, bo
 async with slb.live.session(max_pages=10) as session:
     results = await slb.compare(
         ["shale", "sandstone", "limestone", "dolomite", "chalk"],
-        session=session, concurrency=5,
+        session=session,
+        concurrency=5,
     )
 ```
 
@@ -38,7 +39,7 @@ async with slb.live.session(max_pages=10) as session:
 
 ## Retrying a flaky first load
 
-Occasionally, the glossary's search widget renders with nothing in it on the very first load. `session()`'s `retry` parameter (a `RetryPolicy`) controls how that specific case is retried — how many attempts, and how the delay between them grows:
+Occasionally, the glossary's search widget renders with nothing in it on the very first load. `session()`'s `retry` parameter (a `RetryPolicy`) controls how that specific case is retried, how many attempts, and how the delay between them grows:
 
 ```python
 from slb_glossary import RetryPolicy, BackoffType
@@ -50,6 +51,26 @@ async with slb.live.session(
 ```
 
 This only governs that one initial-load retry, not every network call a session makes afterward; ordinary page timeouts are governed by `timeout` instead.
+
+## RetryPolicy elsewhere in the library
+
+`RetryPolicy` isn't specific to session startup; it's a general-purpose retry configuration used in a few other places too, and available for your own code as well:
+
+- **`refresh_topics`** (the same facet-panel load that populates `session.topics`/`session.size`) reuses `session.retry` directly rather than taking a retry policy of its own — call it again later if the glossary's topic list may have changed mid-run, and it retries exactly like the initial load did.
+- **`slb install`**'s browser download (`slb_glossary.cli.browsers`) retries a failed download per its own `RetryPolicy`, exposed as the CLI's `--retries`/`--timeout` flags rather than a policy object directly. See [`install`](../cli/sync.md#install).
+- **`slb_glossary.retries.retry`** is the underlying retry loop everything above calls into, and it's public: wrap any zero-argument async callable of your own in it, independent of anything glossary-related.
+
+```python
+from slb_glossary.retries import retry, RetryPolicy
+
+
+async def flaky_call() -> str: ...
+
+
+result = await retry(flaky_call, policy=RetryPolicy(attempts=3, base_delay=500))
+```
+
+`retry` also accepts `until`, a callable checked against a successful result before deciding the call actually succeeded, e.g. `until=lambda r: r is not None`, for retrying a call that returns a falsy-but-not-erroring result you'd still like another attempt at.
 
 ## Where to go from here
 

@@ -1672,7 +1672,7 @@ async def compare(
     language: str | None = None,
     concurrency: int | None = None,
     with_similar: bool = False,
-) -> dict[str, QueryResult]:
+) -> dict[str, QueryResult[typing.Any]]:
     """
     Look up several terms at once, for side-by-side comparison.
 

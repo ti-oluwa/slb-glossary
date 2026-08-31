@@ -61,7 +61,10 @@ Covered in full on [Combined Search with slb_glossary.query](query.md#persist-ca
 
 ```python
 written = await slb.local.load_file(
-    db, "terms.json", term_field="term", definition_field="definition",
+    db,
+    "terms.json",
+    term_field="term",
+    definition_field="definition",
     source="internal-wordlist",
 )
 print(f"Imported {written} row(s)")
@@ -74,13 +77,13 @@ This is the library counterpart of `slb local import`, useful for seeding the da
 ## Search modes: lexical, semantic, hybrid
 
 ```python
-results = await slb.local.search(db, "reservoir rock", mode="lexical")   # the default
+results = await slb.local.search(db, "reservoir rock", mode="lexical")  # the default
 ```
 
 `mode="lexical"` (bm25 full-text ranking) is the default and needs nothing beyond the base install. `"semantic"` (embedding similarity) and `"hybrid"` (both, fused) need the `semantic` extra installed, and terms already embedded:
 
 ```python
-await slb.local.embed_terms(db)   # compute and store embeddings for everything cached so far
+await slb.local.embed_terms(db)  # compute and store embeddings for everything cached so far
 
 results = await slb.local.search(db, "rock that holds fluid", mode="hybrid")
 ```

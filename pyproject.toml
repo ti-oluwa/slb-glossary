@@ -61,6 +61,9 @@ test = [
 docs = [
     "zensical>=0.0.31",
 ]
+examples = [
+    "pydantic-ai-slim[mcp]>=1.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

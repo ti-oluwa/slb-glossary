@@ -99,6 +99,7 @@ nav:
       - Local Search and Cache: library/local-search.md
       - Combined Search with slb_glossary.query: library/query.md
       - Saving Results and Config Objects: library/configuration.md
+      - Logging: library/logging.md
   - Core Concepts:
       - Sessions and the Browser: concepts/sessions.md
       - Search Modes: concepts/search-modes.md

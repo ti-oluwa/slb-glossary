@@ -23,8 +23,8 @@ A single term definition, extracted from one glossary page. A plain `typing.Name
 ```python
 result = await slb.get_term("porosity", db=db, session=session)
 term, definition, grammatical_label, topic, url, *_ = result.value  # positional
-print(result.value.term, result.value.definition)                   # by name
-print(result.value.asdict())                                        # as a plain dict
+print(result.value.term, result.value.definition)  # by name
+print(result.value.asdict())  # as a plain dict
 ```
 
 Only `term`, `definition`, `topic`, and `url` are ever filtered/matched on; `image`, `image_caption`, `related`, and `language` are along for the ride, carried through from whichever page produced the result.
@@ -71,9 +71,9 @@ A `Session` is bound to one language edition for its entire lifetime (`session()
 ```python
 from slb_glossary import SearchMode
 
-SearchMode.LEXICAL   # "lexical" - the default
+SearchMode.LEXICAL  # "lexical" - the default
 SearchMode.SEMANTIC  # "semantic"
-SearchMode.HYBRID     # "hybrid"
+SearchMode.HYBRID  # "hybrid"
 ```
 
 Covered in full on its own page: [Search Modes](search-modes.md).

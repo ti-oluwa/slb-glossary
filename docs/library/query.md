@@ -43,9 +43,9 @@ Every function here wraps its answer in a `QueryResult`, rather than handing bac
 
 ```python
 lookup = await slb.get_term("porosity", db=db, session=session)
-print(lookup.value)       # the SearchResult itself (or None if not found)
-print(lookup.source)      # Source.LOCAL or Source.LIVE - which one actually answered
-print(lookup.persisted)   # whether this result was just written to `db`
+print(lookup.value)  # the SearchResult itself (or None if not found)
+print(lookup.source)  # Source.LOCAL or Source.LIVE - which one actually answered
+print(lookup.persisted)  # whether this result was just written to `db`
 ```
 
 For a streamed lookup (`search`, `get_terms_on`), `persisted` reflects whether persistence was *requested* for the call as a whole, not a per-item write confirmation.
@@ -55,9 +55,7 @@ For a streamed lookup (`search`, `get_terms_on`), `persisted` reflects whether p
 ## `search`: the one you'll reach for most
 
 ```python
-async for lookup in slb.search(
-    "water saturation", db=db, session=session, persist=True
-):
+async for lookup in slb.search("water saturation", db=db, session=session, persist=True):
     print(lookup.source, ":", lookup.value.term, "-", lookup.value.definition)
 ```
 
@@ -65,7 +63,11 @@ Everything from [`local.search`](local-search.md#search-modes-lexical-semantic-h
 
 ```python
 async for lookup in slb.search(
-    "reservoir rock", db=db, session=session, mode="hybrid", relevance_threshold=0.7,
+    "reservoir rock",
+    db=db,
+    session=session,
+    mode="hybrid",
+    relevance_threshold=0.7,
 ):
     ...  # trust local results less readily; augment with live more often
 ```
@@ -77,10 +79,16 @@ async for lookup in slb.search(
 Each of these is a thinner, more specific tool than `search`, sharing the same `db`/`session`/`source`/`persist` arguments described above:
 
 ```python
-lookup = await slb.get_term("black oil", db=db, session=session)                     # one exact term
-results = await slb.compare(["water flooding", "gas flooding"], db=db, session=session)  # several, concurrently
-related = await slb.related_terms("water saturation", db=db, session=session)        # just the related-term links
-async for lookup in slb.get_terms_on("Drilling Fluids", db=db, session=session):     # every term under a topic
+lookup = await slb.get_term("black oil", db=db, session=session)  # one exact term
+results = await slb.compare(
+    ["water flooding", "gas flooding"], db=db, session=session
+)  # several, concurrently
+related = await slb.related_terms(
+    "water saturation", db=db, session=session
+)  # just the related-term links
+async for lookup in slb.get_terms_on(
+    "Drilling Fluids", db=db, session=session
+):  # every term under a topic
     ...
 term = await slb.get_random_term(db=db, session=session)
 topics = await slb.get_topics(db=db, session=session)
@@ -90,7 +98,10 @@ topics = await slb.get_topics(db=db, session=session)
 
 ```python
 results = await slb.compare(
-    ["shale", "sandstone", "limestone", "dolomite"], db=db, session=session, concurrency=4,
+    ["shale", "sandstone", "limestone", "dolomite"],
+    db=db,
+    session=session,
+    concurrency=4,
 )
 for name, lookup in results.items():
     print(name, "->", lookup.value.term if lookup.value else "not found")

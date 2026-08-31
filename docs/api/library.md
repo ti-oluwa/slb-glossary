@@ -12,11 +12,11 @@ A dense, structural reference across `slb_glossary`'s modules. For explanations 
 | `open_session(**options)` / `close_session(session)` | async functions | The non-context-manager pair `session()` wraps. Use when you need to hold a session open across a scope `async with` can't express cleanly. |
 | `session_from_config(config, **overrides)` | async context manager | Same as `session()`, but sourced from a `Config` (or a path to one). Keyword overrides win over the config's own values for that one call. |
 | `search(session, query, *, limit=3, topic=None, start_letter=None, concurrency=1, ...)` | async generator | Ranked live search. `limit=None` for unlimited. `concurrency>1` trades relevance-order guarantees for speed. |
-| `get_term(session, term_or_url, *, topic=None, language=None)` | coroutine → `SearchResult \| None` | One exact term or detail-page URL. |
+| `get_results_from_url(session, url, *, topic=None, page=None, exclude=None)` | async generator | Every definition found on one term detail-page URL (a term can carry more than one). What `query.get_term` calls into for a live lookup. |
+| `get_results_from_urls(session, urls, *, topic=None, concurrency=1, first_only=False, exclude=None)` | async generator | Same, for several URLs. `concurrency>1` opens that many worker pages on `session` (needs `session.max_pages` to cover it). Results arrive as they finish, not necessarily in `urls`' order when concurrent. |
 | `get_terms_on(session, topic, *, limit=None, start_letter=None)` | async generator | Every term filed under one topic. |
 | `get_terms_urls(session, *, query=None, topic=None, start_letter=None, limit=None)` | async generator → `str` | Raw URLs, no content fetched. |
-| `get_topics(session)` | coroutine → `dict[str, int]` | Topic name → term count. |
-| `get_random_term(session, *, topic=None, count=1)` | coroutine | Sampled by visiting a random detail page. |
+| `refresh_topics(session)` | coroutine → `Session` | Reloads `session.topics`/`session.size` in place, reusing `session.retry` — the exact reload `open_session`/`session()` already does once at startup; call this again later if the glossary's topic list may have changed mid-run. |
 | `score_result(result, query)` | function → `float` | Token-overlap relevance score used internally by `search`; exposed for custom ranking. |
 | `ensure_initialized(session, auto_initialize=True)` | coroutine | Loads `session.topics`/`session.size` if not already loaded; raises `SessionNotInitializedError` if `auto_initialize=False` and it isn't. |
 | `Session` | class | See [Sessions and the Browser](../concepts/sessions.md#what-opening-a-session-actually-does). Key attributes: `topics`, `size`, `pages` (the page pool), `language`. |
@@ -34,10 +34,11 @@ A dense, structural reference across `slb_glossary`'s modules. For explanations 
 | `get_term(db, term_or_url, *, topic=None, language=None)` | coroutine → `SearchResult \| None` | |
 | `get_terms_on(db, topic, *, limit=None)` | coroutine → `list[SearchResult]` | |
 | `get_topics(db)` | coroutine → `dict[str, int]` | |
+| `get_random_term(db, *, topic=None, language=None, fuzzy=False, exclude=None)` | coroutine → `SearchResult \| None` | Sampled from what's already stored, no network involved. |
 | `count(db)` | coroutine → `int` | Total stored terms. |
 | `upsert_results(db, results)` | coroutine → `int` | Insert/update by `(url, topic)`. Returns rows written. |
 | `upsert_results_incrementally(db, results_iter, *, batch_size=20)` | async generator | Wraps an async iterable of `SearchResult`, writing every `batch_size` as they pass through, yielding each result onward unchanged. |
-| `load_file(db, path, *, term_field="term", definition_field="definition", topic_field=..., url_field=..., source="glossary")` | coroutine → `int` | Import from CSV/JSON/XLSX. See [`local import`](../cli/sync.md#importing-your-own-data). |
+| `load_file(db, path, *, term_field="term", definition_field="definition", topic_field=..., url_field=..., source="glossary")` | coroutine → `int` | Import from CSV/JSON/XLSX/XLSM (and YAML, with the `config` extra's PyYAML dependency present) — see `slb_glossary.readers.supported_formats()`. See [`local import`](../cli/sync.md#importing-your-own-data). |
 | `embed_terms(db, *, urls=None, only_missing=True, batch_size=None)` | coroutine → `int` | Computes and stores embeddings via [model2vec](https://github.com/MinishLab/model2vec) (`minishlab/potion-retrieval-32M`). Needs the `semantic` extra. |
 | `delete_embeddings(db, *, urls=None)` | coroutine → `int` | Remove stored embeddings, e.g. before `embed_terms` with a different model. |
 | `flush(db)` / `reset(db)` | coroutines | `flush` clears stored terms only; `reset` also clears sync/metadata history. |
@@ -84,14 +85,54 @@ Every function takes `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`, de
 
 | Name | Kind | Notes |
 |---|---|---|
-| `MCPApp(config)` | class | Wraps a `fastmcp.FastMCP` server. `.run()` / `.run_async()` / `.server()`. Assembly is lazy: no I/O until first use. |
-| `MCPConfig` | `dataclass` | `.tools` (`Tool`), `.local` (`LocalAccess`), `.session` (`SessionAccess`), `.source` (`SourcePolicy`), `.server_info` (`ServerInfo`), transport/auth/rate-limit settings. |
+| `MCPApp(config)` | class | Wraps a `fastmcp.FastMCP` server. `.server()` builds it (lazily, once); `.run(**transport_kwargs)` / `.run_async(**transport_kwargs)` build-then-serve. |
+| `load_app(dotted_path)` | function → `MCPApp \| FastMCP` | Uvicorn-style `"module:attr"` loader; calls a zero-arg factory if `attr` is callable. What `slb mcp serve APP_PATH` uses. |
+| `MCPConfig` | `dataclass` | `.server` (`ServerInfo`), `.session` (`SessionAccess`), `.local` (`LocalAccess`), `.source_policy` (`SourcePolicy`), `.tools` (`Tool`), `.timeouts` (`Timeout`), `.auth` (`Auth`), `.rate_limit` (`RateLimit`), `.hooks` (`Hooks`), `.logging` (`Logging`), `.streaming` (`Streaming`). Every field defaults to a valid read-only, local+live, unauthenticated config. `.update(...)` changes one field without re-specifying the rest. `MCPConfig.default(language=...)` is a shortcut for the one commonly-changed, deeply-nested setting. |
 | `Tool` | `Flag` enum | `SEARCH`, `GET_TERM`, `GET_TERMS_ON`, `GET_TERMS_URLS`, `GET_TOPICS`, `GET_RANDOM_TERM`, `RELATED_TERMS`, `COMPARE`, `SYNC`. Aliases: `"read_only"` (everything but `SYNC`), `"all"`. |
-| `LocalAccess` | `dataclass` | `allow_write` (gates the `SYNC` tool and `persist=True` regardless of `tools`). |
-| `SessionAccess` | `dataclass` | `enabled` — whether the server may open a live session at all. |
-| `SourcePolicy` | `dataclass` | Which `Source` values a caller may request per call. |
+| `resolve_tools(config)` / `MCPConfig.resolve_tools()` | function/method → `Tool` | The actual tool set to build: `Tool.SYNC` stripped unless `local.allow_write` is also `True`. |
+| `SessionAccess` | `dataclass` | `enabled`, `mode` (`SessionMode`), `idle_timeout`, `max_concurrent`, `options` (a `slb_glossary.config.SessionOptions`). |
+| `SessionMode` | `Enum` | `EAGER` (open at startup), `LAZY` (open on first use — the default), `PER_CALL` (fresh session per call, full isolation). |
+| `LocalAccess` | `dataclass` | `enabled`, `allow_write` (gates `Tool.SYNC` and `persist=True` regardless of `tools`), `database` (a `slb_glossary.config.DatabaseOptions`). |
+| `SourcePolicy` | `dataclass` | `allowed` (`frozenset[Source] \| None`, auto-computed from `session.enabled`/`local.enabled` if unset), `default`, `expose_choice` (hide the `source` argument from tool schemas entirely). |
+| `Timeout` | `dataclass` | `default` (seconds, `None` = uncapped), `per_tool` (name → seconds override), `.for_tool(name)`. |
+| `Auth` | `dataclass` | `provider` (a FastMCP `AuthProvider`, secures the transport itself), `required_scopes`. |
+| `StaticTokenVerifier(tokens)` | class | A ready-made `AuthProvider` for fixed bearer tokens → client identity. What `--auth-token` builds under the hood. |
+| `import_provider(dotted_path)` | function → `AuthProvider` | Load a custom provider from `"module:attr"`. |
+| `RateLimit` | `dataclass` | `enabled`, `algorithm` (`RateLimitAlgorithm`), `limit`, `window`, `scope` (`RateLimitScope`). |
+| `RateLimitAlgorithm` | `Enum` | `TOKEN_BUCKET` (bursts allowed) \| `SLIDING_WINDOW` (the default; minute-granularity). |
+| `RateLimitScope` | `Enum` | `GLOBAL` \| `CLIENT` \| `TOOL` \| `CLIENT_TOOL` (the default — most granular). |
+| `Hooks` | `dataclass` | `before_tool`, `after_tool`, `on_error`, `on_startup`, `on_shutdown` — each a tuple of caller-supplied callables run around tool calls/server lifecycle. |
+| `Logging` | `dataclass` | `sinks`, `level`, `logger_name`, `fmt`, `propagate`, `log_tool_calls` — mirrors `slb_glossary.logging.configure_logging`. |
+| `Streaming` | `dataclass` | `default`, `allow_override` — the optional `stream` argument on tools that report MCP progress notifications (`glossary_search`, `glossary_get_terms_on`). |
+| `ServerInfo` | `dataclass` | `name`, `version` (defaults to `slb_glossary.__version__`), `instructions`, `logo` (a path or URL, inlined as a data URI at build time). |
 
-See [Running an MCP Server](../agent/mcp-server.md) for how these compose in practice, and the CLI flags (`slb mcp serve`) that set them without writing Python.
+See [Running an MCP Server](../agent/mcp-server.md) for how these compose in practice, the CLI flags (`slb mcp serve`) that set a subset of them without writing Python, and [`examples/mcp_app.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/mcp_app.py) for a complete runnable server.
+
+## `slb_glossary.constants`
+
+Every tunable numeric/string constant in the package lives on the shared `constants` instance, each one optionally overridable by an environment variable without editing any code:
+
+```python
+from slb_glossary.constants import constants
+
+print(constants.relevance_threshold)  # 0.45, or SLB_GLOSSARY_RELEVANCE_THRESHOLD if set
+print(constants.compare_concurrency)
+```
+
+A representative sample — every one follows the same `SLB_GLOSSARY_<NAME>` pattern:
+
+| Constant | Env var | Used by |
+|---|---|---|
+| `relevance_threshold` | `SLB_GLOSSARY_RELEVANCE_THRESHOLD` | `query.search`'s `Source.AUTO` local/live decision. |
+| `compare_concurrency` | `SLB_GLOSSARY_COMPARE_CONCURRENCY` | `query.compare`'s default concurrency. |
+| `default_search_mode` | `SLB_GLOSSARY_DEFAULT_SEARCH_MODE` | `local.search`'s default `mode`. |
+| `embedding_model` | `SLB_GLOSSARY_EMBEDDING_MODEL` | `local.embed_terms`'s model2vec model. |
+| `embed_batch_size` | `SLB_GLOSSARY_EMBED_BATCH_SIZE` | `local.embed_terms`'s default `batch_size`. |
+| `import_batch_size` / `export_batch_size` | `SLB_GLOSSARY_IMPORT_BATCH_SIZE` / `SLB_GLOSSARY_EXPORT_BATCH_SIZE` | `local.load_file` / `local export`. |
+| `rrf_k`, `lexical_weight`, `semantic_weight` | `SLB_GLOSSARY_RRF_K`, `SLB_GLOSSARY_LEXICAL_WEIGHT`, `SLB_GLOSSARY_SEMANTIC_WEIGHT` | `local.hybrid_search`'s Reciprocal Rank Fusion — see [Search Modes](../concepts/search-modes.md). |
+| `session_auto_initialize` | `SLB_GLOSSARY_SESSION_AUTO_INITIALIZE` | Whether `session()` initializes eagerly or lazily by default. |
+
+The full, current list is the source of truth: every constant is a `Constant(default, env_var=...)` line on `Constants` in `slb_glossary/constants.py`, each documented in place with what it controls.
 
 ## `slb_glossary` (top level)
 

@@ -51,7 +51,7 @@ Here's the CLI path, since it needs no code at all. After [installing](getting-s
 slb search "water saturation"
 ```
 
-This opens a background browser, searches the live glossary, and prints a table of matching definitions to your terminal. The first search after install is slower than the rest, since the background browser only has to start once. See [why](faq.md#why-is-the-first-search-slow) if that catches you off guard.
+This opens a background browser, searches the live glossary, and prints a table of matching definitions to your terminal. The first search after install is slower than the rest, since the background browser only has to start once. See [why](faq.md#why-is-the-first-search-slow-or-the-install-step-failing) if that catches you off guard.
 
 Here's the same lookup from Python, since it's about the same number of lines:
 

@@ -21,7 +21,7 @@ Semantic search compares *embeddings*: numeric vectors that capture a phrase's m
 This only works on terms you've already run through `embed_terms`:
 
 ```python
-await slb.local.embed_terms(db)   # embeds everything not already embedded
+await slb.local.embed_terms(db)  # embeds everything not already embedded
 ```
 
 From the CLI, the equivalent is `slb local embed` - see [Local Cache and Sync](../cli/sync.md#embedding-for-semantichybrid-search).
@@ -52,9 +52,9 @@ This is generally the best-ranking mode once you've embedded your terms, and the
 | `hybrid` | `semantic` extra + `embed_terms` | Both, fused by rank | No (local only) | Yes — generally the best default once embedded |
 
 ```python
-await slb.local.search(db, "porosity", mode="lexical")   # default, exact-word match
+await slb.local.search(db, "porosity", mode="lexical")  # default, exact-word match
 await slb.local.search(db, "rock that holds fluid", mode="semantic")  # paraphrase match
-await slb.local.search(db, "reservoir rock", mode="hybrid")           # both, fused
+await slb.local.search(db, "reservoir rock", mode="hybrid")  # both, fused
 ```
 
 ```bash

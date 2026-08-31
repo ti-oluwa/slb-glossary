@@ -150,7 +150,7 @@ If you installed the library:
 python -c "import slb_glossary; print(slb_glossary.__version__)"
 ```
 
-This should print a version number with no error. If either of these fails, the [FAQ](../faq.md) covers the most common causes; if the browser step itself is the one that's failing, start with [Why is the first search slow, or the install step failing?](../faq.md#why-is-the-first-search-slow).
+This should print a version number with no error. If either of these fails, the [FAQ](../faq.md) covers the most common causes; if the browser step itself is the one that's failing, start with [Why is the first search slow, or the install step failing?](../faq.md#why-is-the-first-search-slow-or-the-install-step-failing).
 
 ---
 
