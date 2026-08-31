@@ -124,21 +124,24 @@ class TestOpenDb:
     async def test_raises_database_error_when_fts5_unavailable(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ):
-        """`open_db` propagates `initialize`'s `DatabaseError` when FTS5 is unavailable.
-
-        Note: `open_db` has no try/except around `initialize`, so on this
-        path the just-opened `aiosqlite` connection is never closed - a
-        real (if minor, since the process typically exits soon after)
-        resource leak. This test closes the leaked connection itself via
-        `aiosqlite.connect`'s captured return value, purely so the leak
-        doesn't produce noisy background-thread warnings in this test run.
-        """
+        """`open_db` propagates `initialize`'s `DatabaseError` when FTS5 is unavailable,
+        and closes the just-opened connection itself rather than leaking it
+        (see `open_db`'s try/except around `_enable_wal`/`initialize`)."""
         from slb_glossary.errors import DatabaseError
 
         async def _broken_initialize(connection):
             raise DatabaseError("no FTS5")
 
         monkeypatch.setattr("slb_glossary.local.connection.initialize", _broken_initialize)
+        with pytest.raises(DatabaseError):
+            await open_db(tmp_path / "t.db")
+
+    async def test_closes_connection_when_initialize_fails(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The connection `open_db` had just opened is closed before the
+        error propagates, so nothing leaks a background worker thread."""
+        from slb_glossary.errors import DatabaseError
 
         opened_connections = []
         real_connect = aiosqlite.connect
@@ -148,13 +151,19 @@ class TestOpenDb:
             opened_connections.append(connection)
             return connection
 
+        async def _broken_initialize(connection):
+            raise DatabaseError("no FTS5")
+
         monkeypatch.setattr("slb_glossary.local.connection.aiosqlite.connect", _tracking_connect)
-        try:
-            with pytest.raises(DatabaseError):
-                await open_db(tmp_path / "t.db")
-        finally:
-            for connection in opened_connections:
-                await connection.close()
+        monkeypatch.setattr("slb_glossary.local.connection.initialize", _broken_initialize)
+
+        with pytest.raises(DatabaseError):
+            await open_db(tmp_path / "t.db")
+
+        assert len(opened_connections) == 1
+        # A closed aiosqlite connection raises on further use.
+        with pytest.raises(ValueError, match="no active connection"):
+            await opened_connections[0].execute("SELECT 1")
 
 
 @pytest.mark.anyio

@@ -1,4 +1,6 @@
-"""`SearchResult`, `RelatedTerm`, `Language`, `SearchMode`, `Updatable`, and `RecordLike` shape/behavior."""
+"""
+`SearchResult`, `RelatedTerm`, `Language`, `SearchMode`, `Updatable`, and `RecordLike` shape/behavior.
+"""
 
 import dataclasses
 

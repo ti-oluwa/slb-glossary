@@ -1,4 +1,5 @@
-"""`env()` casting/validation, `parse_int`, and `split_exclude`.
+"""
+`env()` casting/validation, `parse_int`, and `split_exclude`.
 
 `Lookup` (`slb_glossary.utils.Lookup`) is a bare `typing.Protocol` alias
 with no runtime behavior of its own beyond what `typing.Protocol`

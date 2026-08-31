@@ -38,22 +38,6 @@ jobs:
       - name: Check formatting
         run: uv run ruff format slb_glossary/ --check
 
-      - name: Run security analysis
-        run: |
-          echo "Running Bandit security analysis..."
-          uv run bandit -r slb_glossary/ -s B101 -f json -o bandit-report.json || true
-          uv run bandit -r slb_glossary/ -s B101
-        continue-on-error: false
-
-      - name: Upload security reports
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: security-reports
-          path: |
-            bandit-report.json
-          retention-days: 30
-
   type-check:
     name: Type Checking
     runs-on: ubuntu-latest

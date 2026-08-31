@@ -1,4 +1,6 @@
-"""OS-appropriate data/config directory resolution and env-var overrides."""
+"""
+OS-appropriate data/config directory resolution and env-var overrides.
+"""
 
 import pathlib
 

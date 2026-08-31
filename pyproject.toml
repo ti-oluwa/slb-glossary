@@ -58,6 +58,9 @@ test = [
     "click",
     "faker>=25.0",
 ]
+docs = [
+    "zensical>=0.0.31",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -128,5 +131,6 @@ module = [
     "yaml.*",
     "model2vec.*",
     "sqlite_vec.*",
+    "huggingface_hub.*",
 ]
 ignore_missing_imports = true

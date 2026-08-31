@@ -1,4 +1,6 @@
-"""`LogSink` implementations, `SinkHandler` routing, `resolve_sink(s)`, and `configure_logging`."""
+"""
+`LogSink` implementations, `SinkHandler` routing, `resolve_sink(s)`, and `configure_logging`.
+"""
 
 import io
 import logging

@@ -1,4 +1,6 @@
-"""`save` and format-specific writers for CSV/JSON/JSONL/TXT/XLSX."""
+"""
+`save` and format-specific writers for CSV/JSON/JSONL/TXT/XLSX.
+"""
 
 import json
 import pathlib

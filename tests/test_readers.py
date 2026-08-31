@@ -1,4 +1,6 @@
-"""`read_rows` and format-specific readers for CSV/JSON/XLSX."""
+"""
+`read_rows` and format-specific readers for CSV/JSON/XLSX.
+"""
 
 import json
 import pathlib

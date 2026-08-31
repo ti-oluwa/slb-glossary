@@ -1,4 +1,6 @@
-"""The `Constant` descriptor's env-var resolution, caching, and override/reset behavior."""
+"""
+The `Constant` descriptor's env-var resolution, caching, and override/reset behavior.
+"""
 
 import enum
 

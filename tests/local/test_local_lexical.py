@@ -1,4 +1,6 @@
-"""`build_fts_query` and `lexical_search`'s two-tier (exact/prefix, then bm25) ranking."""
+"""
+`build_fts_query` and `lexical_search`'s two-tier (exact/prefix, then bm25) ranking.
+"""
 
 import pytest
 

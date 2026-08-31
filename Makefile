@@ -1,6 +1,6 @@
 # Makefile for slb-glossary development and testing
 
-.PHONY: help install install-dev install-test browsers test test-fast test-unit test-cli test-mcp test-live test-slow test-watch test-coverage test-coverage-xml test-coverage-html lint lint-fix format format-check security type-check quality build upload upload-test dev-setup clean ci debug-env example dev release-check
+.PHONY: help install install-dev install-test install-docs browsers test test-fast test-unit test-cli test-mcp test-live test-slow test-coverage test-coverage-xml test-coverage-html lint lint-fix format format-check type-check quality docs-serve docs-build build upload upload-test dev-setup clean ci debug-env example dev release-check
 
 # Default target
 help: ## Show this help message
@@ -19,6 +19,9 @@ install-dev: ## Set up dependencies for development (dev tools + tests)
 
 install-test: ## Install just the test dependencies
 	uv sync --group test --inexact
+
+install-docs: ## Install just the docs dependencies (mkdocs + material theme)
+	uv sync --group docs --inexact
 
 browsers: ## Install the chromium build patchright drives (needed for --run-live tests and actual use)
 	uv run patchright install chromium
@@ -60,9 +63,6 @@ test-live: ## Run tests marked 'live' - hits the real glossary site/a real brows
 test-slow: ## Run tests marked 'slow' - e.g. loads the real embedding model
 	uv run pytest --run-slow -m slow -v --tb=short
 
-test-watch: ## Re-run tests on file changes (needs pytest-watch; part of the test group on non-Windows)
-	uv run pytest-watch --onpass "echo 'Tests passed'" --onfail "echo 'Tests failed'" -- -v --tb=short
-
 test-coverage: ## Run tests with a terminal coverage report
 	uv run pytest --cov=slb_glossary --cov-branch --cov-report=term-missing
 	@echo "Coverage report generated. Check the terminal output for details."
@@ -89,9 +89,6 @@ format: ## Format code
 format-check: ## Check code formatting without changing anything
 	uv run ruff format slb_glossary/ tests/ --check
 
-security: ## Run security analysis (bandit)
-	uv run bandit -r slb_glossary/ -s B101
-
 type-check: ## Run type checking in an environment WITHOUT the 'semantic' extra
 	@# The 'semantic' extra pulls in numpy transitively (via model2vec), and
 	@# numpy's own bundled stub uses Python 3.12+ syntax that crashes mypy
@@ -109,7 +106,15 @@ type-check: ## Run type checking in an environment WITHOUT the 'semantic' extra
 		echo "Install it with: uv add --dev mypy (or 'make install-dev')"; \
 	fi
 
-quality: lint format-check security type-check ## Run all quality checks
+quality: lint format-check type-check ## Run all quality checks
+
+# Documentation
+
+docs-serve: ## Serve the docs locally with live-reload (http://127.0.0.1:8000)
+	uv run --group docs mkdocs serve
+
+docs-build: ## Build the static docs site into site/
+	uv run --group docs mkdocs build
 
 # Build and distribution
 

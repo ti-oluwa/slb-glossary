@@ -1,4 +1,6 @@
-"""`RetryPolicy` delay math and the `retry()` helper's control flow."""
+"""
+`RetryPolicy` delay math and the `retry()` helper's control flow.
+"""
 
 import asyncio
 import math

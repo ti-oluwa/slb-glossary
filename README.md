@@ -7,7 +7,7 @@ This began as a hobby project to help with SPE PetroBowl prep (see [Credits](#cr
 > [!IMPORTANT]
 > This package is intended for research or instructional use only. See [Attribution and disclaimer](#attribution-and-disclaimer).
 
-This README is a tutorial, not a full API reference. It introduces what each part of the library does and how the pieces fit together. A proper API reference doc isn't published yet, so for now the docstrings in the source are the most detailed source of truth on any given function's parameters and behavior.
+This README is a tutorial, not a full API reference. It introduces what each part of the library does and how the pieces fit together. For the full documentation site - a complete CLI reference, the Python API walked through page by page, and the concepts behind search modes/sessions/the data model - see **[ti-oluwa.github.io/slb-glossary](https://ti-oluwa.github.io/slb-glossary/)**.
 
 ## Table of contents
 
@@ -404,7 +404,7 @@ Before semantic or hybrid search can find anything, the terms already in your lo
 await slb.local.embed_terms(db)  # embeds every term not already embedded
 ```
 
-Call it again after every sync or import to embed whatever's new; it skips terms already embedded by default (`only_missing=True`), so a repeat call only pays for what changed. There's no CLI command for this step yet; it's Python-only for now.
+Call it again after every sync or import to embed whatever's new; it skips terms already embedded by default (`only_missing=True`), so a repeat call only pays for what changed. On the CLI, this is `slb-glossary local embed` (`--urls`, `--reembed`/`--only-missing`, `--batch-size`).
 
 Once terms are embedded, search with a `mode`:
 
@@ -687,6 +687,7 @@ Run `slb --help`, or `--help` after any subcommand, for the full set of options.
 | `local stats`        | Local only                          | Term counts, topic breakdown, and last-sync info.                                                |
 | `local search`       | Local only                          | Full-text search the local database, `--fuzzy` for typo-tolerant `--topic`, `--mode` for lexical/semantic/hybrid ranking. |
 | `local get`          | Local only                          | Look up a single term by exact name/URL, locally.                                                |
+| `local embed`        | Local only                          | Compute and store embeddings for locally stored terms, for `--mode semantic`/`hybrid` search. See [Semantic and hybrid search](#semantic-and-hybrid-search). |
 | `local import`       | Local only                          | Import a CSV/JSON/XLSX file into the local database. See [Importing your own data](#importing-your-own-data). |
 | `local export`       | Local only                          | Write locally stored terms back out to a file, optionally ranked by a search. See [Importing your own data](#importing-your-own-data). |
 | `local flush`        | Local only                          | Delete every stored term, keeping sync history.                                                  |

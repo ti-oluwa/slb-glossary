@@ -1,4 +1,6 @@
-"""`clean_query`'s natural-language stripping."""
+"""
+`clean_query`'s natural-language stripping.
+"""
 
 import pytest
 

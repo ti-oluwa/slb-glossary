@@ -1,4 +1,6 @@
-"""Exception hierarchy (base classes, `isinstance` relationships)."""
+"""
+Exception hierarchy (base classes, `isinstance` relationships).
+"""
 
 import pathlib
 

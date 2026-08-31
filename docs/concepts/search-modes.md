@@ -24,6 +24,8 @@ This only works on terms you've already run through `embed_terms`:
 await slb.local.embed_terms(db)   # embeds everything not already embedded
 ```
 
+From the CLI, the equivalent is `slb local embed` - see [Local Cache and Sync](../cli/sync.md#embedding-for-semantichybrid-search).
+
 `embed_terms` is a one-time (or periodic) cost, separate from ordinary syncing: syncing fetches and stores terms, `embed_terms` computes and stores their vectors. Run it again after a `sync` that added new terms, with `only_missing=True` (the default) so it only pays for what's actually new.
 
 !!! warning "Semantic scores aren't on the same scale as lexical scores"

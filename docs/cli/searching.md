@@ -1,6 +1,6 @@
 # Searching and Defining Terms
 
-Audience: same as the rest of this section, anyone using `slb` from a terminal. This page covers every lookup command. All of them share the [source model](index.md#the-source-model-local-live-auto) (`--local`/`--live`/`--auto`) and [caching behavior](index.md#caching-live-results---cache) (`--cache`) described on the previous page, so this page focuses on what makes each command different from the others.
+Audience: same as the rest of this section, anyone using `slb` from a terminal. This page covers every lookup command. All of them share the [source model](index.md#the-source-model-local-live-auto) (`--local`/`--live`/`--auto`) and [caching behavior](index.md#caching-live-results-cache) (`--cache`) described on the previous page, so this page focuses on what makes each command different from the others.
 
 ---
 

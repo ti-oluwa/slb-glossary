@@ -76,6 +76,30 @@ slb local get porosity --topic Petrophysics
 
 `local search` and `local get` are the CLI's most direct path into what [Search Modes](../concepts/search-modes.md) covers: `local search` supports `--mode lexical|semantic|hybrid`, exactly like `search --local` does, since both go through the same underlying function.
 
+### Embedding for semantic/hybrid search
+
+`--mode semantic`/`--mode hybrid` only ever search terms that already have a stored embedding - a term you just synced or imported is invisible to them until you run `local embed`:
+
+```bash
+slb local embed
+```
+
+By default this embeds every locally stored row that doesn't have an embedding yet, so running it again after a `sync`/`local import` only pays for what's actually new:
+
+```bash
+slb sync --topic "Drilling Fluids"
+slb local embed              # embeds just the newly-synced rows
+slb local search "mud weight" --mode hybrid
+```
+
+```bash
+slb local embed --urls "https://glossary.slb.com/en/terms/p/porosity,https://glossary.slb.com/en/terms/m/mud-weight"   # only these rows
+slb local embed --reembed    # recompute every embedding in scope, e.g. after switching SLB_GLOSSARY_EMBEDDING_MODEL
+slb local embed --batch-size 200
+```
+
+Needs the `semantic` extra installed (`uv add "slb-glossary[semantic]"`). The embedding model itself downloads once from Hugging Face and is cached locally after that - see [Search Modes](../concepts/search-modes.md#semantic-matching-meaning) for what it costs to run and why the first `local embed` on a large database takes noticeably longer than later ones.
+
 ### Clearing it out
 
 ```bash

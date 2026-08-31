@@ -154,8 +154,15 @@ async def open_db(
 
     connection = await aiosqlite.connect(resolved_db_path)
     connection.row_factory = aiosqlite.Row
-    journal_mode = await _enable_wal(connection)
-    await initialize(connection)
+    try:
+        journal_mode = await _enable_wal(connection)
+        await initialize(connection)
+    except Exception:
+        # Don't leak the connection (and its background worker thread) if
+        # setup fails partway through.
+        with contextlib.suppress(Exception):
+            await connection.close()
+        raise
 
     if not resolved_metadata_path.exists():
         Metadata().save(resolved_metadata_path)

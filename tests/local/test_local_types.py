@@ -1,4 +1,6 @@
-"""`local.types.Database`/`Metadata`: load/save round-trip and defaults."""
+"""
+`local.types.Database`/`Metadata`: load/save round-trip and defaults.
+"""
 
 import dataclasses
 import pathlib

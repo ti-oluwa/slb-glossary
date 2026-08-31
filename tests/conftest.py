@@ -10,6 +10,36 @@ import pytest
 
 from slb_glossary.constants import Constant, Constants
 
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register `--run-live`/`--run-slow`, which un-skip the matching marker."""
+    parser.addoption(
+        "--run-live",
+        action="store_true",
+        default=False,
+        help="Also run tests marked 'live' (touch the real glossary site/browser).",
+    )
+    parser.addoption(
+        "--run-slow",
+        action="store_true",
+        default=False,
+        help="Also run tests marked 'slow' (e.g. load a real embedding model).",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skip `live`/`slow`-marked tests unless their matching `--run-*` flag was passed."""
+    skip_live = pytest.mark.skip(reason="use --run-live to run tests that hit the real site")
+    skip_slow = pytest.mark.skip(reason="use --run-slow to run slow tests")
+    run_live = config.getoption("--run-live")
+    run_slow = config.getoption("--run-slow")
+    for item in items:
+        if not run_live and "live" in item.keywords:
+            item.add_marker(skip_live)
+        if not run_slow and "slow" in item.keywords:
+            item.add_marker(skip_slow)
+
+
 ALL_BACKENDS = [
     pytest.param(("asyncio", {}), id="asyncio"),
     pytest.param(("asyncio", {"use_uvloop": True}), id="asyncio+uvloop"),

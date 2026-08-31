@@ -8,7 +8,7 @@ Audience: everyone. Every path through this documentation passes through this pa
 
 - **Python 3.10 or newer.** `slb-glossary` uses modern typing syntax (`str | None`) throughout, which is why the floor is 3.10 rather than something older.
 - **About 300MB of free disk space**, for the background browser build. See [below](#installing-the-browser-build) for exactly why.
-- **A network connection**, at least the first time you look up any given term. After that, the [local cache](../library/index.md#caching-what-you-look-up-locally) can serve it without one.
+- **A network connection**, at least the first time you look up any given term. After that, the [local cache](../library/local-search.md#1-cache-live-results-as-you-go) can serve it without one.
 
 No account, API key, or paid access to anything is needed. The glossary itself is free to browse.
 

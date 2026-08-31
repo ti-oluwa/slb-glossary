@@ -1,4 +1,6 @@
-"""`local.schema.initialize`: idempotent table/index/trigger/FTS creation."""
+"""
+`local.schema.initialize`: idempotent table/index/trigger/FTS creation.
+"""
 
 import aiosqlite
 import pytest

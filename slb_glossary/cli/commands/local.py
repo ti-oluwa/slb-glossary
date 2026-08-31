@@ -340,6 +340,74 @@ def local_get(term_or_url: str, **params: typing.Any) -> None:
         click.echo(f"{term_or_url!r} was not found locally.", err=True)
 
 
+@local.command("embed")
+@click.option(
+    "--urls",
+    default=None,
+    metavar="URL,URL,...",
+    help="Only (re-)embed rows at these comma-separated URLs. Omit to consider every locally stored row.",
+)
+@click.option(
+    "--reembed/--only-missing",
+    "reembed",
+    default=False,
+    show_default=True,
+    help=(
+        "--only-missing (the default) skips a row that already has a "
+        "stored embedding, so a repeat run after a sync only pays for "
+        "what's newly added. --reembed recomputes embeddings for every "
+        "row in scope, e.g. after switching the embedding model."
+    ),
+)
+@click.option(
+    "--batch-size",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="N",
+    help="Rows embedded per model call. Defaults to constants.embed_batch_size.",
+)
+@database_option
+@config_option
+@log_level_option
+@cli_command
+def embed(**params: typing.Any) -> None:
+    """
+    Compute and store embeddings for locally stored terms, for --mode semantic/hybrid search.
+
+    Needs the [semantic] extra installed. Run this after `local import`
+    or `sync` before searching with --mode semantic/hybrid - those modes
+    only ever search terms that already have a stored embedding, so a
+    term imported or synced but never embedded is invisible to them
+    (`local search`/`search --mode lexical` see it regardless).
+
+    \b
+    Examples:
+      slb-glossary local embed
+      slb-glossary local embed --reembed
+      slb-glossary local embed --urls "https://glossary.slb.com/en/terms/p/porosity"
+      slb-glossary local embed --batch-size 100
+    """
+    urls = (
+        [url.strip() for url in params["urls"].split(",") if url.strip()]
+        if params["urls"]
+        else None
+    )
+
+    async def run() -> int:
+        config = load_config(params)
+        db_path = resolve_db_path(config, params["db_path"])
+        async with local_pkg.database(db_path) as db:
+            return await local_pkg.embed_terms(
+                db,
+                urls=urls,
+                only_missing=not params["reembed"],
+                batch_size=params["batch_size"],
+            )
+
+    embedded = run_async(run())
+    click.echo(f"Embedded {embedded} row(s).")
+
+
 def _field_or_empty(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
     """
     Treat an explicitly empty `--*-field` value as "leave this field unset".
