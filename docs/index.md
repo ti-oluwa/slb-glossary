@@ -15,7 +15,7 @@
 
 The [SLB Energy Glossary](https://glossary.slb.com/) is a large, well maintained reference of oilfield and energy terms, but it's a JavaScript web application, not a page you can just download and read. There's no public API for it either. `slb-glossary` is a small, focused tool built to search it anyway: it drives a real browser in the background to load the site the way a person would, then parses the definitions out of the page.
 
-It is not affiliated with or endorsed by SLB. The glossary content it searches belongs to SLB; `slb-glossary` only searches and displays it. See the [FAQ](faq.md#is-this-affiliated-with-slb) for the full attribution.
+It is not affiliated with or endorsed by SLB. The glossary content it searches belongs to SLB, under [SLB's own terms of service](https://www.slb.com/en/terms-of-service). `slb-glossary` only searches and displays that content, and is intended for instructional and research use, not commercial use. If you enable the local cache, you are responsible for keeping its retention, refresh, and deletion in compliance with SLB's terms. See the [FAQ](faq.md#is-this-affiliated-with-slb) for the full attribution.
 
 ## Three ways in
 

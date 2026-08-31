@@ -8,7 +8,7 @@ Audience: everyone. Every path through this documentation passes through this pa
 
 - **Python 3.10 or newer.** `slb-glossary` uses modern typing syntax (`str | None`) throughout, which is why the floor is 3.10 rather than something older.
 - **About 300MB of free disk space**, for the background browser build. See [below](#installing-the-browser-build) for exactly why.
-- **A network connection**, at least the first time you look up any given term. After that, the [local cache](library-tutorial.md#caching-what-you-look-up-locally) can serve it without one.
+- **A network connection**, at least the first time you look up any given term. After that, the [local cache](../library/index.md#caching-what-you-look-up-locally) can serve it without one.
 
 No account, API key, or paid access to anything is needed. The glossary itself is free to browse.
 
@@ -98,7 +98,7 @@ The base install covers live search (`slb_glossary.live`) and local search (`slb
 | `config` | TOML and YAML config files, in addition to JSON. See [Configuration](../cli/configuration.md). | `uv add "slb-glossary[config]"` |
 | `tui` | The interactive `--tui` mode available on every CLI command. | `uv add "slb-glossary[tui]"` |
 | `mcp` | The MCP server (`slb mcp serve`). See [Connecting an AI agent](../agent/mcp-server.md). | `uv add "slb-glossary[mcp]"` |
-| `semantic` | Semantic and hybrid search on the local database: matching a paraphrase, not just an exact word. See [Search modes](api-reference.md#search-modes). | `uv add "slb-glossary[semantic]"` |
+| `semantic` | Semantic and hybrid search on the local database: matching a paraphrase, not just an exact word. See [Search modes](../concepts/search-modes.md). | `uv add "slb-glossary[semantic]"` |
 | `all` | Every extra above, in one install. | `uv add "slb-glossary[all]"` |
 
 !!! tip "Not sure yet? Install `all`"
