@@ -1,4 +1,4 @@
-# SLB Energy Glossary
+# SLB Glossary
 
 A Python library and CLI for searching the [SLB Energy Glossary](https://glossary.slb.com/), in English and Spanish. It can search the live site directly, keep a local SQLite cache of terms you've already looked up, or do both and intelligently uses whichever (local cache or live site) to return results.
 
@@ -11,7 +11,7 @@ This README is a tutorial, not a full API reference. It introduces what each par
 
 ## Table of contents
 
-- [SLB Energy Glossary](#slb-energy-glossary)
+- [SLB Glossary](#slb-glossary)
   - [Table of contents](#table-of-contents)
   - [Installation](#installation)
     - [As a library](#as-a-library)

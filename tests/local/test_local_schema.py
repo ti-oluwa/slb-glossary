@@ -100,12 +100,12 @@ class TestInitialize:
     ):
         """An `OperationalError` creating the FTS5 table is wrapped in `DatabaseError`."""
 
-        async def _broken_execute(statement, *args, **kwargs):
+        async def broken_execute(statement, *args, **kwargs):
             if "VIRTUAL TABLE" in statement:
                 raise aiosqlite.OperationalError("no such module: fts5")
             return await aiosqlite.Connection.execute(connection, statement, *args, **kwargs)
 
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
-            monkeypatch.setattr(connection, "execute", _broken_execute)
+            monkeypatch.setattr(connection, "execute", broken_execute)
             with pytest.raises(DatabaseError, match="FTS5"):
                 await initialize(connection)

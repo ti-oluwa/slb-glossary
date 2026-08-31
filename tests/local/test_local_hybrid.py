@@ -36,8 +36,8 @@ class TestComputeRrfScores:
         """One ranker's score for a key is `weight / (k + rank)`."""
         ranking = [("a", ""), ("b", "")]
         scores = compute_rrf_scores(ranking, weights=[1.0], k=60)
-        assert scores[("a", "")] == pytest.approx(1.0 / 61)
-        assert scores[("b", "")] == pytest.approx(1.0 / 62)
+        assert scores["a", ""] == pytest.approx(1.0 / 61)
+        assert scores["b", ""] == pytest.approx(1.0 / 62)
 
     def test_scores_from_multiple_rankers_sum(self):
         """A key appearing in more than one ranking gets both rankers' terms summed."""

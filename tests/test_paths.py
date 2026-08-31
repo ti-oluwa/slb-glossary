@@ -4,6 +4,7 @@ OS-appropriate data/config directory resolution and env-var overrides.
 
 import pathlib
 
+import platformdirs
 import pytest
 
 from slb_glossary import paths
@@ -18,7 +19,7 @@ class TestGetDataDir:
         """Without an override or env var, `get_data_dir` uses `platformdirs.user_data_dir`."""
         monkeypatch.delenv(paths.DATA_DIR_ENV_VAR, raising=False)
         fake_dir = tmp_path / "platformdirs-data"
-        monkeypatch.setattr(paths.platformdirs, "user_data_dir", lambda *a, **k: str(fake_dir))
+        monkeypatch.setattr(platformdirs, "user_data_dir", lambda *a, **k: str(fake_dir))
         assert paths.get_data_dir() == fake_dir
         assert fake_dir.is_dir()
 
@@ -48,7 +49,7 @@ class TestGetConfigDir:
         """Without an override or env var, `get_config_dir` uses `platformdirs.user_config_dir`."""
         monkeypatch.delenv(paths.CONFIG_DIR_ENV_VAR, raising=False)
         fake_dir = tmp_path / "platformdirs-config"
-        monkeypatch.setattr(paths.platformdirs, "user_config_dir", lambda *a, **k: str(fake_dir))
+        monkeypatch.setattr(platformdirs, "user_config_dir", lambda *a, **k: str(fake_dir))
         assert paths.get_config_dir() == fake_dir
         assert fake_dir.is_dir()
 

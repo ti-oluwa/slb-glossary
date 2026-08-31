@@ -4,6 +4,7 @@ import hashlib
 
 import pytest
 
+from slb_glossary.local import vector
 from slb_glossary.local.connection import database
 
 MOCK_EMBED_DIM = 4
@@ -63,8 +64,6 @@ def mock_embeddings(monkeypatch: pytest.MonkeyPatch) -> MockEmbeddings:
     Fake `slb_glossary.local.vector.embed`/`embedding_dim`, avoiding a real
     (network-dependent) `model2vec` model load. See `MOCK_EMBED_DIM`'s docstring.
     """
-    from slb_glossary.local import vector
-
     controller = MockEmbeddings()
     monkeypatch.setattr(vector, "embedding_dim", lambda: MOCK_EMBED_DIM)
     monkeypatch.setattr(vector, "embed", controller.embed)

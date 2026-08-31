@@ -205,12 +205,12 @@ class TestSave:
     async def test_accepts_an_async_iterable_of_records(self, tmp_path: pathlib.Path):
         """`records` may be an async iterable; `save` collects it before writing."""
 
-        async def _generate():
+        async def generate():
             for result in make_search_results(2):
                 yield result
 
         destination = tmp_path / "out.jsonl"
-        await save(_generate(), destination)
+        await save(generate(), destination)
         lines = destination.read_text(encoding="utf-8").splitlines()
         assert len(lines) == 2
 

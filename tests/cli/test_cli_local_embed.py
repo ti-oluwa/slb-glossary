@@ -18,6 +18,7 @@ import pytest
 from click.testing import CliRunner
 
 from slb_glossary.cli.main import cli
+from slb_glossary.local import vector
 from slb_glossary.local.api import upsert_results
 from slb_glossary.local.connection import database
 from slb_glossary.types import SearchResult
@@ -32,7 +33,6 @@ def mock_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
     Fake `slb_glossary.local.vector.embed`/`embedding_dim`, avoiding a real
     (network-dependent) `model2vec` model load.
     """
-    from slb_glossary.local import vector
 
     def embed(texts: list[str]) -> np.ndarray:
         return np.ones((len(texts), 4), dtype="float32")

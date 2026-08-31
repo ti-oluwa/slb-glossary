@@ -7,6 +7,7 @@ import pathlib
 
 import pytest
 
+from slb_glossary.local.schema import SCHEMA_VERSION
 from slb_glossary.local.types import Metadata
 
 pytestmark = [pytest.mark.unit]
@@ -52,7 +53,6 @@ class TestMetadata:
 
     def test_default_schema_version_matches_current(self):
         """A freshly constructed `Metadata` reports the current schema version."""
-        from slb_glossary.local.schema import SCHEMA_VERSION
 
         assert Metadata().schema_version == SCHEMA_VERSION
 

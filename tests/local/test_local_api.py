@@ -147,6 +147,7 @@ class TestUpsertResults:
         await upsert_results(db, [second])
         assert await count(db) == 1
         stored = await get_term(db, "https://x.com/a")
+        assert stored is not None
         assert stored.definition == "new"
 
     async def test_same_url_different_topic_creates_separate_rows(self, db):
@@ -161,16 +162,17 @@ class TestUpsertResults:
         result = make_search_result(url="https://x.com/a", language="es")
         await upsert_results(db, [result], language="en")
         stored = await get_term(db, "https://x.com/a")
+        assert stored is not None
         assert stored.language == "en"
 
     async def test_accepts_an_async_iterable(self, db):
         """`results` may be an async iterable, not just a plain list."""
 
-        async def _generate():
+        async def generate():
             for r in make_search_results(2):
                 yield r
 
-        written = await upsert_results(db, _generate())
+        written = await upsert_results(db, generate())
         assert written == 2
 
 
@@ -221,25 +223,25 @@ class TestUpsertResultsIncrementally:
         """With `persist_on_error=True` (the default), a raise mid-stream still persists
         whatever was buffered so far."""
 
-        async def _generate():
+        async def generate():
             yield make_search_result(url="https://x.com/a", term="A")
             raise ValueError("boom")
 
         with pytest.raises(ValueError, match="boom"):
-            async for _ in upsert_results_incrementally(db, _generate(), batch_size=10):
+            async for _ in upsert_results_incrementally(db, generate(), batch_size=10):
                 pass
         assert await count(db) == 1
 
     async def test_persist_on_error_false_discards_buffered_results(self, db):
         """With `persist_on_error=False`, a raise mid-stream discards the unflushed buffer."""
 
-        async def _generate():
+        async def generate():
             yield make_search_result(url="https://x.com/a", term="A")
             raise ValueError("boom")
 
         with pytest.raises(ValueError, match="boom"):
             async for _ in upsert_results_incrementally(
-                db, _generate(), batch_size=10, persist_on_error=False
+                db, generate(), batch_size=10, persist_on_error=False
             ):
                 pass
         assert await count(db) == 0
@@ -257,11 +259,11 @@ class TestSearchDispatch:
         """`mode="lexical"` (the default) dispatches to `lexical_search`."""
         called = []
 
-        async def _fake_lexical_search(*args, **kwargs):
+        async def mock_lexical_search(*args, **kwargs):
             called.append("lexical")
             return []
 
-        monkeypatch.setattr(api, "lexical_search", _fake_lexical_search)
+        monkeypatch.setattr(api, "lexical_search", mock_lexical_search)
         await search(db, "porosity", mode="lexical")
         assert called == ["lexical"]
 
@@ -269,11 +271,11 @@ class TestSearchDispatch:
         """`mode="semantic"` dispatches to `vector_search`."""
         called = []
 
-        async def _fake_vector_search(*args, **kwargs):
+        async def mock_vector_search(*args, **kwargs):
             called.append("semantic")
             return []
 
-        monkeypatch.setattr(api, "vector_search", _fake_vector_search)
+        monkeypatch.setattr(api, "vector_search", mock_vector_search)
         await search(db, "porosity", mode="semantic")
         assert called == ["semantic"]
 
@@ -281,11 +283,11 @@ class TestSearchDispatch:
         """`mode="hybrid"` dispatches to `hybrid_search`."""
         called = []
 
-        async def _fake_hybrid_search(*args, **kwargs):
+        async def mock_hybrid_search(*args, **kwargs):
             called.append("hybrid")
             return []
 
-        monkeypatch.setattr(api, "hybrid_search", _fake_hybrid_search)
+        monkeypatch.setattr(api, "hybrid_search", mock_hybrid_search)
         await search(db, "porosity", mode="hybrid")
         assert called == ["hybrid"]
 
@@ -293,11 +295,11 @@ class TestSearchDispatch:
         """`mode` also accepts a `SearchMode` enum member directly, not just its string value."""
         called = []
 
-        async def _fake_lexical_search(*args, **kwargs):
+        async def mock_lexical_search(*args, **kwargs):
             called.append("lexical")
             return []
 
-        monkeypatch.setattr(api, "lexical_search", _fake_lexical_search)
+        monkeypatch.setattr(api, "lexical_search", mock_lexical_search)
         await search(db, "porosity", mode=SearchMode.LEXICAL)
         assert called == ["lexical"]
 
@@ -305,10 +307,10 @@ class TestSearchDispatch:
         """`scored=False` (the default) returns bare results, not `(result, score)` pairs."""
         result = make_search_result()
 
-        async def _fake_lexical_search(*args, **kwargs):
+        async def mock_lexical_search(*args, **kwargs):
             return [(result, 0.9)]
 
-        monkeypatch.setattr(api, "lexical_search", _fake_lexical_search)
+        monkeypatch.setattr(api, "lexical_search", mock_lexical_search)
         results = await search(db, "porosity", scored=False)
         assert results == [result]
 
@@ -316,10 +318,10 @@ class TestSearchDispatch:
         """`scored=True` returns `(result, score)` pairs unchanged."""
         result = make_search_result()
 
-        async def _fake_lexical_search(*args, **kwargs):
+        async def mock_lexical_search(*args, **kwargs):
             return [(result, 0.9)]
 
-        monkeypatch.setattr(api, "lexical_search", _fake_lexical_search)
+        monkeypatch.setattr(api, "lexical_search", mock_lexical_search)
         results = await search(db, "porosity", scored=True)
         assert results == [(result, 0.9)]
 
@@ -448,12 +450,14 @@ class TestGetTerm:
         """Looks up a stored term by its exact URL."""
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Alpha")])
         result = await get_term(db, "https://x.com/a")
+        assert result is not None
         assert result.term == "Alpha"
 
     async def test_finds_by_case_insensitive_term_name(self, db):
         """Looks up a stored term by its (case-insensitive) exact term name."""
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Alpha")])
         result = await get_term(db, "ALPHA")
+        assert result is not None
         assert result.url == "https://x.com/a"
 
     async def test_returns_none_when_not_found(self, db):
@@ -472,6 +476,7 @@ class TestGetTerm:
             ],
         )
         result = await get_term(db, "https://x.com/a", topic="Drilling")
+        assert result is not None
         assert result.definition == "drill def"
 
     async def test_with_similar_returns_result_and_alternatives(self, db):
@@ -484,6 +489,7 @@ class TestGetTerm:
             ],
         )
         result, similar = await get_term(db, "Porosity", with_similar=True)
+        assert result is not None
         assert result.term == "Porosity"
         assert all(candidate.url != result.url for candidate, _ in similar)
 
@@ -537,6 +543,7 @@ class TestGetRandomTerm:
             ],
         )
         result = await get_random_term(db, topic="Geology")
+        assert result is not None
         assert result.term == "Alpha"
 
     async def test_respects_exclude(self, db):

@@ -41,12 +41,12 @@ class TestConstantResolution:
     def test_validator_rejects_invalid_env_value(self, monkeypatch: pytest.MonkeyPatch):
         """An env value failing `validator` raises `EnvVarError`."""
 
-        class _ValidatedHolder:
+        class ValidatedHolder:
             value: Constant = Constant(10, env_var=ENV_VAR, validator=lambda v: v > 0)
 
         monkeypatch.setenv(ENV_VAR, "-5")
         with pytest.raises(EnvVarError):
-            _ = _ValidatedHolder().value
+            _ = ValidatedHolder().value
 
     @pytest.mark.parametrize(
         ("constant_type", "default", "raw", "expected"),
@@ -73,10 +73,10 @@ class TestConstantCaching:
     def test_cache_false_rereads_env_var_every_access(self, monkeypatch: pytest.MonkeyPatch):
         """`cache=False` (the default) re-reads the env var on every access."""
 
-        class _UncachedHolder:
+        class UncachedHolder:
             value: Constant = Constant(10, env_var=ENV_VAR, cache=False)
 
-        holder = _UncachedHolder()
+        holder = UncachedHolder()
         monkeypatch.setenv(ENV_VAR, "1")
         assert holder.value == 1
         monkeypatch.setenv(ENV_VAR, "2")

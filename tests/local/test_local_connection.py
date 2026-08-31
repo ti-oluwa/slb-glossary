@@ -8,6 +8,7 @@ import pathlib
 import aiosqlite
 import pytest
 
+from slb_glossary.errors import DatabaseError
 from slb_glossary.local.connection import close_db, database, open_db
 from slb_glossary.local.schema import SCHEMA_VERSION
 from slb_glossary.local.types import Metadata
@@ -127,12 +128,11 @@ class TestOpenDb:
         """`open_db` propagates `initialize`'s `DatabaseError` when FTS5 is unavailable,
         and closes the just-opened connection itself rather than leaking it
         (see `open_db`'s try/except around `_enable_wal`/`initialize`)."""
-        from slb_glossary.errors import DatabaseError
 
-        async def _broken_initialize(connection):
+        async def broken_initialize(connection):
             raise DatabaseError("no FTS5")
 
-        monkeypatch.setattr("slb_glossary.local.connection.initialize", _broken_initialize)
+        monkeypatch.setattr("slb_glossary.local.connection.initialize", broken_initialize)
         with pytest.raises(DatabaseError):
             await open_db(tmp_path / "t.db")
 
@@ -141,21 +141,20 @@ class TestOpenDb:
     ):
         """The connection `open_db` had just opened is closed before the
         error propagates, so nothing leaks a background worker thread."""
-        from slb_glossary.errors import DatabaseError
 
         opened_connections = []
         real_connect = aiosqlite.connect
 
-        def _tracking_connect(*args, **kwargs):
+        def tracking_connect(*args, **kwargs):
             connection = real_connect(*args, **kwargs)
             opened_connections.append(connection)
             return connection
 
-        async def _broken_initialize(connection):
+        async def broken_initialize(connection):
             raise DatabaseError("no FTS5")
 
-        monkeypatch.setattr("slb_glossary.local.connection.aiosqlite.connect", _tracking_connect)
-        monkeypatch.setattr("slb_glossary.local.connection.initialize", _broken_initialize)
+        monkeypatch.setattr("slb_glossary.local.connection.aiosqlite.connect", tracking_connect)
+        monkeypatch.setattr("slb_glossary.local.connection.initialize", broken_initialize)
 
         with pytest.raises(DatabaseError):
             await open_db(tmp_path / "t.db")

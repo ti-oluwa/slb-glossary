@@ -53,7 +53,7 @@ def fake_model2vec(monkeypatch: pytest.MonkeyPatch):
     import types
 
     fake_module = types.ModuleType("model2vec")
-    fake_module.StaticModel = FakeStaticModel
+    fake_module.StaticModel = FakeStaticModel  # type: ignore
     monkeypatch.setitem(sys.modules, "model2vec", fake_module)
     return FakeStaticModel
 
@@ -175,4 +175,4 @@ class TestCosineSimilarity:
 
         zero = np.array([0.0, 0.0], dtype="float32")
         other = np.array([1.0, 1.0], dtype="float32")
-        assert cosine_similarity(zero, other) == 0.0
+        assert cosine_similarity(zero, other) == 0
