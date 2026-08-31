@@ -139,6 +139,31 @@ slb local import terms.json --source-tag internal-wordlist
 
 `--source-tag` marks imported rows with where they came from, so `local stats`/`local get` can later tell an imported row apart from one actually fetched from the live glossary (tagged `glossary` by default).
 
+### Embedding stored terms for semantic/hybrid search
+
+`local search`/`search --mode semantic|hybrid` only ever match terms that already have a stored embedding; a term that's been synced or imported but never embedded is invisible to them, even though `local search`/`search --mode lexical` sees it fine. `local embed` computes and stores those embeddings, and needs the `semantic` extra installed:
+
+```bash
+slb local embed
+```
+
+By default (`--only-missing`) this skips any row that already has a stored embedding, so running it again after a `sync` only pays for what's newly added:
+
+```bash
+slb sync --topic "Drilling Fluids"
+slb local embed   # only embeds the rows sync just added
+```
+
+Reach for `--reembed` instead if you've switched the embedding model, or otherwise need every row recomputed rather than just the new ones:
+
+```bash
+slb local embed --reembed
+slb local embed --urls "https://glossary.slb.com/en/terms/p/porosity"  # just these rows
+slb local embed --batch-size 100                                       # rows per model call
+```
+
+See [Search Modes](../concepts/search-modes.md) for what embedding actually buys you, and why hybrid mode needs it too, not just semantic.
+
 ---
 
 ## `install`

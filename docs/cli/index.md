@@ -23,7 +23,7 @@ slb search --tui
 | [`topics`](searching.md#topics) | List the glossary's topic list. |
 | [`urls`](searching.md#urls) | List or fetch from raw glossary term URLs. |
 | [`sync`](sync.md#sync) | Check the browser is installed and refresh the local cache. |
-| [`local`](sync.md#the-local-command-group) | Inspect, search, import into, or clear the local cache directly. |
+| [`local`](sync.md#the-local-command-group) | Inspect, search, import into, embed, or clear the local cache directly. |
 | [`install`](sync.md#install) | Install, list, remove, or update the browser engine. |
 | [`config`](configuration.md#the-config-command) | View, edit, and locate the config file. |
 | `mcp` | Run this glossary as an MCP server. See [Connecting an AI agent](../agent/mcp-server.md). |
