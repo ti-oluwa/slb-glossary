@@ -1,6 +1,6 @@
 # Local Cache and Sync
 
-Audience: same as the rest of this section. This page covers working with the local database deliberately, rather than letting `--cache` fill it in as a side effect of ordinary searches.
+This page covers working with the local database deliberately, rather than letting `--cache` fill it in as a side effect of ordinary searches.
 
 ---
 

@@ -1,6 +1,6 @@
 # Live Search
 
-Audience: same as the rest of this section. This page covers `slb_glossary.live`: the module that actually talks to the glossary website.
+This page covers `slb_glossary.live`: the module that actually talks to the glossary website.
 
 ---
 

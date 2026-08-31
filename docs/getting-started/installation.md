@@ -1,6 +1,6 @@
 # Installation
 
-Audience: everyone. Every path through this documentation passes through this page once. If you only want the terminal tool, you can skip straight to [Installing the CLI](#installing-the-cli). If you're writing Python code, skip to [Installing the library](#installing-the-library). Either way, finish with [Installing the browser build](#installing-the-browser-build), since both need it.
+Every path through this documentation passes through this page once. If you only want the terminal tool, skip straight to [Installing the CLI](#installing-the-cli). If you're writing Python code, skip to [Installing the library](#installing-the-library). Either way, finish with [Installing the browser build](#installing-the-browser-build), since both need it.
 
 ---
 

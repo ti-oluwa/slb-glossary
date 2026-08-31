@@ -1,6 +1,6 @@
 # Saving, Output and Config Files
 
-Audience: same as the rest of this section. This page covers what happens to a result after it's found: printing it, saving it, and setting defaults so you're not retyping the same flags on every command.
+This page covers what happens to a result after it's found: printing it, saving it, and setting defaults so you're not retyping the same flags on every command.
 
 ---
 

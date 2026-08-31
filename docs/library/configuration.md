@@ -1,6 +1,6 @@
 # Saving Results and Config Objects
 
-Audience: same as the rest of this section. This page covers `slb_glossary.save`, for writing results to a file, and `slb_glossary.Config`, the programmatic form of everything [Saving, Output and Config Files](../cli/configuration.md) covers for the CLI.
+This page covers `slb_glossary.save`, for writing results to a file, and `slb_glossary.Config`, the programmatic form of everything [Saving, Output and Config Files](../cli/configuration.md) covers for the CLI.
 
 ---
 

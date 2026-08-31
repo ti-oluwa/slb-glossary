@@ -1,6 +1,6 @@
 # Building an Agent with Pydantic AI
 
-Audience: developers building an agent with [Pydantic AI](https://ai.pydantic.dev/), who want that agent able to look glossary terms up itself. This page assumes you've read [Running an MCP Server](mcp-server.md); it's a worked example on top of that, not a replacement for it.
+Building an agent with [Pydantic AI](https://ai.pydantic.dev/) that can look glossary terms up itself. This page assumes you've read [Running an MCP Server](mcp-server.md); it's a worked example on top of that, not a replacement for it.
 
 ---
 

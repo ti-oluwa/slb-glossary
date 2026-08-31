@@ -1,6 +1,6 @@
 # Combined Search with slb_glossary.query
 
-Audience: same as the rest of this section. This page covers `slb_glossary.query`, the module that reads from [Local Search and Cache](local-search.md) and [Live Search](live-search.md) together, so you don't have to write that combining logic yourself.
+This page covers `slb_glossary.query`, the module that reads from [Local Search and Cache](local-search.md) and [Live Search](live-search.md) together, so you don't have to write that combining logic yourself.
 
 Every function on this page (and the top-level `slb_glossary` package, which re-exports all of them) shares the same core keyword arguments, described once here rather than repeated on every function.
 

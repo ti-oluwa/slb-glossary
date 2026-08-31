@@ -1,6 +1,6 @@
 # Local Search and Cache
 
-Audience: same as the rest of this section. This page covers `slb_glossary.local`: a SQLite database on your own disk that answers instantly and needs no network or browser once something is in it.
+This page covers `slb_glossary.local`: a SQLite database on your own disk that answers instantly and needs no network or browser once something is in it.
 
 ---
 
