@@ -122,3 +122,52 @@ class TestLocalEmbed:
         )
         assert result.exit_code == 0, result.output
         assert "Embedded 0 row(s)." in result.output
+
+    def test_topic_option_restricts_which_rows_are_embedded(self, db_path: pathlib.Path):
+        """`--topic` restricts embedding to rows filed under that topic."""
+        seed(
+            db_path,
+            [
+                make_search_result(url="https://x.com/a", term="Alpha", topic="Geology"),
+                make_search_result(url="https://x.com/b", term="Bravo", topic="Drilling"),
+            ],
+        )
+        result = CliRunner().invoke(
+            cli,
+            [
+                "local",
+                "embed",
+                "--db-path",
+                str(db_path),
+                "--config",
+                "none",
+                "--topic",
+                "Geology",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Embedded 1 row(s)." in result.output
+
+    def test_topic_and_fuzzy_options_resolve_a_misspelled_topic(self, db_path: pathlib.Path):
+        """`--topic`/`--fuzzy` together resolve a misspelled topic against
+        topics actually stored locally."""
+        seed(
+            db_path,
+            [make_search_result(url="https://x.com/a", term="Alpha", topic="Geology")],
+        )
+        result = CliRunner().invoke(
+            cli,
+            [
+                "local",
+                "embed",
+                "--db-path",
+                str(db_path),
+                "--config",
+                "none",
+                "--topic",
+                "geologyy",
+                "--fuzzy",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Embedded 1 row(s)." in result.output

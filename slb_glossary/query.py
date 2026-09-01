@@ -355,7 +355,7 @@ async def search(
     language: str | None = None,
     limit: int | None = 3,
     concurrency: int = 1,
-    persist: bool = False,
+    persist: bool | None = None,
     persist_batch_size: int | None = None,
     persist_on_error: bool = True,
     fuzzy: bool = False,
@@ -460,6 +460,7 @@ async def search(
         isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
+    persist = constants.persist_by_default if persist is None else persist
     normalized_query = clean_query(query)
     resolved_mode = (
         SearchMode(mode) if mode is not None else SearchMode(constants.default_search_mode)
@@ -655,7 +656,7 @@ async def get_terms_on(
     language: str | None = None,
     limit: int | None = None,
     concurrency: int = 1,
-    persist: bool = False,
+    persist: bool | None = None,
     persist_batch_size: int | None = None,
     persist_on_error: bool = True,
     fuzzy: bool = False,
@@ -717,6 +718,7 @@ async def get_terms_on(
         isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
+    persist = constants.persist_by_default if persist is None else persist
     started_at = time.monotonic()
     resolved_source = await resolve_source(db, session, source)
     if resolved_source is Source.LOCAL:
@@ -1030,7 +1032,7 @@ async def get_term(
     db: Database | None = None,
     session: Session | None = None,
     source: Source = Source.AUTO,
-    persist: bool = False,
+    persist: bool | None = None,
     language: str | None = None,
     topic: str | None = None,
     with_similar: typing.Literal[False] = False,
@@ -1045,7 +1047,7 @@ async def get_term(
     db: Database | None = None,
     session: Session | None = None,
     source: Source = Source.AUTO,
-    persist: bool = False,
+    persist: bool | None = None,
     language: str | None = None,
     topic: str | None = None,
     with_similar: typing.Literal[True],
@@ -1061,7 +1063,7 @@ async def get_term(
     db: Database | None = None,
     session: Session | None = None,
     source: Source = Source.AUTO,
-    persist: bool = False,
+    persist: bool | None = None,
     language: str | None = None,
     topic: str | None = None,
     with_similar: bool = False,
@@ -1126,6 +1128,7 @@ async def get_term(
         isn't initialized, and `auto_initialize` is `False`.
     """
     validate_language(session, language)
+    persist = constants.persist_by_default if persist is None else persist
     resolved_source = await resolve_source(db, session, source)
     if resolved_source is Source.LOCAL:
         assert db is not None
@@ -1467,7 +1470,7 @@ async def related_terms(
     db: Database | None = None,
     session: Session | None = None,
     source: Source = Source.AUTO,
-    persist: bool = False,
+    persist: bool | None = None,
     language: str | None = None,
     topic: str | None = None,
     auto_initialize: bool = True,
@@ -1520,7 +1523,7 @@ async def get_random_term(
     session: Session | None = None,
     source: Source = Source.AUTO,
     topic: str | None = None,
-    persist: bool = False,
+    persist: bool | None = None,
     fuzzy: bool = False,
 ) -> QueryResult[SearchResult | None]:
     """
@@ -1556,6 +1559,7 @@ async def get_random_term(
         result = await local.get_random_term(db, topic=topic, fuzzy=fuzzy)
         return QueryResult(value=result, source=Source.LOCAL, persisted=False)
 
+    persist = constants.persist_by_default if persist is None else persist
     if resolved_source is Source.LIVE or source is not Source.AUTO:
         assert session is not None
         result = await _fetch_random_term(session, topic=topic)
@@ -1643,7 +1647,7 @@ async def compare(
     db: Database | None = None,
     session: Session | None = None,
     source: Source = Source.AUTO,
-    persist: bool = False,
+    persist: bool | None = None,
     language: str | None = None,
     concurrency: int | None = None,
     with_similar: typing.Literal[False] = False,
@@ -1655,7 +1659,7 @@ async def compare(
     db: Database | None = None,
     session: Session | None = None,
     source: Source = Source.AUTO,
-    persist: bool = False,
+    persist: bool | None = None,
     language: str | None = None,
     concurrency: int | None = None,
     with_similar: typing.Literal[True],
@@ -1668,7 +1672,7 @@ async def compare(
     db: Database | None = None,
     session: Session | None = None,
     source: Source = Source.AUTO,
-    persist: bool = False,
+    persist: bool | None = None,
     language: str | None = None,
     concurrency: int | None = None,
     with_similar: bool = False,

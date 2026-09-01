@@ -15,6 +15,7 @@ from slb_glossary.cli.source_options import (
     live_session,
     load_config,
     open_configured_db,
+    persist_kwargs,
     resolve_source,
     source_options,
 )
@@ -137,7 +138,7 @@ def compare(
             db=db,
             session=session,
             source=Source.LIVE,
-            persist=params["cache_results"],
+            persist=persist_kwargs(params)["persist"],
             language=language,
         )
 

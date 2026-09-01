@@ -348,6 +348,20 @@ def local_get(term_or_url: str, **params: typing.Any) -> None:
     help="Only (re-)embed rows at these comma-separated URLs. Omit to consider every locally stored row.",
 )
 @click.option(
+    "--topic",
+    "-t",
+    default=None,
+    help="Only (re-)embed rows filed under this topic, or several comma-separated "
+    "topics. Combines with --urls (a row must match both, if both are given).",
+)
+@click.option(
+    "--fuzzy",
+    is_flag=True,
+    help="Tolerate minor misspellings/partial names in --topic, matched "
+    "against topics actually stored locally, instead of requiring an exact "
+    "(case-insensitive) match.",
+)
+@click.option(
     "--reembed/--only-missing",
     "reembed",
     default=False,
@@ -385,6 +399,8 @@ def embed(**params: typing.Any) -> None:
       slb-glossary local embed
       slb-glossary local embed --reembed
       slb-glossary local embed --urls "https://glossary.slb.com/en/terms/p/porosity"
+      slb-glossary local embed --topic "Drilling Fluids"
+      slb-glossary local embed --topic "geologyy" --fuzzy
       slb-glossary local embed --batch-size 100
     """
     urls = (
@@ -400,6 +416,8 @@ def embed(**params: typing.Any) -> None:
             return await local_pkg.embed_terms(
                 db,
                 urls=urls,
+                topic=params["topic"],
+                fuzzy=params["fuzzy"],
                 only_missing=not params["reembed"],
                 batch_size=params["batch_size"],
             )

@@ -221,6 +221,45 @@ class Constants:
     upsert batch to the local database (`slb_glossary.local.upsert_results_incrementally`).
     """
 
+    persist_by_default = Constant(
+        False,
+        env_var="SLB_GLOSSARY_PERSIST_BY_DEFAULT",
+        type=bool,
+    )
+    """
+    Default for `slb_glossary.query`'s `persist` parameter (`search`,
+    `get_term`, `terms`, and friends) when a caller doesn't pass one
+    explicitly. `False` out of the box: writing to the local database is
+    a side effect a library caller should opt into, not one that happens
+    silently. Set `SLB_GLOSSARY_PERSIST_BY_DEFAULT=true`, or
+    `constants.persist_by_default = True` directly, to flip that for
+    every call site in a process that doesn't pass `persist=` itself.
+
+    Deliberately a *separate* constant from `cli_cache_by_default` below,
+    not one shared with it: the CLI's `--cache` has defaulted to on since
+    before this constant existed (caching what you just paid to fetch
+    live is normally what you want from a one-off command), while the
+    library's `persist` has always defaulted to off (a silent write is a
+    bigger surprise from code you're calling than from a command you
+    just typed). Unifying them into one constant would have to pick one
+    of those two defaults and silently change the other.
+    """
+
+    cli_cache_by_default = Constant(
+        True,
+        env_var="SLB_GLOSSARY_CLI_CACHE_BY_DEFAULT",
+        type=bool,
+    )
+    """
+    Default for the CLI's `--cache/--no-cache` flag (`search`, `define`,
+    `terms`, `compare`, ...) when neither is passed explicitly. `True`
+    out of the box, matching this flag's long-standing default. Set
+    `SLB_GLOSSARY_CLI_CACHE_BY_DEFAULT=false` to default every such
+    command to `--no-cache` instead, without having to pass it on every
+    invocation. See `persist_by_default` above for why this isn't the
+    same constant as the library's own default.
+    """
+
     relevance_threshold = Constant(
         0.45,
         env_var="SLB_GLOSSARY_RELEVANCE_THRESHOLD",

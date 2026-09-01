@@ -144,6 +144,54 @@ class TestEmbedTerms:
         embedded = await embed_terms(db, urls=["https://x.com/a"])
         assert embedded == 1
 
+    async def test_topic_filter_restricts_which_rows_are_embedded(self, db, mock_embeddings):
+        """`topic` restricts embedding to rows filed under that topic."""
+        await upsert_results(
+            db,
+            [
+                make_search_result(url="https://x.com/a", term="Alpha", topic="Geology"),
+                make_search_result(url="https://x.com/b", term="Bravo", topic="Drilling"),
+            ],
+        )
+        embedded = await embed_terms(db, topic="Geology")
+        assert embedded == 1
+
+    async def test_topic_and_urls_combine_with_and(self, db, mock_embeddings):
+        """A row must match both `urls` and `topic` when both are given."""
+        await upsert_results(
+            db,
+            [
+                make_search_result(url="https://x.com/a", term="Alpha", topic="Geology"),
+                make_search_result(url="https://x.com/b", term="Bravo", topic="Geology"),
+            ],
+        )
+        embedded = await embed_terms(db, urls=["https://x.com/a"], topic="Geology")
+        assert embedded == 1
+
+    async def test_topic_fuzzy_resolves_against_stored_topics(self, db, mock_embeddings):
+        """`fuzzy=True` resolves a misspelled `topic` against stored topic names."""
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Alpha", topic="Geology")]
+        )
+        embedded = await embed_terms(db, topic="geologyy", fuzzy=True)
+        assert embedded == 1
+
+    async def test_topic_with_no_match_embeds_nothing(self, db, mock_embeddings):
+        """A `topic` matching no stored rows embeds `0`, not an error."""
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Alpha", topic="Geology")]
+        )
+        embedded = await embed_terms(db, topic="Nonexistent Topic")
+        assert embedded == 0
+
+    async def test_topic_fuzzy_with_no_close_match_embeds_nothing(self, db, mock_embeddings):
+        """`fuzzy=True` with nothing close enough stored embeds `0`, not everything."""
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Alpha", topic="Geology")]
+        )
+        embedded = await embed_terms(db, topic="Completely Unrelated", fuzzy=True)
+        assert embedded == 0
+
     async def test_respects_batch_size(self, db, mock_embeddings):
         """A small `batch_size` still embeds every row, across multiple internal batches."""
         await upsert_results(

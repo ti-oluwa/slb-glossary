@@ -13,6 +13,7 @@ from slb_glossary.cli.source_options import (
     database_option,
     load_config,
     open_configured_db,
+    persist_kwargs,
     resolve_lookup,
     resolve_source,
     source_options,
@@ -100,7 +101,7 @@ def random_term(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
                         session=session,
                         topic=topic,
                         source=Source.LIVE,
-                        persist=params["cache_results"],
+                        persist=persist_kwargs(params)["persist"],
                     ),
                 )
                 if lookup.value is not None:

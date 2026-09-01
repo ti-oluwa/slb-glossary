@@ -13,6 +13,7 @@ from slb_glossary.cli.source_options import (
     database_option,
     load_config,
     open_configured_db,
+    persist_kwargs,
     resolve_lookup,
     resolve_source,
     source_options,
@@ -111,7 +112,7 @@ def related(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) 
                     db=db,
                     session=session,
                     source=Source.LIVE,
-                    persist=params["cache_results"],
+                    persist=persist_kwargs(params)["persist"],
                     language=params["language"],
                 ),
             )

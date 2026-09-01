@@ -66,11 +66,12 @@ def source_options(func: F) -> F:
     func = click.option(
         "--cache/--no-cache",
         "cache_results",
-        default=True,
-        show_default=True,
+        default=None,
+        show_default="constants.cli_cache_by_default (True)",
         help=(
             "When a live fetch happens, save its results to the local "
-            "database so the same lookup is served locally next time."
+            "database so the same lookup is served locally next time. "
+            "Defaults to constants.cli_cache_by_default."
         ),
     )(func)
     func = click.option(
@@ -220,8 +221,9 @@ def persist_kwargs(params: typing.Mapping[str, typing.Any]) -> dict[str, typing.
     :return: A kwargs dict with `persist`, `persist_batch_size`, and
         `persist_on_error`, ready to splat into `query.search`/`query.get_terms_on`.
     """
+    cache_results = params.get("cache_results")
     return {
-        "persist": params.get("cache_results", True),
+        "persist": constants.cli_cache_by_default if cache_results is None else cache_results,
         "persist_batch_size": params.get("cache_batch_size") or 20,
         "persist_on_error": params.get("cache_on_error", True),
     }

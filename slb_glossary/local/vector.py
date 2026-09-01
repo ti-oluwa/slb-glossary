@@ -132,6 +132,8 @@ async def embed_terms(
     db: Database,
     *,
     urls: Collection[str] | None = None,
+    topic: str | None = None,
+    fuzzy: bool = False,
     only_missing: bool = True,
     batch_size: int | None = None,
 ) -> int:
@@ -147,7 +149,16 @@ async def embed_terms(
     :param db: The local database to read terms from and write vectors to.
     :param urls: Only (re-)embed rows at these URLs. `None` (the default)
         considers every locally stored row. A URL with several stored
-        definitions embeds all of them, not just one.
+        definitions embeds all of them, not just one. Combines with
+        `topic` (a row must match both, if both are given).
+    :param topic: Only (re-)embed rows filed under this topic, or several
+        comma-separated topics. `None` (the default) doesn't filter by
+        topic. Combines with `urls` (a row must match both, if both are
+        given).
+    :param fuzzy: If `True`, resolve `topic` against topics actually
+        stored locally (tolerating minor misspellings/partial names),
+        the same as `slb_glossary.local.search`'s own `fuzzy`. Has no
+        effect if `topic` isn't given.
     :param only_missing: If `True` (the default), skip a row that
         already has a stored embedding, so a repeat call after a sync
         only pays for what's newly added. Pass `False` to re-embed
@@ -170,6 +181,23 @@ async def embed_terms(
         placeholders = ", ".join("?" for _ in urls)
         conditions.append(f"terms.url IN ({placeholders})")
         params.extend(urls)
+
+    if topic:
+        from slb_glossary.local.api import resolve_topic
+
+        resolved_topic = await resolve_topic(db, topic, fuzzy)
+        if resolved_topic:
+            topic_names = [name.strip() for name in resolved_topic.split(",") if name.strip()]
+            placeholders = ", ".join("?" for _ in topic_names)
+            conditions.append(f"terms.topic COLLATE NOCASE IN ({placeholders})")
+            params.extend(topic_names)
+        else:
+            # `topic` was given but resolved to nothing (e.g. `fuzzy=True`
+            # with no close-enough stored topic) so we match no rows, rather
+            # than silently ignoring the filter and embedding everything.
+            logger.debug("embed_terms: topic %r resolved to nothing; embedding no rows", topic)
+            return 0
+
     if only_missing:
         conditions.append(f"terms.rowid NOT IN (SELECT rowid FROM {VECTOR_TABLE})")
     if conditions:

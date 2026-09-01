@@ -138,3 +138,32 @@ slb local import terms.json --source-tag internal-wordlist
 ```
 
 `--source-tag` marks imported rows with where they came from, so `local stats`/`local get` can later tell an imported row apart from one actually fetched from the live glossary (tagged `glossary` by default).
+
+---
+
+## `install`
+
+Manages the background browser build itself, what `sync --install` calls under the hood, and the same command [Installation](../getting-started/installation.md#installing-the-browser-build) walks through the first time.
+
+```bash
+slb install                    # install patchright's default browser set
+slb install firefox webkit     # install specific browsers
+slb install --list             # what's installed right now
+slb install --update chromium  # reinstall/refresh chromium specifically
+slb install --remove firefox   # remove a browser you no longer need
+```
+
+`BROWSERS` (the positional `chromium`/`firefox`/`webkit` names above) is optional: omitted, `install` installs/updates patchright's default browser set, or lists/removes every installed browser, depending on which flag you paired it with. `--with-deps` also installs the OS-level packages a browser needs to actually run (Linux only), and `--only-shell` installs Chromium's smaller headless-shell build instead of the full browser, if you never run headed.
+
+The engine underneath is [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python), a stealth-hardened fork of Playwright, not vanilla Playwright itself; see [Sessions and the Browser](../concepts/sessions.md) for why that distinction matters for a scraping tool like this one. `install`'s download-related flags reuse Playwright's own environment variables under the hood (`PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT`, `PLAYWRIGHT_DOWNLOAD_HOST`), since patchright is a drop-in fork:
+
+```bash
+slb install --timeout 120000 --retries 5                              # slow connection
+slb install --download-host https://playwright.download.prss.microsoft.com  # a mirror
+```
+
+---
+
+## Where to go from here
+
+For the config file that lets you set defaults like `--db-path` or `--browser-type` once instead of retyping them on every command, see [Saving, Output and Config Files](configuration.md). For the same local-cache model from Python instead of the terminal, see [Local Search and Cache](../library/local-search.md).
