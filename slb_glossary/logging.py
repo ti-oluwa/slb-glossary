@@ -1,7 +1,7 @@
 """
-Pluggable logging sinks for `slb_glossary`, meant for CLI/bug-report use.
+Pluggable logging sinks for `slb_glossary`.
 
-This module exists for callers who want more control over *where*
+This module exists for callers who want more control over where
 log records end up. May be a file for bug reports, `stderr`/`stdout`
 explicitly, or a fully custom destination, without having to hand-roll `
 logging.Handler` boilerplate themselves.
@@ -48,8 +48,8 @@ __all__ = [
     "ConsoleSink",
     "FileSink",
     "LogSink",
+    "LogSinkHandler",
     "SinkFilter",
-    "SinkHandler",
     "SinkSpec",
     "SinksSpec",
     "StderrSink",
@@ -68,10 +68,7 @@ class LogSink(typing.Protocol):
     Protocol for a destination formatted log lines can be written to.
 
     Implement this interface to route `slb_glossary`'s logging anywhere.
-    A file, a socket, a queue for an in-app log viewer, a bug-report buffer,
-    etc. Pass an instance (or the class itself, for a no-argument constructor)
-    to `configure_logging`, `resolve_sink`, `--log-to`/`--log-sink`, or
-    `open_session(log_sink=...)`.
+    A file, a socket, a queue for an in-app log viewer, a bug-report buffer, etc.
     """
 
     def write(self, message: str) -> None:
@@ -90,8 +87,11 @@ class LogSink(typing.Protocol):
 class ConsoleSink:
     """A `LogSink` that writes to a given text stream (`sys.stderr` by default)."""
 
-    def __init__(self, stream: typing.TextIO | None = None) -> None:
+    __slots__ = ("_close", "_stream")
+
+    def __init__(self, stream: typing.TextIO | None = None, close: bool = True) -> None:
         self._stream = stream if stream is not None else sys.stderr
+        self._close = close
 
     def write(self, message: str) -> None:
         self._stream.write(message + "\n")
@@ -102,7 +102,9 @@ class ConsoleSink:
 
     def close(self) -> None:
         # Never close a std stream out from under the rest of the process.
-        pass
+        if not self._close or self._stream is sys.stderr:
+            return
+        self._stream.close()
 
     def __repr__(self) -> str:
         name = getattr(self._stream, "name", self._stream)
@@ -125,6 +127,8 @@ class StdoutSink(ConsoleSink):
 
 class FileSink:
     """A `LogSink` that appends formatted log lines to a file, opened lazily on first write."""
+
+    __slots__ = ("_encoding", "_file", "_mode", "path")
 
     def __init__(
         self, path: str | pathlib.Path, *, mode: str = "a", encoding: str = "utf-8"
@@ -168,7 +172,7 @@ class FileSink:
 
 SinkFilter = str | typing.Callable[[logging.LogRecord], bool]
 """
-A route filter for `SinkHandler`'s `{filter: sink(s)}` mapping form: a
+A route filter for `LogSinkHandler`'s `{filter: sink(s)}` mapping form. Can be a
 logger-name pattern (`fnmatch`-style, e.g. `"slb_glossary.query*"`, `"*"`
 for everything) matched against each record's logger name, or a callable
 taking a `logging.LogRecord` and returning whether it should go to that
@@ -183,7 +187,7 @@ def check_filter_matches(filter: SinkFilter, record: logging.LogRecord) -> bool:
     return bool(filter(record))
 
 
-class SinkHandler(RichHandler):
+class LogSinkHandler(RichHandler):
     """
     A logging handler (`rich.logging.RichHandler`) that formats records
     and forwards them to one or more `LogSink`s.
@@ -292,7 +296,6 @@ def import_sink(dotted_path: str) -> typing.Any:
 
 
 def _looks_like_import_path(text: str) -> bool:
-    """Heuristic: `"module:Class"` or a dotted path with no filesystem-style suffix."""
     if ":" in text:
         return True
     return "." in text and not pathlib.Path(text).suffix
@@ -350,9 +353,9 @@ SinkSpec = LogSink | type[LogSink] | str | pathlib.Path | None
 
 SinksSpec = SinkSpec | Iterable[SinkSpec] | Mapping[SinkFilter, SinkSpec | Iterable[SinkSpec]]
 """
-Anything `configure_logging`/`resolve_sinks` accept for `sinks`: a single
+Anything `configure_logging`/`resolve_sinks` accept for `sinks`. Can be a single
 sink (spec), several, or a `{filter: sink(s)}` mapping that routes only
-matching log records to each sink - see `SinkHandler`.
+matching log records to each sink. See `LogSinkHandler`.
 """
 
 
@@ -368,8 +371,8 @@ def resolve_sinks(
     Resolve `sinks`-style input into ready `LogSink`(s), in the same shape it came in.
 
     :param spec: A single sink spec, an iterable of them, or a
-        `{filter: spec(s)}` mapping - see `SinksSpec`.
-    :param default: Fallback sink for a `None`/empty single spec - see `resolve_sink`.
+        `{filter: spec(s)}` mapping (see `SinksSpec`).
+    :param default: Fallback sink for a `None`/empty single spec (see `resolve_sink`).
     :return: A single `LogSink` for a single spec, a `list[LogSink]` for
         an iterable, or a `{filter: list[LogSink]}` mapping for a mapping.
     """
@@ -408,21 +411,13 @@ def configure_logging(
     logger_name: str = "slb_glossary",
     fmt: str | None = None,
     propagate: bool = False,
-) -> SinkHandler:
+) -> LogSinkHandler:
     """
     Route every `logger_name` (and descendant) log record to `sinks`.
 
-    Intended for the CLI (`--log-to`/`--log-sink`) and for library callers
-    who want the library's entire logging output funneled to one place;
-    a file for bug reports, an in-memory sink for a test harness, several
-    sinks at once, etc. Calling this again (e.g. because `--log-to`
-    changed mid-process) cleanly tears down the handler it previously set
-    up before attaching the new one, so repeat calls don't pile up duplicate
-    handlers.
-
     :param sinks: One sink (spec), several, a `{filter: sink(s)}` mapping
         to route only matching log records to each sink (see
-        `SinkHandler`), or `None` for a single `StderrSink()`.
+        `LogSinkHandler`), or `None` for a single `StderrSink()`.
     :param level: Logging level (name or numeric) to set on `logger_name`'s
         logger. `None` leaves the logger's current level untouched, so this
         can be called purely to redirect output without also changing verbosity.
@@ -438,7 +433,7 @@ def configure_logging(
         also sending them to `sinks`. Defaults to `False` to avoid
         duplicate output alongside the root handler `logging.basicConfig`
         sets up on package initialization.
-    :return: The `SinkHandler` now attached to `logger_name`'s logger.
+    :return: The `LogSinkHandler` now attached to `logger_name`'s logger.
     """
     resolved_fmt = fmt if fmt is not None else constants.log_format
     resolved_sinks = resolve_sinks(sinks, default=StderrSink())
@@ -449,11 +444,11 @@ def configure_logging(
     logger.propagate = propagate
 
     for existing in list(logger.handlers):
-        if isinstance(existing, SinkHandler):
+        if isinstance(existing, LogSinkHandler):
             logger.removeHandler(existing)
             existing.close()
 
-    handler = SinkHandler(resolved_sinks, level=logger.level)
+    handler = LogSinkHandler(resolved_sinks, level=logger.level)
     handler.setFormatter(logging.Formatter(resolved_fmt))
     logger.addHandler(handler)
     logger.debug(

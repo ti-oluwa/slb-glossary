@@ -2,10 +2,9 @@
 A Pydantic AI agent that can look glossary terms up itself, via the glossary
 MCP server as a tool.
 
-Needs the `examples` dependency group: `uv sync --group examples`, or
-`uv add "pydantic-ai-slim[mcp]"` directly. Also needs an API key for
-whichever model you point `Agent(...)` at - Anthropic's, by default here
-(`ANTHROPIC_API_KEY` in your environment).
+Needs the `examples` dependency group. Instal with `uv sync --group examples --inexact`,
+or `uv add "pydantic-ai-slim[mcp]"` directly. Also needs an API key for whichever model
+you point `Agent(...)` at - Anthropic's, by default here (`ANTHROPIC_API_KEY` in your environment).
 
 Two ways to wire the glossary server in are shown below:
 
@@ -13,19 +12,20 @@ Two ways to wire the glossary server in are shown below:
   the way an external agent (Claude Desktop, Claude Code) would connect to
   it. Works even if the agent and the glossary server are different
   processes, machines, or codebases entirely.
+
 - `build_inprocess_agent`: skips the subprocess and network hop entirely by
   handing the agent the `FastMCP` server object directly. Only possible
   when the agent and the glossary server are in the same Python process,
   but faster and simpler when they are.
 
-Run either with `python -m examples.pydantic_ai_agent`.
+Run with `python -m examples.agent`.
 """
 
 import asyncio
 
 from fastmcp.client.transports import StdioTransport
-from pydantic_ai import Agent
-from pydantic_ai.mcp import MCPToolset
+from pydantic_ai import Agent  # type: ignore[import]
+from pydantic_ai.mcp import MCPToolset  # type: ignore[import]
 
 import slb_glossary.mcp as slb_mcp
 
@@ -33,9 +33,8 @@ MODEL = "anthropic:claude-sonnet-4-5"
 
 QUESTIONS = [
     "What does porosity mean in petroleum engineering?",
-    "Now compare that with permeability - how are the two different?",
+    "Now compare that with permeability. How are the two different?",
 ]
-
 
 SYSTEM_PROMPT = (
     "You are a petroleum engineering assistant. When a question is about "

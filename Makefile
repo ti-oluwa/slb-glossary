@@ -18,7 +18,7 @@ install-dev: ## Set up dependencies for development (dev tools + tests)
 	uv sync --group dev --group test --extra all --inexact
 
 install-test: ## Install just the test dependencies
-	uv sync --group test --inexact
+	uv sync --group test --extra all --inexact
 
 install-docs: ## Install just the docs dependencies (mkdocs + material theme)
 	uv sync --group docs --inexact
@@ -29,8 +29,7 @@ browsers: ## Install the chromium build patchright drives (needed for --run-live
 # Testing targets
 #
 # `slow` and `live` tests are opt-in via --run-slow/--run-live (see
-# tests/conftest.py), so a plain `pytest` run already excludes them -
-# no `-m` juggling needed for the everyday case.
+# tests/conftest.py), so a plain `pytest` run already excludes them.
 
 TEST_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 

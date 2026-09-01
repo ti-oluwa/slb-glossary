@@ -1,7 +1,6 @@
 """
-Recognizing "asking about a term in plain English" queries, e.g. "what is
-X", "define X", "tell me about X", and reducing them to the term-like
-phrase they're actually about.
+API for recognizing phrasing like; "what is X", "define X", "tell me about X", in queries and
+reducing them to the term-like phrase they're actually about.
 """
 
 import re

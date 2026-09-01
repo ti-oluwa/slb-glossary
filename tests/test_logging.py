@@ -1,5 +1,5 @@
 """
-`LogSink` implementations, `SinkHandler` routing, `resolve_sink(s)`, and `configure_logging`.
+`LogSink` implementations, `LogSinkHandler` routing, `resolve_sink(s)`, and `configure_logging`.
 """
 
 import io
@@ -14,8 +14,8 @@ from slb_glossary.logging import (
     ConsoleSink,
     FileSink,
     LogSink,
+    LogSinkHandler,
     SinkFilter,
-    SinkHandler,
     StderrSink,
     StdoutSink,
     check_filter_matches,
@@ -146,7 +146,7 @@ class TestSinkHandler:
     def test_single_sink_receives_every_record(self):
         """A single `LogSink` (no mapping) receives every emitted record."""
         sink = RecordingSink()
-        handler = SinkHandler(sink)
+        handler = LogSinkHandler(sink)
         handler.setFormatter(logging.Formatter("%(message)s"))
         handler.emit(make_log_record(message="hello"))
         assert sink.messages == ["hello"]
@@ -154,7 +154,7 @@ class TestSinkHandler:
     def test_iterable_of_sinks_all_receive_every_record(self):
         """An iterable of sinks (no mapping) all receive every emitted record."""
         sink_a, sink_b = RecordingSink(), RecordingSink()
-        handler = SinkHandler([sink_a, sink_b])
+        handler = LogSinkHandler([sink_a, sink_b])
         handler.setFormatter(logging.Formatter("%(message)s"))
         handler.emit(make_log_record(message="hello"))
         assert sink_a.messages == ["hello"]
@@ -163,7 +163,7 @@ class TestSinkHandler:
     def test_mapping_routes_records_by_filter(self):
         """With a `{filter: sink}` mapping, only matching records reach each sink."""
         query_sink, other_sink = RecordingSink(), RecordingSink()
-        handler = SinkHandler({"slb_glossary.query*": query_sink, "*": other_sink})
+        handler = LogSinkHandler({"slb_glossary.query*": query_sink, "*": other_sink})
         handler.setFormatter(logging.Formatter("%(message)s"))
         handler.emit(make_log_record(logger_name="slb_glossary.query.search", message="q"))
         handler.emit(make_log_record(logger_name="slb_glossary.local.sync", message="l"))
@@ -173,7 +173,7 @@ class TestSinkHandler:
     def test_mapping_value_can_be_an_iterable_of_sinks(self):
         """A mapping value may be a list of sinks, all receiving matching records."""
         sink_a, sink_b = RecordingSink(), RecordingSink()
-        handler = SinkHandler({"*": [sink_a, sink_b]})
+        handler = LogSinkHandler({"*": [sink_a, sink_b]})
         handler.setFormatter(logging.Formatter("%(message)s"))
         handler.emit(make_log_record(message="hello"))
         assert sink_a.messages == ["hello"]
@@ -182,20 +182,20 @@ class TestSinkHandler:
     def test_sinks_property_deduplicates_across_routes(self):
         """`.sinks` lists each distinct sink once, even if used in multiple routes."""
         shared_sink = RecordingSink()
-        handler = SinkHandler({"a*": shared_sink, "b*": shared_sink})
+        handler = LogSinkHandler({"a*": shared_sink, "b*": shared_sink})
         assert handler.sinks == [shared_sink]
 
     def test_flush_flushes_every_sink(self):
         """`flush()` flushes every distinct sink."""
         sink = RecordingSink()
-        handler = SinkHandler(sink)
+        handler = LogSinkHandler(sink)
         handler.flush()
         assert sink.flushed is True
 
     def test_close_closes_every_sink(self):
         """`close()` closes every distinct sink."""
         sink = RecordingSink()
-        handler = SinkHandler(sink)
+        handler = LogSinkHandler(sink)
         handler.close()
         assert sink.closed is True
 
@@ -212,7 +212,7 @@ class TestSinkHandler:
             def close(self) -> None:
                 pass
 
-        handler = SinkHandler(BrokenSink())
+        handler = LogSinkHandler(BrokenSink())
         handler.setFormatter(logging.Formatter("%(message)s"))
         # Should not raise.
         handler.emit(make_log_record())
@@ -325,7 +325,7 @@ class TestSetLogLevel:
 
 class TestConfigureLogging:
     def test_attaches_a_sinkhandler_to_the_named_logger(self):
-        """`configure_logging` attaches a `SinkHandler` to `logger_name`'s logger."""
+        """`configure_logging` attaches a `LogSinkHandler` to `logger_name`'s logger."""
         logger_name = "slb_glossary.test.configure1"
         handler = configure_logging(sinks=RecordingSink(), logger_name=logger_name)
         try:
@@ -334,7 +334,7 @@ class TestConfigureLogging:
             logging.getLogger(logger_name).removeHandler(handler)
 
     def test_repeat_calls_remove_previous_sinkhandler(self):
-        """Calling `configure_logging` again replaces, rather than stacks, the `SinkHandler`."""
+        """Calling `configure_logging` again replaces, rather than stacks, the `LogSinkHandler`."""
         logger_name = "slb_glossary.test.configure2"
         first_handler = configure_logging(sinks=RecordingSink(), logger_name=logger_name)
         second_handler = configure_logging(sinks=RecordingSink(), logger_name=logger_name)
@@ -342,7 +342,7 @@ class TestConfigureLogging:
             handlers = logging.getLogger(logger_name).handlers
             assert first_handler not in handlers
             assert second_handler in handlers
-            assert sum(isinstance(h, SinkHandler) for h in handlers) == 1
+            assert sum(isinstance(h, LogSinkHandler) for h in handlers) == 1
         finally:
             logging.getLogger(logger_name).removeHandler(second_handler)
 

@@ -1,9 +1,4 @@
-"""
-API for persisting records to a (file) store.
-
-`save` is the only function most callers need; The `@writer` decorator
-extends it to new file formats.
-"""
+"""API for persisting records to a (file) store."""
 
 import asyncio
 import csv
@@ -75,7 +70,7 @@ def make_json_safe(value: typing.Any) -> typing.Any:
     """
     Recursively convert `value` into something `json.dump` can serialize.
 
-    Handles the shapes `slb_glossary` records actually nest: `NamedTuple`
+    Handles the shapes `slb_glossary` records actually nest; `NamedTuple`
     values (e.g. `RelatedTerm`), and plain lists/tuples/dicts of those.
     Anything else is returned unchanged and left to `json.dump` itself.
 
@@ -125,7 +120,7 @@ def records_to_dicts(
     recursively converted rather than flattened to text, unlike
     `write_json`, which additionally re-keys the list by each record's
     first field for on-disk storage, this stays a flat list, which is
-    usually what you want for `json.dumps`, piping to `jq`, or embedding
+    usually what we need for `json.dumps`, piping to `jq`, or embedding
     in a larger JSON payload.
 
     :param records: The records to convert.
@@ -185,7 +180,7 @@ async def write_jsonl(records: Sequence[RecordLike], destination: pathlib.Path) 
     Write `records` to `destination` as newline-delimited JSON (one object per line).
 
     Unlike `write_json`, records keep their original field order and are
-    not re-keyed or deduplicated by their first field - useful for
+    not re-keyed or deduplicated by their first field. Useful for
     streaming/appending workflows, or piping straight into tools like `jq`.
     """
 

@@ -10,7 +10,7 @@ import enum
 
 import pytest
 
-from slb_glossary.utils import EnvVarError, env, parse_int, split_exclude
+from slb_glossary.utils import EnvironmentVariableError, env, parse_int, split_exclude
 
 pytestmark = pytest.mark.unit
 
@@ -61,15 +61,15 @@ class TestEnv:
         assert env(ENV_VAR, Choice.A, type=Choice) is Choice.B
 
     def test_raises_env_var_error_on_uncastable_value(self, monkeypatch: pytest.MonkeyPatch):
-        """An uncastable value raises `EnvVarError`."""
+        """An uncastable value raises `EnvironmentVariableError`."""
         monkeypatch.setenv(ENV_VAR, "not-a-number")
-        with pytest.raises(EnvVarError):
+        with pytest.raises(EnvironmentVariableError):
             env(ENV_VAR, 0)
 
     def test_validator_failure_raises_env_var_error(self, monkeypatch: pytest.MonkeyPatch):
-        """A value failing `validator` raises `EnvVarError`."""
+        """A value failing `validator` raises `EnvironmentVariableError`."""
         monkeypatch.setenv(ENV_VAR, "-1")
-        with pytest.raises(EnvVarError):
+        with pytest.raises(EnvironmentVariableError):
             env(ENV_VAR, 0, validator=lambda v: v >= 0)
 
 
@@ -92,7 +92,10 @@ class TestSplitExclude:
     def test_splits_urls_and_term_names(self):
         """URLs (`http(s)://`-prefixed) and term names are split into separate sets."""
         urls, names = split_exclude(
-            ["https://glossary.slb.com/en/terms/p/porosity", "Permeability"]
+            [
+                "https://glossary.slb.com/en/terms/p/porosity",
+                "Permeability",
+            ]
         )
         assert urls == frozenset({"https://glossary.slb.com/en/terms/p/porosity"})
         assert names == frozenset({"permeability"})

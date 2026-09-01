@@ -18,12 +18,8 @@ PROBE_TARGETS: tuple[tuple[str, int], ...] = (
 )
 """
 Well-known, highly-available public DNS resolvers, probed by raw IP:port
-TCP connect. No DNS lookup needed (so a broken *resolver* doesn't read
+TCP connect. No DNS lookup needed (so a broken resolver doesn't read
 as "no internet"), and no HTTP/TLS handshake, just a bare TCP SYN/ACK.
-
-About as cheap and dependency-free as an internet-reachability check
-gets. Several are tried, concurrently, so one being blocked, firewalled,
-or briefly down doesn't read as "no internet" on its own.
 """
 
 _CACHE: tuple[float, bool] | None = None

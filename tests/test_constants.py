@@ -7,7 +7,7 @@ import enum
 import pytest
 
 from slb_glossary.constants import Constant, Constants, constants
-from slb_glossary.utils import EnvVarError
+from slb_glossary.utils import EnvironmentVariableError
 
 pytestmark = pytest.mark.unit
 
@@ -39,13 +39,13 @@ class TestConstantResolution:
         assert holder.value == 42
 
     def test_validator_rejects_invalid_env_value(self, monkeypatch: pytest.MonkeyPatch):
-        """An env value failing `validator` raises `EnvVarError`."""
+        """An env value failing `validator` raises `EnvironmentVariableError`."""
 
         class ValidatedHolder:
             value: Constant = Constant(10, env_var=ENV_VAR, validator=lambda v: v > 0)
 
         monkeypatch.setenv(ENV_VAR, "-5")
-        with pytest.raises(EnvVarError):
+        with pytest.raises(EnvironmentVariableError):
             _ = ValidatedHolder().value
 
     @pytest.mark.parametrize(

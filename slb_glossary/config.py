@@ -120,8 +120,9 @@ class SessionOptions(Updatable):
 
     max_pages: int = 6
     """
-    Maximum number of browser pages a session will have open at once. Each
-    independent operation (the tab-paging search page, each concurrent
+    Maximum number of browser pages a session will have open at once. 
+    
+    Each independent operation (the tab-paging search page, each concurrent
     term-fetch worker) checks out its own page, so this should comfortably
     cover the highest `--concurrency` a command is run with, plus one for
     a search page paging through tabs at the same time.
@@ -161,6 +162,7 @@ class SessionOptions(Updatable):
     Whether to apply Playwright stealth patches to the browser context.
     `None` (the default) resolves this automatically instead, based on
     `session.headless` and applied when headless, skipped when headed.
+
     Stealth patches have been observed to be counterproductive in headed
     mode, making the glossary consistently harder to scrape reliably,
     not easier. See `slb_glossary.browser.open_session`.
@@ -169,11 +171,10 @@ class SessionOptions(Updatable):
     log_sink: LogSink | type[LogSink] | str | pathlib.Path | None = None
     """
     Where to route the application's logging for this run. Can be a file path,
-    `"stderr"`/`"stdout"`, or a `"module:ClassName"` import path to a
-    custom `slb_glossary.logging.LogSink`. `
+    `"stderr"`/`"stdout"`, or a `"module:ClassName"` import path to a custom 
+    `slb_glossary.logging.LogSink`. `
     
-    None` (the default) leaves whatever logging setup is already in place 
-    untouched.
+    None` (the default) leaves whatever logging setup is already in place untouched.
     """
 
     retry: RetryOptions = dataclasses.field(default_factory=RetryOptions)
@@ -261,8 +262,10 @@ class OutputOptions(Updatable):
     """Default CLI/print output formatting."""
 
     default_format: str | None = None
-    """Default file format for `--save`, e.g. `"csv"`. `None` infers it
-    from each save path's extension."""
+    """
+    Default file format for `--save`, e.g. `"csv"`. `None` infers it
+    from each save path's extension.
+    """
 
     show_url: bool = True
     """Whether to show the source URL column by default."""
@@ -310,14 +313,14 @@ def _load_dataclass(cls: type[T], data: Mapping[str, typing.Any]) -> T:
     return cls(**kwargs)
 
 
-def _read_config_file(path: pathlib.Path) -> dict[str, typing.Any]:
+def read_config_file(path: pathlib.Path) -> dict[str, typing.Any]:
     """
     Parse `path` into a plain dict, choosing a parser by its file extension.
 
     :param path: Path to a `.json`, `.toml` or `.yaml`/`.yml` config file.
     :return: The parsed file content.
-    :raises ConfigError: If `path`'s extension isn't a supported format, or
-        the format's parser package isn't installed.
+    :raises ConfigError: If `path`'s extension is not a supported format, or
+        the format's parser package is not installed.
     """
     suffix = path.suffix.lstrip(".").lower()
     text = path.read_text(encoding="utf-8")
@@ -383,8 +386,8 @@ def write_config_file(data: dict[str, typing.Any], path: pathlib.Path, format: s
     :param data: A plain, JSON/TOML/YAML-safe dict, e.g. from `Config.to_dict`.
     :param path: Destination path.
     :param format: One of `"json"`, `"toml"`, `"yaml"`/`"yml"`.
-    :raises ConfigError: If `format` isn't supported, or its writer package
-        isn't installed.
+    :raises ConfigError: If `format` is not supported, or its writer package
+        is not installed.
     """
     if format == "json":
         path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -463,13 +466,13 @@ class Config(Updatable):
         :param path: Path to the config file. Its extension selects the parser.
         :return: The loaded `Config`.
         :raises ConfigError: If the file's format is unsupported, its
-            parser package isn't installed, or the file content is invalid.
+            parser package is not installed, or the file content is invalid.
         :raises FileNotFoundError: If `path` does not exist.
         """
         path = pathlib.Path(path)
         logger.debug("Loading config from %s", path)
         try:
-            data = _read_config_file(path)
+            data = read_config_file(path)
         except ConfigError:
             raise
         except Exception as exc:
@@ -481,7 +484,7 @@ class Config(Updatable):
         """
         Load a `Config` from `path`, or the default config path if it exists.
 
-        Unlike `from_file`, this never raises `FileNotFoundError`: if
+        Unlike `from_file`, this never raises `FileNotFoundError`. If
         neither `path` nor the default config path exists, it returns a
         `Config` built from defaults, so callers can always use the
         result without checking for a config file first.
@@ -505,7 +508,7 @@ class Config(Updatable):
         :param format: File format to write, overriding `path`'s extension.
             One of `"json"`, `"toml"`, `"yaml"`/`"yml"`.
         :raises ConfigError: If the resolved format is unsupported or its
-            writer package isn't installed.
+            writer package is not installed.
         """
         path = pathlib.Path(path)
         resolved_format = (format or path.suffix.lstrip(".") or "toml").lower()
@@ -543,7 +546,7 @@ class Config(Updatable):
 
         :param key: A dot-separated path of field names, rooted at this `Config`.
         :param value: The new value. Coerced to the current field's type if
-            it's a `str` and the field isn't already a `str`.
+            it's a `str` and the field is not already a `str`.
         :raises ConfigError: If any segment of `key` does not name a field.
         """
         *parents, leaf = key.split(".")
@@ -590,12 +593,12 @@ def _parse_bool(value: str) -> bool:
 
 def _cast(value: typing.Any, *, like: typing.Any, field_type: typing.Any = None) -> typing.Any:
     """
-    Coerce a string `value` to the type of `like`, for CLI-style key=value input.
+    Coerce a string `value` to the type of `like`.
 
     :param value: The raw value, typically a `str` from a CLI argument.
     :param like: The field's current value, whose type `value` is coerced
         to. When `like` is `None`, there's no runtime value to infer a
-        type from - `field_type` is consulted instead (see below) rather
+        type from so `field_type` is consulted instead (see below) rather
         than giving up and returning the raw string.
     :param field_type: The field's own declared type annotation (e.g.
         `dataclasses.Field.type`), used only as a fallback when `like` is
@@ -603,11 +606,9 @@ def _cast(value: typing.Any, *, like: typing.Any, field_type: typing.Any = None)
         `None` while still being fundamentally `bool`-shaped, e.g.
         `SessionOptions.use_stealth: bool | None = None`, whose
         `None` means "resolve automatically" rather than "no type at
-        all" - without this, `--set session.use_stealth false` would
-        silently store the literal (truthy!) string `"false"` instead of
-        `False`. Ignored when `like` isn't `None`.
-    :return: `value` unchanged if it isn't a `str`, or `like` is a `str`;
-        `value` parsed as `like`'s type if `like` isn't `None`; if `like`
+        all". Ignored when `like` is not `None`.
+    :return: `value` unchanged if it is not a `str`, or `like` is a `str`;
+        `value` parsed as `like`'s type if `like` is not `None`; if `like`
         *is* `None`, `value` parsed as `bool` when `field_type` looks
         bool-shaped, else `value` unchanged.
     :raises ConfigError: If `value` cannot be parsed as the target type.

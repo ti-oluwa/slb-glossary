@@ -1,9 +1,4 @@
-"""
-API for reading tabular records from a (file) source.
-
-`read_rows` is the entry point most callers need; the `@reader` decorator
-extends it to new file formats.
-"""
+"""API for reading tabular records from a (file) source."""
 
 import csv
 import json

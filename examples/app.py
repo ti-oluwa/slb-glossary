@@ -1,10 +1,9 @@
 """
-A complete, real-world MCP server: read-and-write access, a bounded shared
-browser session, file + stderr logging, and a longer timeout for the one
-tool (`glossary_sync`) that can legitimately take a while.
+A complete MCP server with read-and-write access, a bounded shared
+browser session, and file + stderr logging.
 
-Run it directly (`python -m examples.mcp_app`) to serve over streamable
-HTTP, or point `slb mcp serve` at it: `slb mcp serve examples.mcp_app:app`.
+Run it directly (`python -m examples.app`) to serve over streamable
+HTTP, or point `slb mcp serve` at it like so; `slb mcp serve examples.app:app`.
 """
 
 import slb_glossary as slb

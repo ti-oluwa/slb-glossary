@@ -1,13 +1,12 @@
 """
-Text embedding, for semantic scoring/search over glossary terms, local or live.
+Text embedding for semantic scoring/search over glossary terms, local or live.
 
 Wraps a single, package-managed `model2vec` static embedding model (see
 `constants.embedding_model`), so `slb_glossary.local`'s semantic search
 and `slb_glossary.live`'s semantic result scoring embed text the same
 way, without either needing its own model.
 
-The model is downloaded once from Hugging Face and cached locally by
-`model2vec` itself; nothing here makes a network call at query time.
+The model is downloaded once from Hugging Face and cached locally by `model2vec`.
 
 Install the `semantic` extra to use anything in this module:
 `pip install slb-glossary[semantic]`.

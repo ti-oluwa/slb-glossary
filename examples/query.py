@@ -1,9 +1,7 @@
 """
-A real-world tour of `slb_glossary.query`: local-first search with a live
-fallback, comparing terms, saving results, and enabling semantic search on
-whatever ends up cached.
+A concrete example of `slb_glossary.query` usage.
 
-Run it twice in a row (`python -m examples.query`) - the second run answers
+Run it twice in a row (`python -m examples.query`). The second run answers
 every lookup from the local database alone, with no browser involved at all,
 since the first run's `persist=True` calls already cached everything it needed.
 """
@@ -13,12 +11,12 @@ import pathlib
 
 import slb_glossary as slb
 
-DB_PATH = pathlib.Path(__file__).parent / "example_glossary.db"
+DB_PATH = pathlib.Path(__file__).parent / "example.db"
 
 
 async def search_and_cache(db: slb.local.Database, session: slb.live.Session) -> None:
     """Local-first search, falling back to (and caching) a live lookup."""
-    print("--- search: 'clathrates' ---")
+    print("### search: 'clathrates' ###")
     async for lookup in slb.search("clathrates", db=db, session=session, persist=True):
         origin = "cache" if lookup.source is slb.Source.LOCAL else "live, now cached"
         print(f"[{origin}] {lookup.value.term}: {lookup.value.definition}")
@@ -26,7 +24,7 @@ async def search_and_cache(db: slb.local.Database, session: slb.live.Session) ->
 
 async def compare_terms(db: slb.local.Database, session: slb.live.Session) -> None:
     """Look up several terms concurrently and print them side by side."""
-    print("\n--- compare: water flooding vs. gas flooding ---")
+    print("\n### compare: water flooding vs. gas flooding ###")
     results = await slb.compare(
         ["water flooding", "gas flooding"], db=db, session=session, persist=True
     )
@@ -37,17 +35,17 @@ async def compare_terms(db: slb.local.Database, session: slb.live.Session) -> No
         print(f"{term} ({lookup.source.value}): {lookup.value.definition}")
 
 
-async def a_random_term(db: slb.local.Database, session: slb.live.Session) -> None:
+async def random_term(db: slb.local.Database, session: slb.live.Session) -> None:
     """`get_random_term` for "term of the day"-style exploration."""
-    print("\n--- a random term ---")
+    print("\n### a random term ###")
     lookup = await slb.get_random_term(db=db, session=session)
     if lookup.value is not None:
         print(f"{lookup.value.term}: {lookup.value.definition}")
 
 
-async def save_a_batch(db: slb.local.Database, session: slb.live.Session) -> None:
+async def save_batch(db: slb.local.Database, session: slb.live.Session) -> None:
     """Fetch every term under one topic and save the results to a file."""
-    print("\n--- saving every term under 'Reservoir Engineering' ---")
+    print("\n### saving every term under 'Reservoir Engineering' ###")
     results = [
         lookup.value
         async for lookup in slb.get_terms_on(
@@ -67,7 +65,7 @@ async def enable_semantic_search(db: slb.local.Database) -> None:
     Needs the `semantic` extra installed (`uv add "slb-glossary[semantic]"`).
     Skipped gracefully if it isn't, since this is an optional step.
     """
-    print("\n--- embedding cached terms for semantic search ---")
+    print("\n### embedding cached terms for semantic search ###")
     try:
         embedded = await slb.local.embed_terms(db)
     except slb.EmbeddingError as exc:
@@ -85,13 +83,13 @@ async def main() -> None:
         slb.local.database(DB_PATH) as db,
         # `headless=False` here only so a first-time run is easy to watch;
         # drop it (or set `headless=True`) for a normal, background session.
-        slb.live.session(headless=False, block=True) as session,
+        slb.live.session(headless=False, block=False) as session,
     ):
         try:
             await search_and_cache(db, session)
             await compare_terms(db, session)
-            await a_random_term(db, session)
-            await save_a_batch(db, session)
+            await random_term(db, session)
+            await save_batch(db, session)
             await enable_semantic_search(db)
         except slb.NetworkError as exc:
             print(f"Network problem talking to the live glossary: {exc}")

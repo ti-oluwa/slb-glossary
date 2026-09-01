@@ -707,7 +707,8 @@ async def get_terms_on(
         runs. See `slb_glossary.utils.split_exclude` for how an entry is
         told apart as a URL vs. a term name. `None` (the default)
         excludes nothing.
-    :yield: `QueryResult[SearchResult]`s filed under `topic`. `.score` is always `None`, since result ordering here isn't relevance-ranked the way `search`'s is.
+    :yield: `QueryResult[SearchResult]`s filed under `topic`. `.score` is always `None`,
+        since result ordering here isn't relevance-ranked the way `search`'s is.
     :param auto_initialize: If a live fetch happens and `session` isn't
         initialized yet, initialize it automatically (the default) or
         raise. See `slb_glossary.live.ensure_initialized`.
@@ -880,7 +881,9 @@ async def get_terms_urls(
         read's own filters already narrow to what's stored, so excluding
         from that same set besides is rarely useful, but it's still
         honored there too for consistency. `None` (the default) excludes nothing.
-    :yield: `QueryResult[str]`s wrapping matching term detail-page URLs. `.persisted` is always `False` here, since there's nothing to persist, and `.score` is always `None`.
+    :yield: `QueryResult[str]`s wrapping matching term detail-page URLs.
+        `.persisted` is always `False` here, since there's nothing to persist,
+        and `.score` is always `None`.
     :param auto_initialize: If a live fetch happens and `session` isn't
         initialized yet, initialize it automatically (the default) or
         raise. See `slb_glossary.live.ensure_initialized`.

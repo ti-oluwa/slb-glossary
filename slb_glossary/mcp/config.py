@@ -441,7 +441,7 @@ class Logging(Updatable):
     a `"module:ClassName"` import path), several, or a `{filter: sink(s)}`
     mapping to send only matching log records to each sink, e.g. everything
     from a live session/the query API to one file, everything else to
-    another. See `slb_glossary.logging.SinkHandler`.
+    another. See `slb_glossary.logging.LogSinkHandler`.
 
     `None` leaves whatever logging setup is already in place untouched.
     """

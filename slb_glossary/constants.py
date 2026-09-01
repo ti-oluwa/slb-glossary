@@ -67,8 +67,9 @@ class Constant(typing.Generic[T]):
     (via `slb_glossary.utils.env`, which handles the actual casting/
     validation) and resolves fresh, so changing the environment mid-process
     (tests, a long-running server picking up a config reload, etc.) takes
-    effect on the very next access, not just at import time. Pass
-    `cache=True` to resolve it once instead, on first access, and hold
+    effect on the very next access, not just at import time.
+
+    Pass `cache=True` to resolve it once instead, on first access, and hold
     that value for the rest of the process; use this for a constant that's
     read often enough that re-parsing its environment variable every time
     would matter, or one that must stay stable once read (e.g. anything
@@ -110,7 +111,7 @@ class Constant(typing.Generic[T]):
             subclasses matched by value).
         :param validator: Optional extra check run on every environment-sourced
             value (not on `default` itself, which is trusted as correct by
-            construction). A `False` return raises `slb_glossary.utils.EnvVarError`.
+            construction). A `False` return raises `slb_glossary.utils.EnvironmentVariableError`.
         :param cache: If `True`, resolve this constant once, on first access,
             and reuse that value for the rest of the process, instead of
             re-reading/re-validating its environment variable on every access.
@@ -141,8 +142,8 @@ class Constant(typing.Generic[T]):
             return self  # type: ignore[return-value]
 
         # An explicit `__set__` override always wins, `cache` or not, as
-        # that's the whole point of `__set__` ("bypassing the
-        # environment"). Only `reset()` clears this back to `_UNSET`,
+        # that's the whole point of `__set__` ( bypassing the
+        # environment). Only `reset()` clears this back to `_UNSET`,
         # re-enabling normal env/default resolution below.
         if self._cached is not _UNSET:
             return typing.cast(T, self._cached)
@@ -161,9 +162,10 @@ class Constant(typing.Generic[T]):
 
         Takes effect immediately and for every subsequent read regardless
         of this `Constant`'s `cache` setting . `cache` only governs how a
-        *non-overridden* value resolves from the environment, not whether
-        an explicit override is honored. Call `reset()` to remove the
-        override and go back to reading `default`/the environment.
+        non-overridden value resolves from the environment, not whether
+        an explicit override is honored.
+
+        Call `reset()` to remove the override and go back to reading `default`/the environment.
         """
         if self.validator is not None and not self.validator(value):
             raise ValueError(f"{self._name!r}: {value!r} is not a valid value for this constant.")
@@ -229,20 +231,12 @@ class Constants:
     """
     Default for `slb_glossary.query`'s `persist` parameter (`search`,
     `get_term`, `terms`, and friends) when a caller doesn't pass one
-    explicitly. `False` out of the box: writing to the local database is
-    a side effect a library caller should opt into, not one that happens
-    silently. Set `SLB_GLOSSARY_PERSIST_BY_DEFAULT=true`, or
+    explicitly. `False` out of the box and writing to the local database is
+    a side effect a library caller should opt into. 
+    
+    Set `SLB_GLOSSARY_PERSIST_BY_DEFAULT=true`, or
     `constants.persist_by_default = True` directly, to flip that for
     every call site in a process that doesn't pass `persist=` itself.
-
-    Deliberately a *separate* constant from `cli_cache_by_default` below,
-    not one shared with it: the CLI's `--cache` has defaulted to on since
-    before this constant existed (caching what you just paid to fetch
-    live is normally what you want from a one-off command), while the
-    library's `persist` has always defaulted to off (a silent write is a
-    bigger surprise from code you're calling than from a command you
-    just typed). Unifying them into one constant would have to pick one
-    of those two defaults and silently change the other.
     """
 
     cli_cache_by_default = Constant(
@@ -252,12 +246,11 @@ class Constants:
     )
     """
     Default for the CLI's `--cache/--no-cache` flag (`search`, `define`,
-    `terms`, `compare`, ...) when neither is passed explicitly. `True`
-    out of the box, matching this flag's long-standing default. Set
-    `SLB_GLOSSARY_CLI_CACHE_BY_DEFAULT=false` to default every such
-    command to `--no-cache` instead, without having to pass it on every
-    invocation. See `persist_by_default` above for why this isn't the
-    same constant as the library's own default.
+    `terms`, `compare`, ...) when neither is passed explicitly. 
+    
+    `True` by default. Set `SLB_GLOSSARY_CLI_CACHE_BY_DEFAULT=false` to 
+    default every such command to `--no-cache` instead, without having to 
+    pass it on every invocation.
     """
 
     relevance_threshold = Constant(
@@ -267,7 +260,7 @@ class Constants:
     )
     """
     Default `relevance_threshold` for `slb_glossary.query.search`'s
-    `Source.AUTO` behavior: below this score, the local database's best
+    `Source.AUTO` behavior. Below this score, the local database's best
     match isn't trusted alone and a live search is added on.
     """
 
@@ -307,7 +300,7 @@ class Constants:
         validator=lambda v: v >= 1,
     )
     """
-    Default number of rows `slb_glossary.local.loaders.load_file` buffers
+    Default number of rows `slb_glossary.local.load_file` buffers
     before writing an incremental upsert batch to the local database.
     """
 
@@ -350,11 +343,12 @@ class Constants:
     )
     """
     Upper bound on a result's score when it only matched by content
-    (definition/topic text), never the term name, kept below
+    (definition/topic text), and not the term name, kept below
     `relevance_threshold` so that kind of match never reads as confident
-    as an actual name match. Used by `slb_glossary.local.lexical_search`
-    and `slb_glossary.live.relevance`'s lexical scoring; not applied to
-    semantic or hybrid scoring, which have their own natural scale.
+    as an actual name match. 
+    
+    Used by `slb_glossary.local.lexical_search` and `slb_glossary.live.relevance`'s 
+    lexical scoring. Not applied to semantic or hybrid scoring, which have their own natural scale.
     """
 
     embedding_model = Constant(
@@ -363,14 +357,13 @@ class Constants:
     )
     """
     Hugging Face repo id of the `model2vec` model that embeds terms for
-    semantic search (`slb_glossary.local.embeembeddedd_terms`/`vector_search`/
-    `hybrid_search`). Downloaded once, then cached locally; no network
-    call happens per query.
+    semantic search (`slb_glossary.local.embed_terms`/`vector_search`/
+    `hybrid_search`). Downloaded once, then cached locally.
 
     Changing this needs a re-embed of every locally stored term
     (`embed_terms(db, only_missing=False)`), and, if the model's output
-    size differs, `embedding_dim` updated to match and every old vector
-    cleared first (`slb_glossary.local.delete_embeddings`).
+    size differs, `embedding_dim` needs to be updated to match and every 
+    old vector cleared first (`slb_glossary.local.delete_embeddings`).
     """
 
     embedding_dim = Constant(
@@ -388,9 +381,10 @@ class Constants:
     """
     The `k` constant in reciprocal rank fusion (`weight / (k + rank)`),
     used by `slb_glossary.local.hybrid_search` to combine lexical and
-    semantic result rankings. 60 is the standard default most hybrid
-    search implementations use. Lower weighs top ranks more heavily;
-    higher flattens the difference between them.
+    semantic result rankings. 
+    
+    60 is the standard default most hybrid search implementations use. 
+    Lower weighs top ranks more heavily; higher flattens the difference between them.
     """
 
     lexical_weight = Constant(
@@ -413,10 +407,11 @@ class Constants:
     )
     """
     Default for `open_session`/`session`'s `initialize` parameter when
-    it's left as `None` (the default there too). `False` means a session
-    comes back immediately without loading topics/size (lazy), which
-    search functions will raise `SessionNotInitializedError` for until
-    `session.initialize()` is called. 
+    it's left as `None`. 
+    
+    `False` means a session comes back immediately without loading 
+    topics/size (lazy), which search functions will raise `SessionNotInitializedError` 
+    for until `session.initialize()` is called. 
     
     Useful because that load is one of the more expensive parts of 
     opening a session, and is wasted work for a caller that's about 
@@ -431,7 +426,7 @@ class Constants:
         validator=lambda v: v >= 1,
     )
     """
-    Candidates pulled from each of the lexical and semantic rankers
+    Number of candidates pulled from each of the lexical and semantic rankers
     before `slb_glossary.local.hybrid_search` fuses and truncates them
     to the caller's actual `limit`. Higher lets a result ranked outside
     the top few by one ranker still surface if the other ranks it
@@ -444,12 +439,14 @@ class Constants:
         validator=lambda v: v >= 1,
     )
     """
-    Multiplier `slb_glossary.local.vector_search` applies to its nearest-
+    The multiplier `slb_glossary.local.vector_search` applies to its nearest-
     neighbor request before filtering by topic/language/exclude, since
     the vector database applies its own result cap before those filters
     can run, and asking for exactly as many neighbors as needed can come
-    up short once they're applied. Raise this if a `vector_search` result
-    that should be findable is going missing under a topic/language filter.
+    up short once they're applied. 
+    
+    Raise this if a `vector_search` result that should be findable is going 
+    missing under a topic/language filter.
     """
 
     embed_batch_size = Constant(
@@ -472,7 +469,7 @@ class Constants:
 
     `"lexical"` needs nothing beyond the base install. `"semantic"`/`"hybrid"`
     need the `semantic` extra installed and terms already embedded
-    (`slb_glossary.local.embed_terms`); set this to one of those once a
+    (`slb_glossary.local.embed_terms`). Set this to one of those once a
     database is embedded, it generally ranks better.
     """
 
@@ -482,18 +479,18 @@ class Constants:
     )
     """
     Whether `slb_glossary.query`'s `Source.AUTO` functions check
-    `slb_glossary.connectivity.has_internet_connection` before attempting a
-    live fetch, when both a local database and a live session are
-    available. When `True` (the default), if no internet is detected, the
-    call logs a warning and serves local results only, skipping the live
-    attempt entirely. 
+    internet connectivity before attempting a live fetch, when both a local 
+    database and a live session are available. When `True` (the default), 
+    if no internet is detected, the call logs a warning and serves local results 
+    only, skipping the live attempt entirely. 
     
     This is much cheaper than opening a browser and waiting
-    out a full navigation timeout only to hit a `NetworkError`. Set to
-    `False` to always attempt live regardless (e.g. if the check itself
+    out a full navigation timeout only to hit a `NetworkError`. 
+    
+    Set to `False` to always attempt live regardless (e.g. if the check itself
     is unreliable on your network, such as one that blocks the probe
     targets but still reaches the glossary site fine through a proxy).
-    Has no effect on `Source.LOCAL`/`Source.LIVE` calls, which never had
+    Has no effect on `Source.LOCAL`/`Source.LIVE` calls, which do not have
     a choice to begin with.
     """
 
@@ -503,10 +500,9 @@ class Constants:
         validator=lambda v: v > 0.0,
     )
     """
-    Seconds `slb_glossary.connectivity.has_internet_connection` waits for each
-    probe target before giving up on it. Also the check's worst-case
-    total wall time, since every target is probed concurrently, not one
-    after another.
+    Number of seconds `slb_glossary.connectivity.has_internet_connection` waits 
+    for each probe target before giving up on it. Also the check's worst-case
+    total wall time, since every target is probed concurrently, not one after another.
     """
 
     internet_check_cache_ttl = Constant(
@@ -515,7 +511,7 @@ class Constants:
         validator=lambda v: v >= 0.0,
     )
     """
-    Seconds `slb_glossary.connectivity.has_internet_connection` reuses its
+    Number of seconds `slb_glossary.connectivity.has_internet_connection` reuses its
     last result for, instead of probing again, when called with its
     default `use_cache=True`. `0` disables caching and every call probes fresh.
     """
@@ -525,7 +521,5 @@ constants = Constants()
 """
 Shared, package-wide `Constants` instance. 
 
-Use this, not `Constants` itself. `Constants()` always returns this same 
-instance anyway, but importing the instance directly makes that explicit 
-and saves a call at every use site.
+Use this, not `Constants` itself. `Constants()` always returns this same instance anyway.
 """

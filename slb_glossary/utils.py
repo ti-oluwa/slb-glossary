@@ -14,10 +14,10 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
+from slb_glossary.errors import EnvironmentVariableError
 from slb_glossary.types import RecordLike, SearchResult
 
 __all__ = [
-    "EnvVarError",
     "Lookup",
     "env",
     "log_timed_yields",
@@ -30,10 +30,6 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 T = typing.TypeVar("T")
-
-
-class EnvVarError(ValueError):
-    """Raised when an environment variable is set but can't be cast/validated to its expected type."""
 
 
 _ENV_CASTERS: dict[type, typing.Callable[[str], typing.Any]] = {
@@ -72,7 +68,7 @@ def env(
     :param validator: Optional extra check run on the cast value. A
         `False` return is treated the same as a cast failure.
     :return: The cast, validated value, or `default` if `name` isn't set.
-    :raises EnvVarError: If `name` is set but its value can't be cast to
+    :raises EnvironmentVariableError: If `name` is set but its value can't be cast to
         the expected type, or fails `validator`.
     """
     raw = os.environ.get(name)
@@ -89,12 +85,14 @@ def env(
             caster = _ENV_CASTERS.get(expected, expected)
             value = caster(raw)  # type: ignore[union-attr]
     except (ValueError, TypeError) as exc:
-        raise EnvVarError(
+        raise EnvironmentVariableError(
             f"Environment variable {name}={raw!r} is not a valid {expected.__name__}."
         ) from exc
 
     if validator is not None and not validator(value):  # type: ignore[arg-type]
-        raise EnvVarError(f"Environment variable {name}={raw!r} is not a valid value.")
+        raise EnvironmentVariableError(
+            f"Environment variable {name}={raw!r} is not a valid value."
+        )
     return typing.cast(T, value)
 
 

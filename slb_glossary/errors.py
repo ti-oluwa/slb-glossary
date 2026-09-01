@@ -61,3 +61,7 @@ class WriterError(OSError, SLBGlossaryError):
         super().__init__(message)
         self.destination = destination
         self.format = format
+
+
+class EnvironmentVariableError(ValueError):
+    """Raised when an environment variable is set but can't be cast/validated to its expected type."""

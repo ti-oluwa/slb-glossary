@@ -77,7 +77,7 @@ bootstrap_uv() {
     fi
 
     # uv's installer places the binary in ~/.local/bin (or ~/.cargo/bin on
-    # older installers); add both to PATH for the rest of *this* run so we
+    # older installers); add both to PATH for the rest of this run so we
     # don't have to ask the user to open a new shell just to finish installing.
     export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
@@ -115,7 +115,7 @@ main() {
 
     echo ""
     info "Installed! Run 'slb-glossary --help' (or the shorter 'slb --help') to get started."
-    info "First run needs a browser engine too: slb-glossary install"
+    info "First run needs a browser engine too. Run 'slb-glossary install' to install one (or see 'slb-glossary install --help' for more options)."
     echo ""
     echo "If 'slb-glossary'/'slb' aren't found, open a new shell (or add ~/.local/bin to PATH) and try again."
 }
