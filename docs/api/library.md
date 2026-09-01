@@ -173,6 +173,8 @@ A representative sample, every one follows the same `SLB_GLOSSARY_<NAME>` patter
 | `import_batch_size` / `export_batch_size` | `SLB_GLOSSARY_IMPORT_BATCH_SIZE` / `SLB_GLOSSARY_EXPORT_BATCH_SIZE` | `local.load_file` / `local export`. |
 | `rrf_k`, `lexical_weight`, `semantic_weight` | `SLB_GLOSSARY_RRF_K`, `SLB_GLOSSARY_LEXICAL_WEIGHT`, `SLB_GLOSSARY_SEMANTIC_WEIGHT` | `local.hybrid_search`'s Reciprocal Rank Fusion, see [Search Modes](../concepts/search-modes.md). |
 | `session_auto_initialize` | `SLB_GLOSSARY_SESSION_AUTO_INITIALIZE` | Whether `session()` initializes eagerly or lazily by default. |
+| `persist_by_default` | `SLB_GLOSSARY_PERSIST_BY_DEFAULT` | `slb_glossary.query`'s `persist` default when a caller doesn't pass one. `False` out of the box: a silent write to your local database is a bigger surprise from a library call than from a command you just typed. |
+| `cli_cache_by_default` | `SLB_GLOSSARY_CLI_CACHE_BY_DEFAULT` | The CLI's `--cache`/`--no-cache` default. `True` out of the box, matching this flag's long-standing default. Deliberately a separate constant from `persist_by_default`, not shared with it, since the two have always defaulted differently and unifying them would have to pick one default and silently change the other. |
 | `similar_terms_pool_size` | `SLB_GLOSSARY_SIMILAR_POOL_SIZE` | `get_term`/`compare`'s `with_similar=True`: how many candidates are pulled before alternatives are drawn from them. |
 | `max_similar_terms` | `SLB_GLOSSARY_MAX_SIMILAR_TERMS` | `get_term`/`compare`'s `with_similar=True`: how many alternatives are actually returned. |
 | `exact_match_score` | `SLB_GLOSSARY_EXACT_MATCH_SCORE` | The `.score` an exact `get_term` match is given (`1.0` by default), since exact matches aren't scored by the same ranking as a search. |
@@ -184,9 +186,11 @@ The full, current list is the source of truth: every constant is a `Constant(def
 | Name | Kind | Notes |
 |---|---|---|
 | `save(records, destination, *, format=None)` | coroutine | Writes a list or async iterable of `SearchResult`-likes to a file. Format inferred from extension unless overridden. |
-| `supported_formats()` | function → `list[str]` | `["csv", "json", "xlsx"]` on a base install; `WRITERS` dict keys, sorted. |
 | `writer(format)` | function → `Writer` | Look up a specific writer callable directly. |
 | `WRITERS` | `dict[str, Writer]` | `Writer = Callable[[Sequence[RecordLike], pathlib.Path], Awaitable[None]]`. |
+| `read_rows(path, *, format=None)` | function → `Iterator[dict[str, Any]]` | The read-side counterpart to `save`. See [`slb_glossary.readers`](#slb_glossaryreaders). |
+| `reader(format)` | decorator | Registers a new read format. |
+| `readers` / `writers` | modules | The submodules `read_rows`/`save` and friends actually live in; `slb.writers.supported_formats()`/`slb.readers.supported_formats()` aren't re-exported at the top level, so call them through the submodule. |
 | `RetryPolicy` | `dataclass` | `attempts`, `base_delay`, `backoff_type`, `factor`, `max_delay`, `jitter`. |
 | `BackoffType` | `StrEnum` | `CONSTANT`, `LINEAR`, `EXPONENTIAL`, `LOGARITHMIC`. |
 | `SLBGlossaryError` | Exception | Base class for every exception this package raises. |

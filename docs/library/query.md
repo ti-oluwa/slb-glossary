@@ -35,6 +35,8 @@ async for lookup in slb.search("water saturation", db=db, session=session, persi
 
 `persist=True` writes any result that came from a live fetch back into `db`, so the next call for the same term doesn't need the network at all. This is exactly the mechanism [Local Search and Cache](local-search.md#1-cache-live-results-as-you-go)'s `upsert_results_incrementally` implements, wired up automatically. A local-only result (`source=Source.LOCAL`, or an `AUTO` call that never fell through to live) is never re-persisted, since it's already there.
 
+`persist` defaults to `False` when not passed explicitly, from `constants.persist_by_default`: a write to your local database is a side effect worth opting into deliberately, not one a library call should do silently. Set `SLB_GLOSSARY_PERSIST_BY_DEFAULT=true` (or `constants.persist_by_default = True` directly) to flip that default for every call site in a process that doesn't pass `persist=` itself, rather than adding it to every call individually.
+
 ---
 
 ## `QueryResult`: knowing where an answer came from

@@ -111,6 +111,7 @@ Beyond the config file, a large number of individually tunable internals can be 
 ```bash
 export SLB_GLOSSARY_DATA_DIR=/mnt/shared/slb-glossary   # where the local database lives
 export SLB_GLOSSARY_CONFIG_DIR=/etc/slb-glossary          # where the config file lives
+export SLB_GLOSSARY_CLI_CACHE_BY_DEFAULT=false             # default every command to --no-cache
 ```
 
 Every one of these follows the same `SLB_GLOSSARY_<NAME>` pattern, and each is documented next to the constant it overrides in [`slb_glossary.constants`](../api/library.md#slb_glossaryconstants). They're mainly useful for deployment environments (containers, CI) where setting an environment variable is easier than shipping a config file.

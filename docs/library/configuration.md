@@ -11,7 +11,7 @@ results = [lookup.value async for lookup in slb.search("black oil", db=db, sessi
 await slb.save(results, "black_oil.json")
 ```
 
-`save` picks a writer from `destination`'s file extension (`.json`, `.csv`, `.xlsx`), the same way the CLI's `--save` does. Pass `format` to override that independently of the extension:
+`save` picks a writer from `destination`'s file extension, the same way the CLI's `--save` does. Pass `format` to override that independently of the extension:
 
 ```python
 await slb.save(results, "black_oil.txt", format="csv")
@@ -23,11 +23,53 @@ await slb.save(results, "black_oil.txt", format="csv")
 await slb.save(slb.live.search(session, "flooding", limit=None), "flooding.json")
 ```
 
-`.xlsx` needs the `xlsx` extra installed (`uv add "slb-glossary[xlsx]"`), since it depends on `openpyxl`; `.json` and `.csv` work with no extra at all.
+```python
+print(slb.writers.supported_formats())  # ['csv', 'json', 'jsonl', 'ndjson', 'txt', 'xlsx'] on a base install
+```
+
+`.xlsx` needs the `xlsx` extra installed (`uv add "slb-glossary[xlsx]"`), since it depends on `openpyxl`; every other format works with no extra at all. `.jsonl`/`.ndjson` write one JSON object per line (the same format either way, just two names for it), and `.txt` writes a numbered, human-readable list rather than a machine-parseable format, useful for a quick `cat` rather than feeding into another tool.
+
+---
+
+## Reading your own data
+
+The read-side counterpart, `slb_glossary.readers`, is what `local.load_file` (covered in [Local Search and Cache](local-search.md#3-import-your-own-data)) uses internally, and it's just as usable directly for tabular data that has nothing to do with the glossary at all:
 
 ```python
-print(slb.supported_formats())  # ['csv', 'json', 'xlsx'] on a base install
+for row in slb.readers.read_rows("my_data.csv"):
+    print(row["some_column"])
 ```
+
+```python
+print(slb.readers.supported_formats())  # ['csv', 'json', 'xlsm', 'xlsx'] on a base install, plus 'yaml' with the `config` extra
+```
+
+`read_rows` picks a reader the same way `save` picks a writer: by `path`'s extension, or an explicit `format` override. It's a plain (non-async) generator, since reading rows out of a file doesn't need `await` the way a browser fetch does.
+
+### Teaching it a new format
+
+```python
+import pathlib
+import typing
+
+from slb_glossary.readers import reader
+
+
+@reader("tsv")
+def read_tsv_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
+    with open(path, newline="", encoding="utf-8") as f:
+        header = f.readline().rstrip("\n").split("\t")
+        for line in f:
+            yield dict(zip(header, line.rstrip("\n").split("\t")))
+```
+
+Once registered, `.tsv` files work everywhere `read_rows` is used underneath, including `local.load_file`, with no changes needed on that side:
+
+```python
+await slb.local.load_file(db, "terms.tsv")
+```
+
+See [`slb_glossary.readers`](../api/library.md#slb_glossaryreaders) for the full API, including the built-in `read_csv_rows`/`read_json_rows`/`read_xlsx_rows` if you want to call one directly rather than through `read_rows`'s format dispatch.
 
 ---
 
