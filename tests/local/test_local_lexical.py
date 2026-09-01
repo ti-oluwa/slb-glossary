@@ -51,15 +51,17 @@ class TestLexicalSearch:
         assert score == constants.prefix_match_score
 
     async def test_content_only_match_scores_below_content_match_score_cap(self, db):
-        """A definition-only match's score is capped at `content_match_score_cap`.
+        """
+        A definition-only match's score is capped at `content_match_score_cap`.
 
         With only a *single* content-tier match, `worst == best` for that
         lone bm25 value, so `spread = (worst - best) or 1.0` collapses to
         the `or 1.0` branch and the score formula's numerator
-        (`worst - row_bm25`) is exactly `0.0` - i.e. a lone content-only
+        (`worst - row_bm25`) is exactly `0.0`, i.e. a lone content-only
         match always scores `0.0` (verified directly). Two content
         matches with different bm25 relevance are needed to see a
-        nonzero, capped score for the *better* one."""
+        nonzero, capped score for the *better* one.
+        """
         await upsert_results(
             db,
             [
@@ -80,9 +82,11 @@ class TestLexicalSearch:
         assert 0.0 < best_score <= constants.content_match_score_cap
 
     async def test_exact_match_ranks_ahead_of_content_only_match(self, db):
-        """A name match is never outranked by a content-only match, however often the
+        """
+        A name match is never outranked by a content-only match, however often the
         content-only result repeats the query word (the motivating example from the
-        module's own docstring: "mud" should surface "Mud" ahead of "Drilling fluid")."""
+        module's own docstring: "mud" should surface "Mud" ahead of "Drilling fluid").
+        """
         await upsert_results(
             db,
             [

@@ -34,7 +34,7 @@ class TestProbe:
     async def test_returns_true_on_successful_connect(self, monkeypatch: pytest.MonkeyPatch):
         """`probe` returns `True` when `asyncio.open_connection` succeeds."""
 
-        class FakeWriter:
+        class MockWriter:
             def close(self):
                 pass
 
@@ -42,7 +42,7 @@ class TestProbe:
                 pass
 
         async def mock_open_connection(host, port):
-            return object(), FakeWriter()
+            return object(), MockWriter()
 
         monkeypatch.setattr(asyncio, "open_connection", mock_open_connection)
         assert await connectivity.probe("1.1.1.1", 53, timeout=1.0) is True

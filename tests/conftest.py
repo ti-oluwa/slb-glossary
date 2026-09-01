@@ -28,15 +28,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Skip `live`/`slow`-marked tests unless their matching `--run-*` flag was passed."""
+    """
+    Skip `live`/`slow`-marked tests unless their matching `--run-*` flag was passed.
+    """
     skip_live = pytest.mark.skip(reason="use --run-live to run tests that hit the real site")
     skip_slow = pytest.mark.skip(reason="use --run-slow to run slow tests")
     run_live = config.getoption("--run-live")
     run_slow = config.getoption("--run-slow")
     for item in items:
-        if not run_live and "live" in item.keywords:
+        if not run_live and item.get_closest_marker("live") is not None:
             item.add_marker(skip_live)
-        if not run_slow and "slow" in item.keywords:
+        if not run_slow and item.get_closest_marker("slow") is not None:
             item.add_marker(skip_slow)
 
 
@@ -67,12 +69,11 @@ def anyio_backend_asyncio_only(request: pytest.FixtureRequest) -> tuple[str, dic
     `asyncio` and `asyncio+uvloop` only.
 
     Use for anything touching aiosqlite/patchright/FastMCP, none of which
-    are trio-safe (verified empirically: opening a real
-    `local.connection.database()` under a trio `anyio_backend` fails
+    are trio-safe (verified empirically. Opening a real
+    `local.connection.database()` under a trio `anyio_backend` will fail
     before any test logic runs, because aiosqlite's connection thread
     hands work back via a raw `asyncio.Future` that trio's run loop
-    can't recognize). That failure is a fact about the dependency, not
-    a bug worth chasing down per test.
+    can't recognize).
     """
     return request.param
 

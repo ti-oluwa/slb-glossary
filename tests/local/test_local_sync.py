@@ -44,7 +44,7 @@ def anyio_backend(anyio_backend_asyncio_only):
 
 
 @dataclasses.dataclass
-class FakeSession:
+class MockSession:
     """
     Enough of `live.browser.Session`'s shape for `sync.py`, without the real
     Playwright objects `Session` itself requires to construct.
@@ -62,7 +62,7 @@ class FakeSession:
         self._initialized = True
 
 
-class FakeSite:
+class MockSite:
     """
     A tiny in-memory stand-in for the live glossary, used to monkeypatch
     `sync.py`'s live-layer imports.
@@ -82,13 +82,15 @@ class FakeSite:
         self.visited: list[str] = []
 
     def add_term(self, url: str, topics: list[SearchResult], under_topics: list[str]) -> None:
-        """Register a term's page (`topics`, one `SearchResult` per topic-tagged
-        definition on it) and which topic listings surface its URL."""
+        """
+        Register a term's page (`topics`, one `SearchResult` per topic-tagged
+        definition on it) and which topic listings surface its URL.
+        """
         self.pages_by_url[url] = topics
         for topic_name in under_topics:
             self.urls_by_topic.setdefault(topic_name, []).append(url)
 
-    async def fake_get_terms_on(self, session, topic, *, limit=None, concurrency=1, exclude=None):
+    async def mock_get_terms_on(self, session, topic, *, limit=None, concurrency=1, exclude=None):
         exclude = exclude or frozenset()
         for url in self.urls_by_topic.get(topic, []):
             if url in exclude:
@@ -97,7 +99,7 @@ class FakeSite:
             for result in self.pages_by_url[url]:
                 yield result
 
-    async def fake_get_terms_urls(
+    async def mock_get_terms_urls(
         self, session, *, topic=None, start_letter=None, limit=None, exclude=None
     ):
         exclude = exclude or frozenset()
@@ -107,7 +109,7 @@ class FakeSite:
                 continue
             yield url
 
-    async def fake_get_results_from_urls(
+    async def mock_get_results_from_urls(
         self, session, urls, *, topic=None, concurrency=1, first_only=True, exclude=None
     ):
         exclude = exclude or frozenset()
@@ -121,7 +123,7 @@ class FakeSite:
                 for result in results[1:]:
                     yield result
 
-    async def fake_live_search(
+    async def mock_live_search(
         self,
         session,
         query,
@@ -142,13 +144,13 @@ class FakeSite:
 
 
 @pytest.fixture
-def fake_site(monkeypatch: pytest.MonkeyPatch) -> FakeSite:
-    """Install a `FakeSite` in place of `sync.py`'s live-layer imports."""
-    site = FakeSite()
-    monkeypatch.setattr(sync_module, "get_terms_on", site.fake_get_terms_on)
-    monkeypatch.setattr(sync_module, "get_terms_urls", site.fake_get_terms_urls)
-    monkeypatch.setattr(sync_module, "get_results_from_urls", site.fake_get_results_from_urls)
-    monkeypatch.setattr(sync_module, "live_search", site.fake_live_search)
+def mock_site(monkeypatch: pytest.MonkeyPatch) -> MockSite:
+    """Install a `MockSite` in place of `sync.py`'s live-layer imports."""
+    site = MockSite()
+    monkeypatch.setattr(sync_module, "get_terms_on", site.mock_get_terms_on)
+    monkeypatch.setattr(sync_module, "get_terms_urls", site.mock_get_terms_urls)
+    monkeypatch.setattr(sync_module, "get_results_from_urls", site.mock_get_results_from_urls)
+    monkeypatch.setattr(sync_module, "live_search", site.mock_live_search)
     return site
 
 
@@ -250,115 +252,115 @@ class TestDrainAndUpsert:
 class TestSyncTopics:
     async def test_initializes_session_if_not_already(self, db):
         """Calls `session.initialize()` when it isn't initialized yet."""
-        session = FakeSession()
+        session = MockSession()
         await sync_topics(db, session)
         assert session.initialized is True
 
     async def test_does_not_reinitialize_an_already_initialized_session(self, db):
         """Doesn't call `initialize()` again if the session already is."""
-        session = FakeSession(_initialized=True, topics={"Geology": 5})
+        session = MockSession(_initialized=True, topics={"Geology": 5})
         await sync_topics(db, session)
         assert session.topics == {"Geology": 5}
 
     async def test_writes_zero_terms(self, db):
         """`terms_written` is always `0` - this only records the topic list."""
-        session = FakeSession(_initialized=True)
+        session = MockSession(_initialized=True)
         summary = await sync_topics(db, session)
         assert summary.terms_written == 0
 
 
 @pytest.mark.anyio
 class TestSyncQuery:
-    async def test_fetches_and_stores_matching_results(self, db, fake_site: FakeSite):
+    async def test_fetches_and_stores_matching_results(self, db, mock_site: MockSite):
         """Fetches `query`'s live results and stores them locally."""
-        fake_site.add_term(
+        mock_site.add_term(
             "https://x.com/a",
             [make_search_result(url="https://x.com/a", term="Porosity", topic="Geology")],
             under_topics=[],
         )
-        fake_site.urls_by_query["porosity"] = ["https://x.com/a"]
-        session = FakeSession()
+        mock_site.urls_by_query["porosity"] = ["https://x.com/a"]
+        session = MockSession()
 
         summary = await sync_query(db, session, "porosity")
         assert summary.terms_written == 1
         assert await count_terms(db) == 1
 
-    async def test_skip_existing_excludes_already_stored_urls(self, db, fake_site: FakeSite):
+    async def test_skip_existing_excludes_already_stored_urls(self, db, mock_site: MockSite):
         """`skip_existing=True` (the default) excludes URLs already stored under
         this query/topic/start_letter filter."""
         result = make_search_result(url="https://x.com/a", term="Porosity", topic="Geology")
-        fake_site.add_term("https://x.com/a", [result], under_topics=[])
-        fake_site.urls_by_query["porosity"] = ["https://x.com/a"]
+        mock_site.add_term("https://x.com/a", [result], under_topics=[])
+        mock_site.urls_by_query["porosity"] = ["https://x.com/a"]
         await upsert_results(db, [result])
 
-        session = FakeSession()
+        session = MockSession()
         summary = await sync_query(db, session, "porosity")
         assert summary.terms_written == 0
-        assert "https://x.com/a" not in fake_site.visited
+        assert "https://x.com/a" not in mock_site.visited
 
-    async def test_skip_existing_false_forces_a_full_refetch(self, db, fake_site: FakeSite):
+    async def test_skip_existing_false_forces_a_full_refetch(self, db, mock_site: MockSite):
         """`skip_existing=False` re-fetches even an already-stored URL."""
         result = make_search_result(url="https://x.com/a", term="Porosity", topic="Geology")
-        fake_site.add_term("https://x.com/a", [result], under_topics=[])
-        fake_site.urls_by_query["porosity"] = ["https://x.com/a"]
+        mock_site.add_term("https://x.com/a", [result], under_topics=[])
+        mock_site.urls_by_query["porosity"] = ["https://x.com/a"]
         await upsert_results(db, [result])
 
-        session = FakeSession()
+        session = MockSession()
         summary = await sync_query(db, session, "porosity", skip_existing=False)
         assert summary.terms_written == 1
-        assert "https://x.com/a" in fake_site.visited
+        assert "https://x.com/a" in mock_site.visited
 
 
 @pytest.mark.anyio
 class TestSyncTopic:
-    async def test_fetches_and_stores_every_term_under_topic(self, db, fake_site: FakeSite):
+    async def test_fetches_and_stores_every_term_under_topic(self, db, mock_site: MockSite):
         """Fetches every term filed under `topic` and stores it locally."""
-        fake_site.add_term(
+        mock_site.add_term(
             "https://x.com/a",
             [make_search_result(url="https://x.com/a", term="Porosity", topic="Geology")],
             under_topics=["Geology"],
         )
-        session = FakeSession()
+        session = MockSession()
 
         summary = await sync_topic(db, session, "Geology")
         assert summary.terms_written == 1
 
     async def test_skip_existing_excludes_urls_already_stored_under_that_topic(
-        self, db, fake_site: FakeSite
+        self, db, mock_site: MockSite
     ):
         """`skip_existing=True` excludes URLs already stored under `topic`."""
         result = make_search_result(url="https://x.com/a", term="Porosity", topic="Geology")
-        fake_site.add_term("https://x.com/a", [result], under_topics=["Geology"])
+        mock_site.add_term("https://x.com/a", [result], under_topics=["Geology"])
         await upsert_results(db, [result])
 
-        session = FakeSession()
+        session = MockSession()
         summary = await sync_topic(db, session, "Geology")
         assert summary.terms_written == 0
-        assert "https://x.com/a" not in fake_site.visited
+        assert "https://x.com/a" not in mock_site.visited
 
 
 @pytest.mark.anyio
 class TestSyncLetter:
-    async def test_fetches_and_stores_terms_starting_with_letter(self, db, fake_site: FakeSite):
+    async def test_fetches_and_stores_terms_starting_with_letter(self, db, mock_site: MockSite):
         """Fetches every term starting with `start_letter` and stores it locally."""
-        fake_site.add_term(
+        mock_site.add_term(
             "https://x.com/a",
             [make_search_result(url="https://x.com/a", term="Porosity", topic="Geology")],
             under_topics=[],
         )
-        fake_site.urls_by_topic[None] = ["https://x.com/a"]
-        session = FakeSession()
+        mock_site.urls_by_topic[None] = ["https://x.com/a"]
+        session = MockSession()
 
         summary = await sync_letter(db, session, "P")
         assert summary.terms_written == 1
 
     async def test_uses_first_only_so_a_multi_topic_page_yields_one_row(
-        self, db, fake_site: FakeSite
+        self, db, mock_site: MockSite
     ):
         """Unlike `sync_topic`/`sync_all`, `sync_letter` passes `first_only=True`
         to `get_results_from_urls`, so a term filed under several topics
         still only writes the one topic-tagged row its page fetch returns first."""
-        fake_site.add_term(
+        mock_site.add_term(
             "https://x.com/a",
             [
                 make_search_result(url="https://x.com/a", term="Mud", topic="Drilling"),
@@ -366,8 +368,8 @@ class TestSyncLetter:
             ],
             under_topics=[],
         )
-        fake_site.urls_by_topic[None] = ["https://x.com/a"]
-        session = FakeSession()
+        mock_site.urls_by_topic[None] = ["https://x.com/a"]
+        session = MockSession()
 
         summary = await sync_letter(db, session, "M")
         assert summary.terms_written == 1
@@ -375,38 +377,38 @@ class TestSyncLetter:
 
 @pytest.mark.anyio
 class TestSyncAll:
-    async def test_initializes_session_if_not_already(self, db, fake_site: FakeSite):
+    async def test_initializes_session_if_not_already(self, db, mock_site: MockSite):
         """Calls `session.initialize()` when it isn't initialized yet."""
-        session = FakeSession()
+        session = MockSession()
         await sync_all(db, session)
         assert session.initialized is True
 
-    async def test_warns_and_completes_with_no_topics(self, db, fake_site: FakeSite):
+    async def test_warns_and_completes_with_no_topics(self, db, mock_site: MockSite):
         """An empty `session.topics` still completes (with `0` written), not an error."""
-        session = FakeSession(_initialized=True, topics={})
+        session = MockSession(_initialized=True, topics={})
         summary = await sync_all(db, session)
         assert summary.terms_written == 0
 
-    async def test_fetches_every_topic_and_sums_written_counts(self, db, fake_site: FakeSite):
+    async def test_fetches_every_topic_and_sums_written_counts(self, db, mock_site: MockSite):
         """Walks every topic in `session.topics` and sums each topic's written count."""
-        fake_site.add_term(
+        mock_site.add_term(
             "https://x.com/a",
             [make_search_result(url="https://x.com/a", term="Porosity", topic="Geology")],
             under_topics=["Geology"],
         )
-        fake_site.add_term(
+        mock_site.add_term(
             "https://x.com/b",
             [make_search_result(url="https://x.com/b", term="Casing", topic="Drilling")],
             under_topics=["Drilling"],
         )
-        session = FakeSession(_initialized=True, topics={"Geology": 1, "Drilling": 1})
+        session = MockSession(_initialized=True, topics={"Geology": 1, "Drilling": 1})
 
         summary = await sync_all(db, session)
         assert summary.terms_written == 2
         assert await count_terms(db) == 2
 
     async def test_a_term_filed_under_two_topics_is_only_ever_fetched_once(
-        self, db, fake_site: FakeSite
+        self, db, mock_site: MockSite
     ):
         """
         The regression test for the cross-topic dedup guarantee: a term
@@ -422,7 +424,7 @@ class TestSyncAll:
         it before any page fetch would happen.
         """
         shared_url = "https://x.com/mud"
-        fake_site.add_term(
+        mock_site.add_term(
             shared_url,
             [
                 make_search_result(url=shared_url, term="Mud", topic="Drilling"),
@@ -432,7 +434,7 @@ class TestSyncAll:
         )
         # Alphabetical order: "Drilling" is processed before "Shale Gas",
         # matching `sync_all`'s own `sorted(session.topics)`.
-        session = FakeSession(_initialized=True, topics={"Drilling": 1, "Shale Gas": 1})
+        session = MockSession(_initialized=True, topics={"Drilling": 1, "Shale Gas": 1})
 
         summary = await sync_all(db, session)
 
@@ -440,15 +442,15 @@ class TestSyncAll:
         assert summary.terms_written == 2
         assert await count_terms(db) == 2
         # ...but the URL was only ever actually "fetched" once.
-        assert fake_site.visited == [shared_url]
+        assert mock_site.visited == [shared_url]
 
     async def test_skip_existing_false_refetches_every_topic_in_full(
-        self, db, fake_site: FakeSite
+        self, db, mock_site: MockSite
     ):
         """`skip_existing=False` disables the dedup guarantee entirely: every
         topic re-fetches its terms regardless of what's already stored."""
         shared_url = "https://x.com/mud"
-        fake_site.add_term(
+        mock_site.add_term(
             shared_url,
             [
                 make_search_result(url=shared_url, term="Mud", topic="Drilling"),
@@ -456,18 +458,18 @@ class TestSyncAll:
             ],
             under_topics=["Drilling", "Shale Gas"],
         )
-        session = FakeSession(_initialized=True, topics={"Drilling": 1, "Shale Gas": 1})
+        session = MockSession(_initialized=True, topics={"Drilling": 1, "Shale Gas": 1})
 
         await sync_all(db, session, skip_existing=False)
-        assert fake_site.visited == [shared_url, shared_url]
+        assert mock_site.visited == [shared_url, shared_url]
 
     async def test_error_in_one_topic_still_keeps_earlier_completed_topics(
-        self, db, fake_site: FakeSite, monkeypatch: pytest.MonkeyPatch
+        self, db, mock_site: MockSite, monkeypatch: pytest.MonkeyPatch
     ):
         """If a later topic's fetch fails, terms already written for earlier,
         completed topics are kept - only the failing topic's own in-progress
         batch is subject to `persist_on_error`."""
-        fake_site.add_term(
+        mock_site.add_term(
             "https://x.com/a",
             [make_search_result(url="https://x.com/a", term="Porosity", topic="Geology")],
             under_topics=["Geology"],
@@ -476,11 +478,11 @@ class TestSyncAll:
         async def broken_get_terms_on(session, topic, **kwargs):
             if topic == "Drilling":
                 raise ValueError("site unreachable")
-            async for result in fake_site.fake_get_terms_on(session, topic, **kwargs):
+            async for result in mock_site.mock_get_terms_on(session, topic, **kwargs):
                 yield result
 
         monkeypatch.setattr(sync_module, "get_terms_on", broken_get_terms_on)
-        session = FakeSession(_initialized=True, topics={"Drilling": 1, "Geology": 1})
+        session = MockSession(_initialized=True, topics={"Drilling": 1, "Geology": 1})
 
         with pytest.raises(ValueError, match="site unreachable"):
             await sync_all(db, session)
@@ -491,7 +493,7 @@ class TestSyncAll:
         assert await count_terms(db) == 0
 
     async def test_reports_interrupted_true_when_a_topic_fails(
-        self, db, fake_site: FakeSite, monkeypatch: pytest.MonkeyPatch
+        self, db, mock_site: MockSite, monkeypatch: pytest.MonkeyPatch
     ):
         """The metadata recorded via the `finally` block reflects `interrupted=True`
         when a topic's fetch raised."""
@@ -501,7 +503,7 @@ class TestSyncAll:
             yield  # pragma: no cover - make this an async generator
 
         monkeypatch.setattr(sync_module, "get_terms_on", broken_get_terms_on)
-        session = FakeSession(_initialized=True, topics={"Geology": 1})
+        session = MockSession(_initialized=True, topics={"Geology": 1})
 
         with pytest.raises(ValueError, match="boom"):
             await sync_all(db, session)

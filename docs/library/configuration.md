@@ -24,7 +24,9 @@ await slb.save(slb.live.search(session, "flooding", limit=None), "flooding.json"
 ```
 
 ```python
-print(slb.writers.supported_formats())  # ['csv', 'json', 'jsonl', 'ndjson', 'txt', 'xlsx'] on a base install
+print(
+    slb.writers.supported_formats()
+)  # ['csv', 'json', 'jsonl', 'ndjson', 'txt', 'xlsx'] on a base install
 ```
 
 `.xlsx` needs the `xlsx` extra installed (`uv add "slb-glossary[xlsx]"`), since it depends on `openpyxl`; every other format works with no extra at all. `.jsonl`/`.ndjson` write one JSON object per line (the same format either way, just two names for it), and `.txt` writes a numbered, human-readable list rather than a machine-parseable format, useful for a quick `cat` rather than feeding into another tool.
@@ -41,7 +43,9 @@ for row in slb.readers.read_rows("my_data.csv"):
 ```
 
 ```python
-print(slb.readers.supported_formats())  # ['csv', 'json', 'xlsm', 'xlsx'] on a base install, plus 'yaml' with the `config` extra
+print(
+    slb.readers.supported_formats()
+)  # ['csv', 'json', 'xlsm', 'xlsx'] on a base install, plus 'yaml' with the `config` extra
 ```
 
 `read_rows` picks a reader the same way `save` picks a writer: by `path`'s extension, or an explicit `format` override. It's a plain (non-async) generator, since reading rows out of a file doesn't need `await` the way a browser fetch does.
