@@ -12,7 +12,7 @@ uv add "pydantic-ai-slim[mcp]"
 
 (Or the full `pydantic-ai` package, which already includes this.) You'll also need `slb-glossary`'s `mcp` extra installed and on the same machine, since Pydantic AI will launch `slb mcp serve` itself as a subprocess: `uv add "slb-glossary[mcp]"`, or a CLI install with the `mcp` extra.
 
-If you're working from a clone of the `slb-glossary` repository itself rather than installing it as a dependency, `uv sync --group examples` installs this same dependency for you, and [`examples/pydantic_ai_agent.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/pydantic_ai_agent.py) is a complete, runnable version of everything on this page, both the subprocess and in-process wiring below, plus a real system prompt and a multi-question run.
+If you're working from a clone of the `slb-glossary` repository itself rather than installing it as a dependency, `uv sync --group examples --inexact` installs this same dependency for you, and [`examples/agent.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/agent.py) is a complete, runnable version of everything on this page (`python -m examples.agent`), both the subprocess and in-process wiring below, plus a real system prompt and a multi-question run.
 
 ## Connecting the agent to `slb mcp serve`
 

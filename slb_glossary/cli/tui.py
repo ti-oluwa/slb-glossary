@@ -84,7 +84,7 @@ def _prefill_schema(command_schema: typing.Any, ctx: click.Context) -> None:
                 # Shouldn't normally happen as click resolves required
                 # params (or fails) before `launch_tui` is ever reached.
                 # But if it does, there's nothing meaningful to prefill
-                # with; leave it for the user to fill in in the form
+                # with; leave it for the user to fill in on the form
                 # rather than forcing a default that isn't there.
                 logger.debug(
                     "Required param %r has no resolved value to prefill the TUI with; "

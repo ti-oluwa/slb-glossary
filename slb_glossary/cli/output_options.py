@@ -273,7 +273,7 @@ async def _collect_and_output(
 
     if save_paths:
         # If we printed an output then `collected` and `count` must have been updated.
-        # But if `print_limit` was defined then there a high likelihood that that not all results
+        # But if `print_limit` was defined then there's a high likelihood that not all results
         # were collected and `count == print_limit` not `len(results)`. In that case,
         # we must collect the targets again fully.
         if was_collected and not print_limit:

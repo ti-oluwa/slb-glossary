@@ -107,7 +107,7 @@ Every function takes `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`, de
 | `Streaming` | `dataclass` | `default`, `allow_override`: whether tools that report MCP progress notifications (`glossary_search`, `glossary_get_terms_on`) stream by default, and whether a caller can override that. |
 | `ServerInfo` | `dataclass` | `name`, `version` (defaults to `slb_glossary.__version__`), `instructions`, `logo` (a path or URL, inlined as a data URI at build time). |
 
-See [Running an MCP Server](../agent/mcp-server.md) for how these compose in practice, the CLI flags (`slb mcp serve`) that set a subset of them without writing Python, and [`examples/mcp_app.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/mcp_app.py) for a complete runnable server.
+See [Running an MCP Server](../agent/mcp-server.md) for how these compose in practice, the CLI flags (`slb mcp serve`) that set a subset of them without writing Python, and [`examples/app.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/app.py) for a complete runnable server.
 
 ## `slb_glossary.readers`
 

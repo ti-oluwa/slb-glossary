@@ -200,7 +200,7 @@ def about() -> str:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")  # run the FastMCP instance directly, not app.run()
+    mcp.run(transport="stdio")  # run the FastMCP instance directly, or app.run(), works the same
 ```
 
 This is the escape hatch for anything `MCPConfig` doesn't model directly: extra tools/resources/prompts unrelated to the glossary, FastMCP middleware, or mounting this server inside a larger ASGI app's own routing. `app.server()` is idempotent: calling it again returns the same instance rather than rebuilding it, so mixing this with `app.run()`/`app.run_async()` afterward is safe.
@@ -209,4 +209,4 @@ This is the escape hatch for anything `MCPConfig` doesn't model directly: extra 
 
 ## Where to go from here
 
-For a worked example connecting this server to an actual agent framework, see [Building an Agent with Pydantic AI](pydantic-ai.md). For the full config surface, see [`slb_glossary.mcp`](../api/library.md#slb_glossarymcp). For a complete, runnable server built with several of these fields together, see [`examples/mcp_app.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/mcp_app.py) in the repository.
+For a worked example connecting this server to an actual agent framework, see [Building an Agent with Pydantic AI](pydantic-ai.md). For the full config surface, see [`slb_glossary.mcp`](../api/library.md#slb_glossarymcp). For a complete, runnable server built with several of these fields together, see [`examples/app.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/app.py) in the repository (`python -m examples.app`, or `slb mcp serve examples.app:app`).

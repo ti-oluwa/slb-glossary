@@ -47,6 +47,7 @@ This README is a tutorial, not a full API reference. It introduces what each par
   - [Logging](#logging)
   - [Performance notes](#performance-notes)
   - [Exceptions](#exceptions)
+  - [Examples](#examples)
   - [Development](#development)
   - [Contributing](#contributing)
   - [Attribution and disclaimer](#attribution-and-disclaimer)
@@ -733,16 +734,34 @@ slb search --tui          # fill in `search`'s options interactively
 
 ## Logging
 
-`slb_glossary` logs through the standard `logging` module under the `slb_glossary` logger and attaches a `NullHandler` by default, so it stays silent until you configure logging yourself:
+`slb_glossary` logs through the standard `logging` module, all under the `slb_glossary` logger namespace (`slb_glossary.live`, `slb_glossary.local`, `slb_glossary.query`, and so on for each submodule). Nothing is configured for you automatically. Concretely: with zero setup, `WARNING` and above print to stderr via Python's own bare "handler of last resort", while `INFO`/`DEBUG` records produce no output at all until something configures logging, whether that's your own `logging.basicConfig`, the CLI's flags, or `configure_logging` below. `INFO` covers session open/close, search start/end, and sync summaries; `DEBUG` covers individual page loads, retries, and parsed counts; `WARNING` covers unmatched topics and exhausted retries.
+
+For more control than `logging.basicConfig` gives you, `slb_glossary.logging` provides `configure_logging`, built around **sinks**: destinations for log output, without hand-rolling `logging.Handler` boilerplate.
 
 ```python
-import logging
+from slb_glossary.logging import FileSink, configure_logging
 
-logging.basicConfig(level=logging.INFO)
-logging.getLogger("slb_glossary").setLevel(logging.DEBUG)  # verbose, per-page detail
+configure_logging(sinks=FileSink("slb-glossary.log"), level="DEBUG")
 ```
 
-`INFO` covers session open/close, search start/end, and sync summaries. `DEBUG` covers individual page loads, retries, and parsed counts. `WARNING` covers unmatched topics and exhausted retries. The CLI's own `--log-level` flag sets this for you.
+A bare string is treated as a file path; `StderrSink()`/`StdoutSink()` are the other two built-in sinks, and a `"module:ClassName"` import path loads your own (any class with a `write(message)` method). Calling `configure_logging` again later tears down its previous handler first, so repeated calls don't pile up duplicate output.
+
+Sinks can also be routed selectively, so different parts of the library log to different places in one call:
+
+```python
+from slb_glossary.logging import FileSink, StderrSink, configure_logging
+
+configure_logging(
+    sinks={
+        "slb_glossary.query*": FileSink("query.log"),  # every query.search/compare/... call
+        "*": StderrSink(),                             # everything else
+    },
+)
+```
+
+Each key is an `fnmatch`-style pattern matched against the record's logger name, or a callable taking a `logging.LogRecord`. A record matching more than one pattern goes to every sink whose pattern matched.
+
+`slb_glossary.logging.set_log_level(level)` changes just the verbosity, without touching where output goes. The CLI's own `--log-level`/`--log-to`/`--log-sink` flags, and `session()`'s `log_sink` parameter (for one session's own browser-automation log lines specifically), are thin wrappers over this same module.
 
 ## Performance notes
 
@@ -769,6 +788,35 @@ Past that, lean on the local database. `slb_glossary.query`'s `Source.AUTO` (the
   - `MCPConfigError`: an `MCPConfig` (or a nested config within it) was invalid.
 
   Authentication and rate-limit failures aren't raised as `slb_glossary` exceptions. They're handled by FastMCP's own middleware, which rejects the request before it reaches a tool call at all.
+
+## Examples
+
+The [`examples/`](examples/) directory has complete, runnable scripts you can use to see the library in action rather than just reading snippets:
+
+| Script | Demonstrates |
+|---|---|
+| [`examples/query.py`](examples/query.py) | `slb_glossary.query`: local-first search with a live fallback, comparing terms, saving results to a file, and enabling semantic search on whatever ends up cached. |
+| [`examples/app.py`](examples/app.py) | A complete MCP server: read-and-write access, a bounded shared browser session, and file + stderr logging. |
+| [`examples/agent.py`](examples/agent.py) | A Pydantic AI agent that looks glossary terms up itself, wired to the MCP server two different ways (as a subprocess, and in-process with no subprocess at all). |
+
+Clone the repository, then install the extra dependencies these examples need (`pydantic-ai-slim[mcp]` for `agent.py`; the others only need what a base install already has):
+
+```bash
+git clone https://github.com/ti-oluwa/slb-glossary.git
+cd slb-glossary
+uv sync --group examples --inexact
+```
+
+Run any of them as a module from the repository root:
+
+```bash
+uv run python -m examples.query
+uv run python -m examples.app                    # serves over streamable HTTP
+slb mcp serve examples.app:app                    # equivalently, via the CLI
+uv run python -m examples.agent                   # needs ANTHROPIC_API_KEY set
+```
+
+`examples/query.py` and `examples/agent.py` print their output and exit; `examples/app.py` runs until you stop it (Ctrl-C), since it's a server.
 
 ## Development
 
