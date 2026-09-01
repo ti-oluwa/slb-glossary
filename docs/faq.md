@@ -6,7 +6,7 @@ No. `slb-glossary` is not affiliated with or endorsed by SLB. All rights to the 
 
 **This package is not for commercial use. It's intended for instructional and research purposes only.**
 
-The optional local cache ([Local Search and Cache](library/local-search.md)) still holds SLB's data once you enable it — `slb-glossary` doesn't change who owns it. If you turn caching on, you're responsible for keeping that copy's retention, refresh, and deletion in compliance with SLB's terms linked above. `slb-glossary`'s own code is BSD-3-Clause licensed; that license covers the software, not the glossary content it fetches.
+The optional local cache ([Local Search and Cache](library/local-search.md)) still holds SLB's data once you enable it, `slb-glossary` doesn't change who owns it. If you turn caching on, you're responsible for keeping that copy's retention, refresh, and deletion in compliance with SLB's terms linked above. `slb-glossary`'s own code is BSD-3-Clause licensed; that license covers the software, not the glossary content it fetches.
 
 ## Why is the first search slow, or the install step failing?
 
@@ -15,7 +15,7 @@ Two different one-time costs get mistaken for each other:
 - **The browser build itself has to be downloaded once**, via `slb install chromium` (see [Installing the browser build](getting-started/installation.md#installing-the-browser-build)). If you skipped this, every command that touches the live site will fail, not just run slowly. `slb sync` (with no other flags) will tell you plainly if the browser isn't installed, rather than failing partway through a search.
 - **The very first search after that also launches the browser process for the first time**, which takes a few seconds longer than every search after it, since the process is already warm for the rest of that run (or the rest of that `session()` block, in library code).
 
-If a search still hangs or times out after both of those, a slow or restrictive network is the next thing to check — raise `--timeout`/`session()`'s `timeout`, and see [Sessions and the Browser](concepts/sessions.md#retrying-a-flaky-first-load) for the retry settings that govern a flaky initial page load specifically.
+If a search still hangs or times out after both of those, a slow or restrictive network is the next thing to check, raise `--timeout`/`session()`'s `timeout`, and see [Sessions and the Browser](concepts/sessions.md#retrying-a-flaky-first-load) for the retry settings that govern a flaky initial page load specifically.
 
 ## `slb config show` fails with a TOML error
 
@@ -33,7 +33,7 @@ slb config show --format json
 
 ## Do I need the `semantic` extra?
 
-Only for `--mode semantic`/`--mode hybrid` (CLI) or `mode="semantic"`/`"hybrid"` (library), and only on the local database — live search has no semantic mode at all. Plain lexical search (the default everywhere) needs nothing beyond the base install. See [Search Modes](concepts/search-modes.md) for what the extra actually buys you, and [`local embed`](cli/sync.md#embedding-for-semantichybrid-search)/`slb_glossary.local.embed_terms` for the one-time step semantic/hybrid search also needs beyond just installing the extra.
+Only for `--mode semantic`/`--mode hybrid` (CLI) or `mode="semantic"`/`"hybrid"` (library), and only on the local database, live search has no semantic mode at all. Plain lexical search (the default everywhere) needs nothing beyond the base install. See [Search Modes](concepts/search-modes.md) for what the extra actually buys you, and [`local embed`](cli/sync.md#embedding-for-semantichybrid-search)/`slb_glossary.local.embed_terms` for the one-time step semantic/hybrid search also needs beyond just installing the extra.
 
 ## Why does `search` sometimes return more results than my `--limit`?
 
@@ -41,7 +41,7 @@ Only for `--mode semantic`/`--mode hybrid` (CLI) or `mode="semantic"`/`"hybrid"`
 
 ## Can I use a browser other than Chromium?
 
-Yes — `--browser-type firefox`/`webkit` (CLI) or `browser_type="firefox"`/`"webkit"` (library). Chromium is the default and the one this documentation's examples assume, because the stealth patches this project relies on to scrape the glossary reliably have specifically been evaluated against Chromium; Firefox/WebKit sessions run through the same stealth setup but haven't been checked the same way against the glossary's own bot detection. See [Sessions and the Browser](concepts/sessions.md#why-patchright-not-plain-playwright).
+Yes, `--browser-type firefox`/`webkit` (CLI) or `browser_type="firefox"`/`"webkit"` (library). Chromium is the default and the one this documentation's examples assume, because the stealth patches this project relies on to scrape the glossary reliably have specifically been evaluated against Chromium; Firefox/WebKit sessions run through the same stealth setup but haven't been checked the same way against the glossary's own bot detection. See [Sessions and the Browser](concepts/sessions.md#why-patchright-not-plain-playwright).
 
 ## Something else is wrong
 

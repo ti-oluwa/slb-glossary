@@ -192,7 +192,7 @@ def terms(ctx: click.Context, topic: str, use_tui: bool, **params: typing.Any) -
                 ),
             )
             return await output_results(
-                results,
+                (lookup.value async for lookup in results),
                 title=title,
                 save_paths=params["save_paths"],
                 format=params["format"],

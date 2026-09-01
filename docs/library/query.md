@@ -109,6 +109,47 @@ for name, lookup in results.items():
 
 `related_terms` is a thin convenience wrapper: it calls `get_term` and returns just the `.related` field, rather than something you'd need to write yourself on top of `get_term`.
 
+## Getting similar results alongside an exact match
+
+`get_term` and `compare` both accept `with_similar=True`, resolving to a `SimilarResult` instead of a bare `SearchResult | None`: an exact match (if any), plus up to `max_similar_terms` alternatives found along the way, best match first.
+
+```python
+lookup = await slb.get_term("porocity", db=db, session=session, with_similar=True)  # a typo
+result = lookup.value  # a SimilarResult, not a SearchResult
+
+if result.exact is not None:
+    print("Found:", result.exact.value.term)
+elif result.similar:
+    print("Not found. Did you mean:", result.similar[0].value.term, "?")
+    for alt in result.similar:
+        print(f"  {alt.value.term} (score={alt.score:.2f})")
+```
+
+This is the "did you mean" building block: `result.exact` is `None` exactly when a plain call would have returned `None` too, and `result.similar` is populated the same way either way, so you don't need a separate lookup to get alternatives only when the exact match fails.
+
+```python
+results = await slb.compare(["porocity", "permeabilty"], db=db, session=session, with_similar=True)
+for term, lookup in results.items():
+    similar_result = lookup.value
+    if similar_result.exact is None and similar_result.similar:
+        print(f"{term}: not found, closest match is {similar_result.similar[0].value.term}")
+```
+
+`similar_pool_size` (how many candidates are pulled while looking for the exact match and to draw alternatives from) and `max_similar_terms` (how many alternatives are actually returned) both default to `constants.similar_terms_pool_size`/`constants.max_similar_terms`, and accept a per-call override:
+
+```python
+lookup = await slb.get_term(
+    "porocity",
+    db=db,
+    session=session,
+    with_similar=True,
+    similar_pool_size=10,
+    max_similar_terms=5,
+)
+```
+
+See [The Data Model](../concepts/data-model.md#similarresult) for `SimilarResult`'s full field list, and [`local.get_term`](local-search.md#with_similar-nearby-alternatives-on-a-miss) for the local-only equivalent, which returns a plain tuple rather than a `SimilarResult`.
+
 ---
 
 ## Where to go from here

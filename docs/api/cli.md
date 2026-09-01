@@ -100,7 +100,7 @@ Lists just the related-term links, not the full definition. Own flags: `-t/--top
 
 ## `terms [TOPIC]`
 
-`TOPIC` need not be exact — the closest known topic is used. Yields at most one result per term (the one filed under `TOPIC`), unlike `search`. Own flags: `-a/--start-letter`, `-n/--limit` (default `20`, `0` for unlimited).
+`TOPIC` need not be exact, the closest known topic is used. Yields at most one result per term (the one filed under `TOPIC`), unlike `search`. Own flags: `-a/--start-letter`, `-n/--limit` (default `20`, `0` for unlimited).
 
 ## `random`
 
@@ -120,7 +120,7 @@ Own flags: `-t/--topic`, `-Q/--query`, `-a/--start-letter`, `--all`, `--install`
 
 ## `local <subcommand>`
 
-`path`, `stats`, `search`, `get`, `flush`, `reset`, `export`, `import`, `embed`. Never falls back to live regardless of any source flag. See [The `local` command group](../cli/sync.md#the-local-command-group) for each subcommand's own options — `import` in particular has a large, distinct `--*-field` flag set for column mapping, and `embed` needs the `semantic` extra installed.
+`path`, `stats`, `search`, `get`, `flush`, `reset`, `export`, `import`, `embed`. Never falls back to live regardless of any source flag. See [The `local` command group](../cli/sync.md#the-local-command-group) for each subcommand's own options, `import` in particular has a large, distinct `--*-field` flag set for column mapping, and `embed` needs the `semantic` extra installed.
 
 ## `install`
 
@@ -132,4 +132,4 @@ No subcommand: interactive wizard. `path`, `init`, `get KEY`, `set KEY VALUE`, `
 
 ## `mcp serve [APP_PATH]`
 
-See [Running an MCP Server](../agent/mcp-server.md) for the full flag set (`--tools`, `--source`, `--no-local`, `--no-live`, `--allow-write`, `--transport`, `--auth-token`, `--rate-limit`, and more) — dense enough to warrant its own page rather than a table here.
+See [Running an MCP Server](../agent/mcp-server.md) for the full flag set (`--tools`, `--source`, `--no-local`, `--no-live`, `--allow-write`, `--transport`, `--auth-token`, `--rate-limit`, and more), dense enough to warrant its own page rather than a table here.

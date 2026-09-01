@@ -40,7 +40,7 @@ One entry in a `SearchResult.related` tuple: a link from within a definition's t
 
 | Field | Type | Notes |
 |---|---|---|
-| `term` | `str` | Display text of the link — usually, but not always, the related term's exact name. |
+| `term` | `str` | Display text of the link, usually, but not always, the related term's exact name. |
 | `url` | `str` | The glossary URL the link points to. |
 
 ```python
@@ -62,7 +62,7 @@ Language.ENGLISH  # "en"
 Language.SPANISH  # "es"
 ```
 
-A `Session` is bound to one language edition for its entire lifetime (`session()`'s `language` parameter); a local database can hold terms from both editions at once, distinguished by each stored `SearchResult.language`. Passing `language` to a query function filters (for a local read) or validates against the session's own language (for a live read) — see `get_term`'s `language` parameter in [Combined Search](../library/query.md).
+A `Session` is bound to one language edition for its entire lifetime (`session()`'s `language` parameter); a local database can hold terms from both editions at once, distinguished by each stored `SearchResult.language`. Passing `language` to a query function filters (for a local read) or validates against the session's own language (for a live read), see `get_term`'s `language` parameter in [Combined Search](../library/query.md).
 
 ---
 
@@ -86,11 +86,32 @@ Not a data model for glossary content itself, but the wrapper every `slb_glossar
 
 | Field | Type | Notes |
 |---|---|---|
-| `value` | `T` | The actual answer — a `SearchResult`, `SearchResult \| None`, a tuple of `RelatedTerm`s, etc., depending on which function returned it. |
-| `source` | `Source` | `Source.LOCAL` or `Source.LIVE` — which one actually answered this call. |
+| `value` | `T` | The actual answer: a `SearchResult`, `SearchResult \| None`, a tuple of `RelatedTerm`s, etc., depending on which function returned it. |
+| `source` | `Source` | `Source.LOCAL` or `Source.LIVE`, which one actually answered this call. |
 | `persisted` | `bool` | Whether this result was written to the local database as part of this call. |
+| `score` | `float \| None` | A relevance score in `[0.0, 1.0]` for `value` against the query it was found for, where scoring is meaningful (an exact `get_term` match scores `constants.exact_match_score`, `1.0` by default). `None` where it doesn't apply, e.g. a topic listing or a related-terms lookup. |
 
 Covered in full, with examples, in [Combined Search with slb_glossary.query](../library/query.md#queryresult-knowing-where-an-answer-came-from).
+
+---
+
+## `SimilarResult`
+
+The shape `get_term`/`compare` return instead of a bare `SearchResult` when called with `with_similar=True`: an exact match, plus nearby alternatives, for a "did you mean" experience when the exact match is `None` (or just to see what else is nearby even when it isn't).
+
+| Field | Type | Notes |
+|---|---|---|
+| `exact` | `QueryResult[SearchResult] \| None` | What a plain (non-`with_similar`) call would have returned, wrapped in its own `QueryResult`. `None` if there was no exact match. Its `.score` is always `constants.exact_match_score`, since it's exact by definition. |
+| `similar` | `tuple[QueryResult[SearchResult], ...]` | Up to `max_similar_terms` other results found along the way, best match first, each with its own `.score`. Empty if none were found, or if `max_similar_terms=0`. |
+
+```python
+lookup = await slb.get_term("porocity", db=db, session=session, with_similar=True)  # a typo
+similar_result = lookup.value
+if similar_result.exact is None and similar_result.similar:
+    print("Did you mean:", similar_result.similar[0].value.term)
+```
+
+Covered in full, with examples, in [Combined Search with slb_glossary.query](../library/query.md#getting-similar-results-alongside-an-exact-match).
 
 ---
 

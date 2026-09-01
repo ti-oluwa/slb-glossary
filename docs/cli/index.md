@@ -1,6 +1,6 @@
 # Using the CLI
 
-No programming knowledge is assumed anywhere in this section — just the `slb` command from a terminal. If you haven't installed it yet, see [Installation](../getting-started/installation.md).
+No programming knowledge is assumed anywhere in this section, just the `slb` command from a terminal. If you haven't installed it yet, see [Installation](../getting-started/installation.md).
 
 Every command below accepts `--help` for its own full option list, and every command also accepts `--tui`, which opens an interactive form for that command instead of you having to remember its flags:
 

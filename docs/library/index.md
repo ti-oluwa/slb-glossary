@@ -42,7 +42,7 @@ Beyond `slb_glossary.live.search` and `slb_glossary.local.search` themselves, `s
 | `get_topics(...)` | The glossary's list of topics. |
 | `get_terms_urls(...)` | Raw glossary URLs matching a query/topic, without fetching their content. |
 
-Every one of these accepts the same handful of shared keyword arguments: `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`), and `persist`. [Combined Search with slb_glossary.query](query.md) covers what each of those actually does, in depth, once — the individual functions' own docs mostly just point back to it.
+Every one of these accepts the same handful of shared keyword arguments: `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`), and `persist`. [Combined Search with slb_glossary.query](query.md) covers what each of those actually does, in depth, once, the individual functions' own docs mostly just point back to it.
 
 ## Where to go from here
 

@@ -55,7 +55,7 @@ async with slb.live.session(
 
 ### Lazy initialization
 
-Opening a session doesn't, by itself, load anything from the glossary; the first call that actually needs the topic list (like `search`) triggers that automatically. If you'd rather control exactly when that first network round trip happens — say, to measure it separately, or to fail fast before doing anything else — open the session without initializing it, and call it explicitly:
+Opening a session doesn't, by itself, load anything from the glossary; the first call that actually needs the topic list (like `search`) triggers that automatically. If you'd rather control exactly when that first network round trip happens, say, to measure it separately, or to fail fast before doing anything else, open the session without initializing it, and call it explicitly:
 
 ```python
 async with slb.live.session(initialize=False) as session:

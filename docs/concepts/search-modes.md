@@ -8,7 +8,7 @@ Every ranked search this library does, local or live, uses one of three ranking 
 
 **The default. Needs nothing beyond the base install.**
 
-Lexical search ranks by [bm25](https://en.wikipedia.org/wiki/Okapi_BM25), a full-text ranking algorithm, over the term, definition, and topic text actually stored locally. It only ever matches words that are actually present (or close misspellings of them, if `fuzzy=True`): searching "rock that holds fluid" under lexical mode will not find "porosity" unless those specific words appear somewhere in a stored definition.
+Lexical search ranks by [bm25](https://en.wikipedia.org/wiki/Okapi_BM25), a full-text ranking algorithm, over the term, definition, and topic text actually stored locally. It only ever matches words that are actually present (or close misspellings of them, if `fuzzy=True`): searching "rock that holds fluid" under lexical mode will not find a term like "porous" unless those specific words appear somewhere in its stored definition.
 
 Live search uses a related but simpler technique, since there's no whole result set to rank against ahead of time: plain token overlap between your query and each candidate term/topic, scored as results stream in one page at a time.
 
@@ -16,7 +16,7 @@ Live search uses a related but simpler technique, since there's no whole result 
 
 **Needs the `semantic` extra installed (`uv add "slb-glossary[semantic]"`), and terms already embedded first.**
 
-Semantic search compares *embeddings*: numeric vectors that capture a phrase's meaning, produced by a small local model ([`minishlab/potion-retrieval-32M`](https://huggingface.co/minishlab/potion-retrieval-32M), via [model2vec](https://github.com/MinishLab/model2vec)), downloaded once and cached, with no network call needed per query afterward. Two phrases with similar meanings end up with similar vectors even if they don't share any words, which is what lets "rock that holds fluid" find "porosity": their embeddings land close together in vector space, measured by cosine similarity.
+Semantic search compares *embeddings*: numeric vectors that capture a phrase's meaning, produced by a small local model ([`minishlab/potion-retrieval-32M`](https://huggingface.co/minishlab/potion-retrieval-32M), via [model2vec](https://github.com/MinishLab/model2vec)), downloaded once and cached, with no network call needed per query afterward. Two phrases with similar meanings end up with similar vectors even if they don't share any words: searching "rock that holds fluid" surfaces "porous" this way, since the two land close together in vector space (measured by cosine similarity), despite sharing no words at all.
 
 This only works on terms you've already run through `embed_terms`:
 
@@ -48,8 +48,8 @@ This is generally the best-ranking mode once you've embedded your terms, and the
 | | Needs | Matches | Works live | Good `Source.AUTO` pairing |
 |---|---|---|---|---|
 | `lexical` | Nothing extra | Exact words (or near-misspellings, with `fuzzy=True`) | Yes | Yes |
-| `semantic` | `semantic` extra + `embed_terms` | Meaning, not exact words | No (local only) | Only with care — see the scale warning above |
-| `hybrid` | `semantic` extra + `embed_terms` | Both, fused by rank | No (local only) | Yes — generally the best default once embedded |
+| `semantic` | `semantic` extra + `embed_terms` | Meaning, not exact words | No (local only) | Only with care, see the scale warning above |
+| `hybrid` | `semantic` extra + `embed_terms` | Both, fused by rank | No (local only) | Yes, generally the best default once embedded |
 
 ```python
 await slb.local.search(db, "porosity", mode="lexical")  # default, exact-word match

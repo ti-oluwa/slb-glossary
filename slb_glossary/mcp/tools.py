@@ -576,7 +576,7 @@ async def handle_terms_on(
             persist_on_error=args.persist_on_error,
             fuzzy=args.fuzzy,
         ):
-            results.append(result.asdict())
+            results.append(result.value.asdict())
             count += 1
             if stream:
                 await report_progress(count, args.limit)
@@ -598,8 +598,8 @@ async def handle_terms_urls(
     source = resolve_source(args.source, config)
     async with runtime.acquire(source) as (db, session):
         urls = [
-            url
-            async for url in query.get_terms_urls(
+            lookup.value
+            async for lookup in query.get_terms_urls(
                 db=db,
                 session=session,
                 source=source,

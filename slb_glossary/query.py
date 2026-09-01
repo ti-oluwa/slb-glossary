@@ -661,7 +661,7 @@ async def get_terms_on(
     fuzzy: bool = False,
     exclude: Collection[str] | None = None,
     auto_initialize: bool = True,
-) -> typing.AsyncIterator[SearchResult]:
+) -> typing.AsyncIterator[QueryResult[SearchResult]]:
     """
     Yield every term filed under `topic`, reading from `db`/`session` according to `source`.
 
@@ -706,7 +706,7 @@ async def get_terms_on(
         runs. See `slb_glossary.utils.split_exclude` for how an entry is
         told apart as a URL vs. a term name. `None` (the default)
         excludes nothing.
-    :yield: `SearchResult`s filed under `topic`.
+    :yield: `QueryResult[SearchResult]`s filed under `topic`. `.score` is always `None`, since result ordering here isn't relevance-ranked the way `search`'s is.
     :param auto_initialize: If a live fetch happens and `session` isn't
         initialized yet, initialize it automatically (the default) or
         raise. See `slb_glossary.live.ensure_initialized`.
@@ -732,7 +732,7 @@ async def get_terms_on(
             exclude=exclude,
         ):
             count += 1
-            yield result
+            yield QueryResult(value=result, source=Source.LOCAL, persisted=False, score=None)
 
         logger.debug(
             "`query.get_terms_on(%r, source=LOCAL)` yielded %d result(s) in %.3fs",
@@ -763,7 +763,7 @@ async def get_terms_on(
             persist_on_error=persist_on_error,
         ):
             count += 1
-            yield result
+            yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=None)
 
         logger.debug(
             "`query.get_terms_on(%r, source=LIVE)` yielded %d result(s) in %.3fs",
@@ -794,7 +794,7 @@ async def get_terms_on(
             time.monotonic() - started_at,
         )
         for result in results:
-            yield result
+            yield QueryResult(value=result, source=Source.LOCAL, persisted=False, score=None)
         return
 
     if session is None:
@@ -822,7 +822,7 @@ async def get_terms_on(
         persist_on_error=persist_on_error,
     ):
         live_count += 1
-        yield result
+        yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=None)
     logger.debug(
         "`query.get_terms_on(%r, source=AUTO->LIVE)` yielded %d result(s) in %.3fs total",
         topic,
@@ -844,7 +844,7 @@ async def get_terms_urls(
     fuzzy: bool = False,
     exclude: Collection[str] | None = None,
     auto_initialize: bool = True,
-) -> typing.AsyncIterator[str]:
+) -> typing.AsyncIterator[QueryResult[str]]:
     """
     Yield term detail-page URLs matching the given filters, reading from
     `db`/`session` according to `source`.
@@ -878,7 +878,7 @@ async def get_terms_urls(
         read's own filters already narrow to what's stored, so excluding
         from that same set besides is rarely useful, but it's still
         honored there too for consistency. `None` (the default) excludes nothing.
-    :yield: Matching term detail-page URLs.
+    :yield: `QueryResult[str]`s wrapping matching term detail-page URLs. `.persisted` is always `False` here, since there's nothing to persist, and `.score` is always `None`.
     :param auto_initialize: If a live fetch happens and `session` isn't
         initialized yet, initialize it automatically (the default) or
         raise. See `slb_glossary.live.ensure_initialized`.
@@ -902,7 +902,7 @@ async def get_terms_urls(
             fuzzy=fuzzy,
             exclude=exclude,
         ):
-            yield url
+            yield QueryResult(value=url, source=Source.LOCAL, persisted=False, score=None)
         return
 
     if resolved_source is Source.LIVE or source is not Source.AUTO:
@@ -916,7 +916,7 @@ async def get_terms_urls(
             exclude=exclude,
             auto_initialize=auto_initialize,
         ):
-            yield url
+            yield QueryResult(value=url, source=Source.LIVE, persisted=False, score=None)
         return
 
     # source is Source.AUTO, `resolved_source` started as LOCAL. Try it, then fall back.
@@ -937,7 +937,7 @@ async def get_terms_urls(
     if urls:
         logger.debug("Serving `get_terms_urls(...)` from the local database")
         for url in urls:
-            yield url
+            yield QueryResult(value=url, source=Source.LOCAL, persisted=False, score=None)
         return
 
     if session is None:
@@ -958,7 +958,7 @@ async def get_terms_urls(
         exclude=exclude,
         auto_initialize=auto_initialize,
     ):
-        yield url
+        yield QueryResult(value=url, source=Source.LIVE, persisted=False, score=None)
 
 
 async def get_topics(

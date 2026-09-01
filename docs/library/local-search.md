@@ -72,6 +72,8 @@ print(f"Imported {written} row(s)")
 
 This is the library counterpart of `slb local import`, useful for seeding the database from an internal wordlist or a dataset that never touched the live glossary at all. A row's own URL (or one synthesized from its term) and topic together are the local database's primary key, so importing the same file twice updates existing rows rather than duplicating them. See [`local import`](../cli/sync.md#importing-your-own-data) for the full set of `*_field` options, all of which are keyword arguments here too.
 
+`load_file` reads through `slb_glossary.readers`, which is also usable on its own (for reading tabular data that has nothing to do with the glossary at all), and extensible with your own file formats. See [`slb_glossary.readers`](../api/library.md#slb_glossaryreaders).
+
 ---
 
 ## Search modes: lexical, semantic, hybrid
@@ -88,7 +90,7 @@ await slb.local.embed_terms(db)  # compute and store embeddings for everything c
 results = await slb.local.search(db, "rock that holds fluid", mode="hybrid")
 ```
 
-That embedding step is why a paraphrase like *"rock that holds fluid"* can match *"porosity"* under `"semantic"`/`"hybrid"` mode, but not under `"lexical"`, which only ever matches on the words actually present. See [Search Modes](../concepts/search-modes.md) for how the three modes actually differ under the hood, and what `embed_terms` costs to run.
+That embedding step is why a paraphrase like *"rock that holds fluid"* can surface a semantically related term like *"porous"* under `"semantic"`/`"hybrid"` mode, even without sharing a single word with the query, which `"lexical"` mode cannot do since it only ever matches on the words actually present. See [Search Modes](../concepts/search-modes.md) for how the three modes actually differ under the hood, and what `embed_terms` costs to run.
 
 ### Getting scores alongside results
 
@@ -97,6 +99,20 @@ scored_results = await slb.local.search(db, "porosity", scored=True)
 for result, score in scored_results:
     print(result.term, round(score, 3))
 ```
+
+### `with_similar`: nearby alternatives on a miss
+
+`local.get_term` accepts `with_similar=True` too, for a "did you mean" alongside an exact lookup. Unlike `query.get_term`, this returns a plain `(result, similar)` tuple rather than a `SimilarResult`, since there's no `QueryResult` wrapper at the local-only level:
+
+```python
+result, similar = await slb.local.get_term(db, "porocity", with_similar=True)  # a typo
+
+if result is None and similar:
+    best_match, score = similar[0]
+    print(f"Not found. Did you mean {best_match.term!r}? (score={score:.2f})")
+```
+
+`similar` is drawn via `lexical_search` on the same query, capped at `max_similar_terms` (default `constants.max_similar_terms`), with the exact match (if any) excluded from it. `similar_pool_size` controls how many candidates `lexical_search` pulls before alternatives are drawn from them, same as the `query`-level version covered in [Combined Search](query.md#getting-similar-results-alongside-an-exact-match).
 
 ---
 

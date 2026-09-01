@@ -1,6 +1,6 @@
 # Sessions and the Browser
 
-Every part of this library that talks to the live glossary — the CLI, `slb_glossary.live`, the MCP server — ultimately does so through a `Session`: an open browser, loaded with the glossary's topic list and term count, ready to be searched. This page covers what that actually is and why it works the way it does, since a handful of design choices here explain behavior that shows up throughout [Live Search](../library/live-search.md) and the CLI.
+Every part of this library that talks to the live glossary (the CLI, `slb_glossary.live`, the MCP server) ultimately does so through a `Session`: an open browser, loaded with the glossary's topic list and term count, ready to be searched. This page covers what that actually is and why it works the way it does, since a handful of design choices here explain behavior that shows up throughout [Live Search](../library/live-search.md) and the CLI.
 
 ---
 
@@ -20,11 +20,11 @@ A few specifics worth knowing:
 
 ## What opening a session actually does
 
-`session()`/`open_session()` launches the browser, opens a context (patchright's term for an isolated cookie/cache/storage sandbox, with the stealth patches applied to it), and then — unless you asked for [lazy initialization](../library/live-search.md#lazy-initialization) — loads the glossary's topic list and total term count once, storing them on the returned `Session` for the rest of its lifetime (`session.topics`, `session.size`). Everything after that reuses this one browser and context rather than launching a fresh one per search.
+`session()`/`open_session()` launches the browser, opens a context (patchright's term for an isolated cookie/cache/storage sandbox, with the stealth patches applied to it), and then, unless you asked for [lazy initialization](../library/live-search.md#lazy-initialization), loads the glossary's topic list and total term count once, storing them on the returned `Session` for the rest of its lifetime (`session.topics`, `session.size`). Everything after that reuses this one browser and context rather than launching a fresh one per search.
 
 ## The page pool: how concurrency actually works
 
-A `Session` doesn't just hold one browser tab; it holds a small pool of them, bounded by `max_pages` (default `6`). Any operation that needs to actually load a URL — the search results page, each term's detail page — checks out a page from this pool for the duration of that one operation, then returns it. This is what makes a session safe to drive concurrently: `compare`'s `concurrency`, or `slb.live.search`'s `concurrency`, work by having several lookups in flight at once, each with its own checked-out page, rather than serializing everything through a single shared tab.
+A `Session` doesn't just hold one browser tab; it holds a small pool of them, bounded by `max_pages` (default `6`). Any operation that needs to actually load a URL (the search results page, each term's detail page) checks out a page from this pool for the duration of that one operation, then returns it. This is what makes a session safe to drive concurrently: `compare`'s `concurrency`, or `slb.live.search`'s `concurrency`, work by having several lookups in flight at once, each with its own checked-out page, rather than serializing everything through a single shared tab.
 
 ```python
 async with slb.live.session(max_pages=10) as session:
@@ -56,7 +56,7 @@ This only governs that one initial-load retry, not every network call a session 
 
 `RetryPolicy` isn't specific to session startup; it's a general-purpose retry configuration used in a few other places too, and available for your own code as well:
 
-- **`refresh_topics`** (the same facet-panel load that populates `session.topics`/`session.size`) reuses `session.retry` directly rather than taking a retry policy of its own — call it again later if the glossary's topic list may have changed mid-run, and it retries exactly like the initial load did.
+- **`refresh_topics`** (the same facet-panel load that populates `session.topics`/`session.size`) reuses `session.retry` directly rather than taking a retry policy of its own, call it again later if the glossary's topic list may have changed mid-run, and it retries exactly like the initial load did.
 - **`slb install`**'s browser download (`slb_glossary.cli.browsers`) retries a failed download per its own `RetryPolicy`, exposed as the CLI's `--retries`/`--timeout` flags rather than a policy object directly. See [`install`](../cli/sync.md#install).
 - **`slb_glossary.retries.retry`** is the underlying retry loop everything above calls into, and it's public: wrap any zero-argument async callable of your own in it, independent of anything glossary-related.
 

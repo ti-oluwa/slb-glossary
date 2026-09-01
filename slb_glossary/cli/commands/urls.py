@@ -167,7 +167,7 @@ def list_urls(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
                     exclude=exclude,
                 ),
             )
-            records = (UrlRecord(url=url) async for url in url_iter)
+            records = (UrlRecord(url=lookup.value) async for lookup in url_iter)
             return await output_results(
                 records,
                 title=title,
