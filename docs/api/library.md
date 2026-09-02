@@ -115,35 +115,41 @@ The read-side counterpart to `writers`, used internally by `local.load_file` and
 
 | Name | Kind | Notes |
 |---|---|---|
-| `read_rows(path, *, format=None)` | function -> `Iterator[dict[str, Any]]` | Lazily reads `path` as `{column: value}` row dicts, choosing a reader by file extension (or `format`, to override it). Raises `UnsupportedFormatError` if nothing's registered for the resolved format. |
+| `read_rows(path, *, format=None)` | async generator -> `dict[str, Any]` | Lazily reads `path` as `{column: value}` row dicts, choosing a reader by file extension (or `format`, to override it). Raises `UnsupportedFormatError` if nothing's registered for the resolved format. |
 | `supported_formats()` | function -> `list[str]` | `["csv", "json", "xlsm", "xlsx"]` on a base install (plus `"yaml"` once the `config` extra's PyYAML is present): `READERS` dict keys, sorted. Distinct from `writers.supported_formats()`, which only covers write formats. |
 | `reader(format)` | decorator | Registers a new format: `@reader("yaml")` on a function matching the `Reader` signature below teaches `read_rows` (and `local.load_file`) that format. |
-| `Reader` | type alias | `Callable[[pathlib.Path], Iterator[dict[str, Any]]]`: what a function decorated with `@reader(...)` must look like. |
+| `Reader` | type alias | `Callable[[pathlib.Path], AsyncIterator[dict[str, Any]]]`: what a function decorated with `@reader(...)` must look like, an async generator. |
 | `READERS` | `dict[str, Reader]` | The registry `reader(...)` writes to and `read_rows` reads from directly, if you'd rather inspect or call a specific reader yourself. |
-| `read_csv_rows` / `read_json_rows` / `read_xlsx_rows` | `Reader`s | The built-in readers `read_rows` dispatches to; callable directly for lower-level control. |
+| `read_csv_rows` / `read_json_rows` / `read_xlsx_rows` | `Reader`s | The built-in readers `read_rows` dispatches to; callable directly for lower-level control. Each offloads its actual file I/O to a worker thread internally (`asyncio.to_thread`), so reading a large file doesn't blocks the event loop. |
 
 ```python
 import slb_glossary as slb
 
-for row in slb.readers.read_rows("terms.csv"):
+async for row in slb.readers.read_rows("terms.csv"):
     print(row["term"], row["definition"])
 ```
 
 Registering your own format works the same way `local.load_file` picks up any format `readers` already knows about, with no separate registration step needed on the `local.load_file` side:
 
 ```python
+import asyncio
 import pathlib
 import typing
 
-from slb_glossary.readers import reader
+from slb_glossary.readers import reader, iter_in_thread
 
 
-@reader("tsv")
-def read_tsv_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
-    with open(path, newline="", encoding="utf-8") as f:
+def _read_tsv_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
+    with path.open(newline="", encoding="utf-8") as f:
         header = f.readline().rstrip("\n").split("\t")
         for line in f:
             yield dict(zip(header, line.rstrip("\n").split("\t")))
+
+
+@reader("tsv")
+async def read_tsv_rows(path: pathlib.Path) -> typing.AsyncIterator[dict[str, typing.Any]]:
+    async for row in iter_in_thread(_read_tsv_rows(path)):
+        yield row
 
 
 # `local.load_file` can now read `.tsv` files too, with no changes on its end.
@@ -188,7 +194,7 @@ The full, current list is the source of truth: every constant is a `Constant(def
 | `save(records, destination, *, format=None)` | coroutine | Writes a list or async iterable of `SearchResult`-likes to a file. Format inferred from extension unless overridden. |
 | `writer(format)` | function -> `Writer` | Look up a specific writer callable directly. |
 | `WRITERS` | `dict[str, Writer]` | `Writer = Callable[[Sequence[RecordLike], pathlib.Path], Awaitable[None]]`. |
-| `read_rows(path, *, format=None)` | function -> `Iterator[dict[str, Any]]` | The read-side counterpart to `save`. See [`slb_glossary.readers`](#slb_glossaryreaders). |
+| `read_rows(path, *, format=None)` | async generator -> `dict[str, Any]` | The read-side counterpart to `save`. See [`slb_glossary.readers`](#slb_glossaryreaders). |
 | `reader(format)` | decorator | Registers a new read format. |
 | `readers` / `writers` | modules | The submodules `read_rows`/`save` and friends actually live in; `slb.writers.supported_formats()`/`slb.readers.supported_formats()` aren't re-exported at the top level, so call them through the submodule. |
 | `RetryPolicy` | `dataclass` | `attempts`, `base_delay`, `backoff_type`, `factor`, `max_delay`, `jitter`. |

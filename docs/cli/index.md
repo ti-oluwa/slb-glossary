@@ -1,6 +1,6 @@
 # Using the CLI
 
-For CLI usage, no programming knowledge is assumed in this section, just the `slb` command from a terminal. If you haven't installed it yet, see [Installation](../getting-started/installation.md).
+For this CLI usage section, no programming knowledge is assumed. We just need to use the `slb` command fin a terminal. If you haven't installed it yet, see [Installation](../getting-started/installation.md).
 
 Every command below accepts `--help` for its own full option list, and every command also accepts `--tui`, which opens an interactive form for that command instead of you having to remember its flags:
 
@@ -46,7 +46,7 @@ slb search porosity --relevance-threshold 0.8 # trust local results less readily
 ```
 
 !!! tip "`--annotate` shows you which source actually answered"
-    `search`'s table (and `--json` output) can show each result's origin and score as extra columns: `--annotate always`. Handy the first few times you use `--auto`, before you have a feel for when it reaches for the live site.
+    `search`'s table (and `--json` output) can show each result's origin and score as extra columns with `--annotate always`. Handy the first few times you use `--auto`, before you have a feel for when it reaches for the live site.
 
 ## Caching live results: `--cache`
 

@@ -38,7 +38,7 @@ print(
 The read-side counterpart, `slb_glossary.readers`, is what `local.load_file` (covered in [Local Search and Cache](local-search.md#3-import-your-own-data)) uses internally, and it's just as usable directly for tabular data that has nothing to do with the glossary at all:
 
 ```python
-for row in slb.readers.read_rows("my_data.csv"):
+async for row in slb.readers.read_rows("my_data.csv"):
     print(row["some_column"])
 ```
 
@@ -48,26 +48,32 @@ print(
 )  # ['csv', 'json', 'xlsm', 'xlsx'] on a base install, plus 'yaml' with the `config` extra
 ```
 
-`read_rows` picks a reader the same way `save` picks a writer: by `path`'s extension, or an explicit `format` override. It's a plain (non-async) generator, since reading rows out of a file doesn't need `await` the way a browser fetch does.
+`read_rows` picks a reader the same way `save` picks a writer, by `path`'s extension, or an explicit `format` override. It's an async generator, like the rest of this library, and the built-in readers offload their actual (blocking) file I/O to a worker thread internally, so reading a large file never blocks whatever else your event loop is doing.
 
 ### Teaching it a new format
 
 ```python
+import asyncio
 import pathlib
 import typing
 
-from slb_glossary.readers import reader
+from slb_glossary.readers import reader, iter_in_thread
 
 
-@reader("tsv")
-def read_tsv_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
-    with open(path, newline="", encoding="utf-8") as f:
+def _read_tsv_rows(path: pathlib.Path) -> typing.Iterator[dict[str, typing.Any]]:
+    with path.open(newline="", encoding="utf-8") as f:
         header = f.readline().rstrip("\n").split("\t")
         for line in f:
             yield dict(zip(header, line.rstrip("\n").split("\t")))
+
+
+@reader("tsv")
+async def read_tsv_rows(path: pathlib.Path) -> typing.AsyncIterator[dict[str, typing.Any]]:
+    async for row in iter_in_thread(_read_tsv_rows(path)):
+        yield row
 ```
 
-Once registered, `.tsv` files work everywhere `read_rows` is used underneath, including `local.load_file`, with no changes needed on that side:
+This follows the same pattern as the built-in readers: a sync generator `_read_tsv_rows` does the actual file I/O, and the async wrapper uses `iter_in_thread` to run each row fetch in a worker thread so the event loop never blocks. For a quick, small file you don't need the threading overhead, you can skip it and just be an `async def` generator directly, but this approach scales well to large files. Once registered, `.tsv` files work everywhere `read_rows` is used underneath, including `local.load_file`, with no changes needed on that side:
 
 ```python
 await slb.local.load_file(db, "terms.tsv")

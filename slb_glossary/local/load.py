@@ -208,7 +208,7 @@ async def load_file(
     batches_written = 0
     buffer: list[SearchResult] = []
 
-    async def _flush() -> None:
+    async def flush() -> None:
         nonlocal buffer, total_written, batches_written
         if not buffer:
             return
@@ -232,9 +232,7 @@ async def load_file(
             # only the error that occurred while processing gets rewrapped as a
             # `DatabaseError` about the source file.
             try:
-                row = next(row_iter)
-            except StopIteration:
-                break
+                row = await anext(row_iter, None)
             except DatabaseError:
                 raise
             except Exception as exc:
@@ -242,6 +240,8 @@ async def load_file(
                     f"Could not read {resolved_path!s} as {resolved_format}: {exc}"
                 ) from exc
 
+            if row is None:
+                break
             result = record_to_result(
                 row,
                 term_field=term_field,
@@ -260,9 +260,9 @@ async def load_file(
             buffer.append(result)
 
             if len(buffer) >= resolved_batch_size:
-                await _flush()
+                await flush()
     finally:
-        await _flush()
+        await flush()
 
     logger.info(
         "Imported %d row(s) from %s across %d batch(es)",

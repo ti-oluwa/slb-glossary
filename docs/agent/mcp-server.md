@@ -2,7 +2,7 @@
 
 Connecting an AI agent to this glossary, whether or not you're writing Python, needs the `mcp` extra: `uv add "slb-glossary[mcp]"` for library use, or the CLI. You already have it if you installed with the `[all]` option.
 
-[MCP](https://modelcontextprotocol.io/) (Model Context Protocol) is the open standard this server speaks. An agent connects to it, sees a list of tools, and calls them the same way it would call any other tool. Everything here is a thin layer over exactly the [`slb_glossary.query`](../library/query.md) functions already covered elsewhere in this documentation, the server doesn't reimplement any lookup logic of its own.
+[MCP](https://modelcontextprotocol.io/) (Model Context Protocol) is the open standard this server speaks. An agent connects to it, sees a list of tools, and calls them the same way it would call any other tool. What we use here is a wrapper over the [`slb_glossary.query`](../library/query.md) functions already covered in this documentation, the server doesn't reimplement any lookup logic of its own.
 
 ---
 
@@ -14,7 +14,7 @@ slb mcp serve
 
 This starts a server over `stdio` (the default transport, reading/writing MCP messages over standard input/output, the way an agent's own process expects when it launches this as a subprocess), with a sensible default tool set and no local-database writes allowed. That's enough to point an MCP client at right away.
 
-### Connecting Claude Desktop or Claude Code
+### Connecting a Desktop client or Agent
 
 Add this to your MCP client's config (Your Desktop's `*desktop_config.json`, or LLM's `.mcp.json`):
 
