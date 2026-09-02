@@ -2,7 +2,7 @@
 
 <div class="hero" markdown>
 
-With **slb-glossary** you can search the [SLB Energy Glossary](https://glossary.slb.com/) from a terminal, from Python code, or using an AI agent, with an optional local cache so repeat lookups don't need the network at all.
+With **slb-glossary**, you can search the [SLB Energy Glossary](https://glossary.slb.com/) intelligently from a terminal or from Python code. It can also serve as deterministic source of truth for oil/gas and energy field terms when using an AI agent.
 
 [Installation](getting-started/installation.md){ .md-button .md-button--primary }
 [Using the CLI](cli/index.md){ .md-button }
