@@ -2,7 +2,6 @@
 
 import dataclasses
 import enum
-import sys
 import typing
 from collections.abc import AsyncIterable, Iterable, Sequence
 

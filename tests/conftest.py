@@ -2,7 +2,7 @@
 
 import asyncio
 import datetime
-import sys
+import platform
 import time
 import typing
 
@@ -52,7 +52,7 @@ ASYNCIO_ONLY_BACKENDS = [
     pytest.param(
         ("asyncio", {"use_uvloop": True}),
         id="asyncio+uvloop",
-        marks=pytest.mark.skipif(sys.platform == "win32", reason="uvloop is Unix-only"),
+        marks=pytest.mark.skipif(platform.system() == "Windows", reason="uvloop is Unix-only"),
     ),
 ]
 

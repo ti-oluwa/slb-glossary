@@ -1,5 +1,5 @@
 """
-`local.sync`: `get_known_urls_set`, `_record_sync`, `drain_and_upsert`'s
+`local.sync`: `get_known_urls_set`, `record_sync`, `drain_and_upsert`'s
 error handling, and every `sync_*` function - including the guarantee that
 `sync_all` never re-fetches a term's page a second time just because it's
 filed under more than one topic.
@@ -185,7 +185,7 @@ class TestRecordSync:
                 make_search_result(url="https://x.com/b", topic="Geology"),
             ],
         )
-        summary = await sync_module._record_sync(db, terms_written=2, language="en")
+        summary = await sync_module.record_sync(db, terms_written=2, language="en")
         assert summary.total_terms == 2
         assert summary.topics == {"Geology": 2}
         assert summary.terms_written == 2
@@ -199,7 +199,7 @@ class TestRecordSync:
     @pytest.mark.anyio
     async def test_interrupted_flag_is_recorded(self, db):
         """`interrupted=True` is carried through into the returned `SyncSummary`."""
-        summary = await sync_module._record_sync(
+        summary = await sync_module.record_sync(
             db, terms_written=0, language="en", interrupted=True
         )
         assert summary.interrupted is True
@@ -509,7 +509,7 @@ class TestSyncAll:
             await sync_all(db, session)
 
         metadata = Metadata.load(db.metadata_path)
-        # `_record_sync` doesn't store `interrupted` itself on `Metadata` -
+        # `record_sync` doesn't store `interrupted` itself on `Metadata` -
         # confirm instead that a sync was still recorded despite the error
         # (i.e. the `finally` block ran).
         assert metadata.last_synced_at is not None

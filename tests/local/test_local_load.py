@@ -1,5 +1,5 @@
 """
-`local.load`: `get_field`'s case-insensitive lookup, `_parse_related`'s
+`local.load`: `get_field`'s case-insensitive lookup, `parse_related`'s
 tolerant parsing, `record_to_result`'s row-to-`SearchResult` mapping
 (including URL synthesis), and `load_file`'s batched CSV/JSON/XLSX import.
 """
@@ -12,7 +12,7 @@ import pytest
 from slb_glossary.errors import DatabaseError
 from slb_glossary.local.api import count as count_terms
 from slb_glossary.local.api import iter_terms
-from slb_glossary.local.load import _parse_related, get_field, load_file, record_to_result
+from slb_glossary.local.load import get_field, load_file, parse_related, record_to_result
 from slb_glossary.types import RelatedTerm
 
 pytestmark = pytest.mark.unit
@@ -52,28 +52,28 @@ class TestGetField:
 class TestParseRelated:
     def test_none_or_empty_string_returns_none(self):
         """`None` or `""` returns `None`."""
-        assert _parse_related(None) is None
-        assert _parse_related("") is None
+        assert parse_related(None) is None
+        assert parse_related("") is None
 
     def test_parses_native_list_of_dicts(self):
         """A native list of `{"term": ..., "url": ...}` dicts (as a JSON
         reader would already give) parses to a tuple of `RelatedTerm`."""
         raw = [{"term": "Permeability", "url": "https://x.com/permeability"}]
-        assert _parse_related(raw) == (
+        assert parse_related(raw) == (
             RelatedTerm(term="Permeability", url="https://x.com/permeability"),
         )
 
     def test_parses_native_list_of_term_url_pairs(self):
         """A native list of `[term, url]` pairs also parses correctly."""
         raw = [["Permeability", "https://x.com/permeability"]]
-        assert _parse_related(raw) == (
+        assert parse_related(raw) == (
             RelatedTerm(term="Permeability", url="https://x.com/permeability"),
         )
 
     def test_parses_json_array_string_of_dicts(self):
         """A JSON array string (as a CSV/XLSX cell would hold it as text) parses too."""
         raw = '[{"term": "Permeability", "url": "https://x.com/permeability"}]'
-        assert _parse_related(raw) == (
+        assert parse_related(raw) == (
             RelatedTerm(term="Permeability", url="https://x.com/permeability"),
         )
 
@@ -86,26 +86,26 @@ class TestParseRelated:
             "not a dict or pair",
             [1, 2, 3],
         ]
-        assert _parse_related(raw) == (
+        assert parse_related(raw) == (
             RelatedTerm(term="Permeability", url="https://x.com/permeability"),
         )
 
     def test_unparsable_json_string_returns_none(self):
         """An invalid JSON string returns `None`, not an error."""
-        assert _parse_related("not valid json") is None
+        assert parse_related("not valid json") is None
 
     def test_non_list_top_level_returns_none(self):
         """A JSON value that parses but isn't a list (e.g. a bare object) returns `None`."""
-        assert _parse_related('{"term": "x", "url": "y"}') is None
+        assert parse_related('{"term": "x", "url": "y"}') is None
 
     def test_empty_list_returns_none(self):
         """An empty list (native or JSON) returns `None`, not `()`."""
-        assert _parse_related([]) is None
-        assert _parse_related("[]") is None
+        assert parse_related([]) is None
+        assert parse_related("[]") is None
 
     def test_every_item_malformed_returns_none(self):
         """A list where every item is unparsable returns `None`, not `()`."""
-        assert _parse_related(["not a dict or pair", 123]) is None
+        assert parse_related(["not a dict or pair", 123]) is None
 
 
 class TestRecordToResult:
