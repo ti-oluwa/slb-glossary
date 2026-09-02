@@ -15,8 +15,6 @@ retention, refresh, and deletion in compliance with SLB's terms of use linked ab
 @Author: Daniel T. Afolayan (ti-oluwa)
 """
 
-import logging as py_logging
-
 from . import live, local, query, readers, writers
 from . import logging as log
 from .config import Config
@@ -70,11 +68,6 @@ from .types import (
 )
 from .utils import get_topic_match, print_async_records, print_records
 from .writers import WRITERS, Writer, records_to_dicts, save, writer
-
-py_logging.basicConfig(
-    format="%(levelname)s  %(asctime)s  [%(name)s.%(funcName)s:%(lineno)d]:  %(message)s",
-    level=py_logging.INFO,
-)
 
 __version__ = "0.1.0"
 __all__ = [

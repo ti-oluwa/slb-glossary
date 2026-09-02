@@ -134,11 +134,11 @@ class Runtime(NamedComponent):
                 opened_at = time.monotonic()
                 kwargs = self.config.session.options.session_kwargs()
                 # Runtime only ever opens a session because a live call is
-                # imminent (EAGER, at startup) or already in flight (LAZY/
-                # PER_CALL, on first/every use). The decision to go live at
+                # imminent (`EAGER`, at startup) or already in flight (`LAZY`/
+                # `PER_CALL`, on first/every use). The decision to go live at
                 # all has already been made by the time we get here, so
                 # there's no reason to defer the topics/size load further.
-                # This overrides whatever `initialize` session_kwargs()
+                # This overrides whatever `initialize` value `session_kwargs()`
                 # otherwise resolved to (the global lazy-by-default, which
                 # exists for `slb_glossary.query`'s own local-vs-live
                 # choice, not for a runtime that's already committed to a
@@ -158,7 +158,7 @@ class Runtime(NamedComponent):
         """Background task. Closes the shared session after it's sat idle past `idle_timeout`."""
         idle_timeout = self.config.session.idle_timeout
         assert idle_timeout is not None, (
-            f"[{self.name}] `_reap_idle_session` started with idle_timeout=None; "
+            f"[{self.name}] `_reap_idle_session` started with `idle_timeout=None`; "
             f"`{type(self).__name__}.start()` should never have scheduled this task in that case."
         )
         assert self.config.session.mode is not SessionMode.PER_CALL, (
@@ -214,7 +214,6 @@ class Runtime(NamedComponent):
             raise MCPError(f"[{self.name}] This server has live glossary access disabled.")
 
         db = await self._open_db() if (needs_db and self.config.local.enabled) else None
-
         if not needs_session or not self.config.session.enabled:
             yield db, None
             return

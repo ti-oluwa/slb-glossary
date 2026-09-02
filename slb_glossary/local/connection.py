@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["close_db", "database", "open_db"]
 
 
-def _resolve_metadata_path(
+def resolve_metadata_path(
     db_path: pathlib.Path, metadata_path: str | pathlib.Path | None, db_path_was_given: bool
 ) -> pathlib.Path:
     """Work out where a database's `metadata.json` lives, given its own path."""
@@ -27,7 +27,7 @@ def _resolve_metadata_path(
     return db_path.with_name(db_path.stem + ".metadata.json")
 
 
-async def _enable_wal(connection: aiosqlite.Connection) -> str:
+async def enable_wal(connection: aiosqlite.Connection) -> str:
     """
     Switch `connection` to WAL journaling and return the mode SQLite actually applied.
 
@@ -60,7 +60,7 @@ async def _enable_wal(connection: aiosqlite.Connection) -> str:
     return mode
 
 
-def _discard_on_mismatch(db_path: pathlib.Path, metadata_path: pathlib.Path) -> Metadata | None:
+def discard_on_mismatch(db_path: pathlib.Path, metadata_path: pathlib.Path) -> Metadata | None:
     """
     Delete an existing database/metadata pair if its schema version doesn't
     match the current one.
@@ -145,17 +145,17 @@ async def open_db(
     """
     resolved_db_path = pathlib.Path(path) if path is not None else default_db_path()
     resolved_db_path.parent.mkdir(parents=True, exist_ok=True)
-    resolved_metadata_path = _resolve_metadata_path(
+    resolved_metadata_path = resolve_metadata_path(
         db_path=resolved_db_path,
         metadata_path=metadata_path,
         db_path_was_given=path is not None,
     )
-    _discard_on_mismatch(resolved_db_path, resolved_metadata_path)
+    discard_on_mismatch(resolved_db_path, resolved_metadata_path)
 
     connection = await aiosqlite.connect(resolved_db_path)
     connection.row_factory = aiosqlite.Row
     try:
-        journal_mode = await _enable_wal(connection)
+        journal_mode = await enable_wal(connection)
         await initialize(connection)
     except Exception:
         # Don't leak the connection (and its background worker thread) if

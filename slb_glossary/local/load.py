@@ -27,7 +27,7 @@ def get_field(row: typing.Mapping[str, typing.Any], name: str | None) -> typing.
     return None
 
 
-def _parse_related(raw: typing.Any) -> tuple[RelatedTerm, ...] | None:
+def parse_related(raw: typing.Any) -> tuple[RelatedTerm, ...] | None:
     """
     Parse a related-terms cell/value into a tuple of `RelatedTerm`.
 
@@ -100,7 +100,7 @@ def record_to_result(
     language = get_field(row, language_field)
     image = get_field(row, image_field)
     image_caption = get_field(row, image_caption_field)
-    related = _parse_related(get_field(row, related_field))
+    related = parse_related(get_field(row, related_field))
 
     return SearchResult(
         term=str(term),

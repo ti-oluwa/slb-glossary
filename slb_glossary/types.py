@@ -2,6 +2,7 @@
 
 import dataclasses
 import enum
+import sys
 import typing
 from collections.abc import AsyncIterable, Iterable, Sequence
 
@@ -16,7 +17,7 @@ __all__ = [
 ]
 
 
-class SearchMode(enum.StrEnum):
+class SearchMode(str, enum.Enum):
     """
     Ranking strategy for searching or scoring glossary terms, local or live.
 

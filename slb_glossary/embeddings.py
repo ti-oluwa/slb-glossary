@@ -48,8 +48,8 @@ def load_model() -> typing.Any:
     # Both fire on *every* call, not just the first, because of the
     # `force_download` default noted below so we quiet them here rather than
     # relying on the caller to have configured third-party loggers.
-    for noisy_logger_name in ("httpx", "httpcore", "huggingface_hub", "filelock"):
-        logging.getLogger(noisy_logger_name).setLevel(logging.WARNING)
+    for logger_name in ("httpx", "httpcore", "huggingface_hub", "filelock"):
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
     try:
         from huggingface_hub.utils.tqdm import disable_progress_bars
 

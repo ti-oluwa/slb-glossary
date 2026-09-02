@@ -207,7 +207,7 @@ async def embed_terms(
         rows = tuple(await cursor.fetchall())
 
     if not rows:
-        logger.debug("embed_terms: nothing to embed")
+        logger.debug("`embed_terms`: nothing to embed")
         return 0
 
     started_at = time.monotonic()

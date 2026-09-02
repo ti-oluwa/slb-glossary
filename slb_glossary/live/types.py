@@ -24,7 +24,7 @@ __all__ = [
 ]
 
 
-class BrowserType(enum.StrEnum):  # type: ignore[name-defined]
+class BrowserType(str, enum.Enum):  # type: ignore[name-defined]
     """Playwright browser families `open_session` can launch."""
 
     CHROMIUM = "chromium"

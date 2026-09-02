@@ -79,7 +79,7 @@ class SyncSummary:
     """
 
 
-async def _record_sync(
+async def record_sync(
     db: Database, *, terms_written: int, language: str, interrupted: bool = False
 ) -> SyncSummary:
     """Recompute the local database's totals and persist them to `metadata.json`."""
@@ -171,7 +171,7 @@ async def sync_topics(db: Database, session: Session) -> SyncSummary:
         await session.initialize()
 
     logger.debug("Syncing topic list only (%d topic(s) known to session)", len(session.topics))
-    return await _record_sync(db, terms_written=0, language=session.language.value)
+    return await record_sync(db, terms_written=0, language=session.language.value)
 
 
 async def sync_query(
@@ -246,7 +246,7 @@ async def sync_query(
         batch_size=batch_size,
         persist_on_error=persist_on_error,
     )
-    summary = await _record_sync(
+    summary = await record_sync(
         db,
         terms_written=written,
         language=session.language.value,
@@ -314,7 +314,7 @@ async def sync_topic(
         batch_size=batch_size,
         persist_on_error=persist_on_error,
     )
-    summary = await _record_sync(
+    summary = await record_sync(
         db,
         terms_written=written,
         language=session.language.value,
@@ -401,7 +401,7 @@ async def sync_letter(
         batch_size=batch_size,
         persist_on_error=persist_on_error,
     )
-    summary = await _record_sync(
+    summary = await record_sync(
         db,
         terms_written=written,
         language=session.language.value,
@@ -515,7 +515,7 @@ async def sync_all(
         interrupted = True
         raise
     finally:
-        summary = await _record_sync(
+        summary = await record_sync(
             db,
             terms_written=total_written,
             language=session.language.value,

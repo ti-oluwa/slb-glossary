@@ -50,7 +50,8 @@ def build_fts_query(query: str) -> str:
     tokens = query.strip().split()
     if not tokens:
         return '""'
-    return " AND ".join(f'"{token}"*' for token in tokens)
+
+    return " AND ".join('"' + token.replace('"', '""') + '"*' for token in tokens)
 
 
 async def lexical_search(
