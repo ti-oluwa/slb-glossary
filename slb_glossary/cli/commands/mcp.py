@@ -13,12 +13,13 @@ from slb_glossary.types import Language
 
 __all__ = ["mcp"]
 
-_APP_PATH_IGNORED_OPTIONS = (
+APP_PATH_IGNORED_OPTIONS = (
     "config_path",
     "tools",
     "source",
     "no_local",
     "no_live",
+    "session_mode",
     "allow_write",
     "timeout",
     "auth_tokens",
@@ -30,17 +31,17 @@ _APP_PATH_IGNORED_OPTIONS = (
     "language",
 )
 """
-Option names that only make sense when *building* an `MCPConfig` from
+Option names that only make sense when building an `MCPConfig` from
 flags. Those options are meaningless (and silently ignored, if we let them through) once
 `APP_PATH` hands over an already-built app.
 """
 
 
-def _reject_flags_with_app_path(ctx: click.Context) -> None:
+def reject_flags_with_app_path(ctx: click.Context) -> None:
     """Raise a `click.UsageError` if `APP_PATH` and any config-building flag were both given."""
     explicit = [
         name
-        for name in _APP_PATH_IGNORED_OPTIONS
+        for name in APP_PATH_IGNORED_OPTIONS
         if ctx.get_parameter_source(name) is click.core.ParameterSource.COMMANDLINE
     ]
     if explicit:
@@ -92,6 +93,14 @@ def mcp() -> None:
 )
 @click.option("--no-local", is_flag=True, help="Disable local database access entirely.")
 @click.option("--no-live", is_flag=True, help="Disable live glossary access entirely.")
+@click.option(
+    "--session-mode",
+    type=click.Choice(["eager", "lazy", "per_call"], case_sensitive=False),
+    default=None,
+    help="When the shared browser session opens: 'eager' (at startup), 'lazy' (on the "
+    "first tool call that needs it), or 'per_call' (a fresh session for every call, "
+    "for full isolation). Default: 'lazy'.",
+)
 @click.option(
     "--allow-write",
     is_flag=True,
@@ -169,6 +178,15 @@ def mcp() -> None:
     default=None,
     help="Verbosity of `slb_glossary`'s own logging output.",
 )
+@click.option(
+    "--log-to",
+    default=None,
+    help="Where to send this server's own logging output: a file path, or 'stderr'/"
+    "'stdout'. Default: leave whatever logging is already configured in the process "
+    "untouched. For anything past this (routing different loggers to different "
+    "sinks, a custom LogSink), build the `MCPConfig.logging` field in Python instead "
+    "and pass it via APP_PATH; see the docs.",
+)
 @cli_command
 @click.pass_context
 def serve(
@@ -182,6 +200,7 @@ def serve(
     source: tuple[str, ...],
     no_local: bool,
     no_live: bool,
+    session_mode: str | None,
     allow_write: bool,
     timeout: float,
     auth_tokens: tuple[str, ...],
@@ -192,6 +211,7 @@ def serve(
     rate_limit_algorithm: str,
     language: str | None,
     log_level: str | None,
+    log_to: str | None,
 ) -> None:
     """
     Serve an MCP server, either built from the flags below or loaded from APP_PATH.
@@ -219,7 +239,7 @@ def serve(
         transport_kwargs.update(host=host, port=port)
 
     if app_path is not None:
-        _reject_flags_with_app_path(ctx)
+        reject_flags_with_app_path(ctx)
         app = load_app(app_path)
         run_async(app.run_async(**transport_kwargs))
         return
@@ -232,6 +252,7 @@ def serve(
         RateLimit,
         RateLimitAlgorithm,
         SessionAccess,
+        SessionMode,
         SourcePolicy,
         Timeout,
         resolve_tools,
@@ -250,7 +271,11 @@ def serve(
     if language is not None:
         session_browser = session_browser.update(language=Language(language).value)
 
-    session = SessionAccess(enabled=not no_live, options=session_browser)
+    session = SessionAccess(
+        enabled=not no_live,
+        options=session_browser,
+        mode=SessionMode(session_mode) if session_mode is not None else SessionMode.LAZY,
+    )
     local = LocalAccess(
         enabled=not no_local, allow_write=allow_write, database=glossary_config.local
     )
@@ -287,7 +312,7 @@ def serve(
         timeouts=Timeout(default=timeout or None),
         auth=auth_config,
         rate_limit=rate_limit,
-        logging=MCPConfig.default(language=language).logging.update(level=log_level),
+        logging=MCPConfig.default(language=language).logging.update(level=log_level, sinks=log_to),
     )
     app = MCPApp(config)
     run_async(app.run_async(**transport_kwargs))
