@@ -336,7 +336,14 @@ def read_config_file(path: pathlib.Path) -> dict[str, typing.Any]:
                 "Reading a .toml config requires the 'tomlkit' package. "
                 "Install it with `pip install slb-glossary[config]`."
             ) from exc
-        return dict(tomlkit.parse(text)) if text.strip() else {}
+        # `tomlkit.parse` returns tomlkit's own rich item types (e.g. an
+        # `Array` for a list, not a plain `list`), which round-trip fine
+        # through tomlkit itself but break `tomlkit.dumps` later if they
+        # end up embedded in an otherwise-plain dict (as they do once
+        # passed through `dataclasses.asdict` in `Config.to_dict`).
+        # `.unwrap()` converts the whole parsed document to plain
+        # dict/list/str/int/etc, with no tomlkit-specific types left in it.
+        return tomlkit.parse(text).unwrap() if text.strip() else {}
 
     if suffix in ("yaml", "yml"):
         try:

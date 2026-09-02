@@ -15,13 +15,13 @@ from rich.table import Table
 
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.tui import launch_tui
-from slb_glossary.config import Config
+from slb_glossary.config import Config, _strip_none
 from slb_glossary.errors import ConfigError
 
 __all__ = ["config"]
 
 
-def _load(path: str | None) -> tuple[Config, pathlib.Path]:
+def _load_config(path: str | None) -> tuple[Config, pathlib.Path]:
     """Load a `Config` from `path` (or the default path) and return it with the resolved path."""
     resolved = pathlib.Path(path) if path else Config.default_path()
     if resolved.exists():
@@ -147,23 +147,23 @@ def show(ctx: click.Context, config_path: str | None, output_format: str) -> Non
       slb-glossary config show --format json
       slb-glossary config show --path ~/my-config.toml
     """
-    cfg, _ = _load(_resolve_path(ctx, config_path))
-    data = cfg.to_dict()
+    config, _ = _load_config(_resolve_path(ctx, config_path))
+    data = config.to_dict()
 
     if output_format == "json":
         click.echo(json.dumps(data, indent=2))
         return
     if output_format == "toml":
         try:
-            import tomlkit
+            import tomlkit  # type: ignore[import]
 
-            click.echo(tomlkit.dumps(data), nl=False)
+            click.echo(tomlkit.dumps(_strip_none(data)), nl=False)
             return
         except ImportError:
             pass
     if output_format == "yaml":
         try:
-            import yaml
+            import yaml  # type: ignore[import]
 
             click.echo(yaml.safe_dump(data, sort_keys=False), nl=False)
             return
@@ -188,9 +188,9 @@ def get(ctx: click.Context, key: str, config_path: str | None) -> None:
       slb-glossary config get local.prefer_local
       slb-glossary config get session.headless --path ~/my-config.toml
     """
-    cfg, _ = _load(_resolve_path(ctx, config_path))
+    config, _ = _load_config(_resolve_path(ctx, config_path))
     try:
-        value = cfg.get(key)
+        value = config.get(key)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(json.dumps(value) if not isinstance(value, str) else value)
@@ -222,13 +222,13 @@ def set_(
       slb-glossary config set session.headless false --path ~/my-config.toml
     """
     resolved_path = _resolve_path(ctx, config_path)
-    cfg, resolved = _load(resolved_path)
+    config, resolved = _load_config(resolved_path)
     try:
-        cfg.set(key, value)
+        config.set(key, value)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
-    cfg.to_file(resolved, format=output_format)
-    click.echo(f"Set {key} = {cfg.get(key)!r} in {resolved}")
+    config.to_file(resolved, format=output_format)
+    click.echo(f"Set {key} = {config.get(key)!r} in {resolved}")
 
 
 @config.command("init")
@@ -321,7 +321,7 @@ def wizard(ctx: click.Context, config_path: str | None) -> None:
       slb-glossary config wizard --path ~/my-config.toml
     """
     resolved_path = _resolve_path(ctx, config_path)
-    cfg, resolved = _load(resolved_path)
+    config, resolved = _load_config(resolved_path)
     console = Console()
 
     console.print(
@@ -336,8 +336,8 @@ def wizard(ctx: click.Context, config_path: str | None) -> None:
         )
     )
 
-    for field in dataclasses.fields(cfg):
-        section_value = getattr(cfg, field.name)
+    for field in dataclasses.fields(config):
+        section_value = getattr(config, field.name)
         if not dataclasses.is_dataclass(section_value):
             continue
 
@@ -362,7 +362,7 @@ def wizard(ctx: click.Context, config_path: str | None) -> None:
             if raw == str(current):
                 continue
             try:
-                cfg.set(key, raw)
+                config.set(key, raw)
             except ConfigError as exc:
                 click.secho(f"  Skipped ({exc})", fg="red")
 
@@ -376,5 +376,5 @@ def wizard(ctx: click.Context, config_path: str | None) -> None:
         output_format = click.prompt(
             "File format", type=click.Choice(["toml", "json", "yaml"]), default="toml"
         )
-    cfg.to_file(resolved, format=output_format)
+    config.to_file(resolved, format=output_format)
     click.secho(f"Saved to {resolved}", fg="green")
