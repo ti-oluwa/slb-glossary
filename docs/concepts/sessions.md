@@ -1,12 +1,12 @@
 # Sessions and the Browser
 
-Every part of this library that talks to the live glossary (the CLI, `slb_glossary.live`, the MCP server) ultimately does so through a `Session`: an open browser, loaded with the glossary's topic list and term count, ready to be searched. This page covers what that actually is and why it works the way it does, since a handful of design choices here explain behavior that shows up throughout [Live Search](../library/live-search.md) and the CLI.
+Every part of this library that talks to the live glossary (the CLI, `slb_glossary.live`, the MCP server) ultimately does so through a `Session`. It is an open browser, loaded with the glossary's topic list and term count, ready to be searched. This page covers what that actually is and why it works the way it does, since a handful of design choices here explain behavior that shows up throughout [Live Search](../library/live-search.md) and the CLI.
 
 ---
 
 ## Why a browser at all?
 
-The [SLB Energy Glossary](https://glossary.slb.com/) is a JavaScript single-page application: its content is rendered client-side, and there's no public API or static HTML to fetch and parse directly. `slb-glossary` opens a real (headless, by default) browser, navigates it to the glossary the way a person's browser would, and reads the rendered result. That's slower than an HTTP request to a JSON endpoint, and it's the reason this library reaches for a local cache ([Local Search and Cache](../library/local-search.md)) as heavily as it does: the browser round trip is the one genuinely expensive step in the whole system.
+The [SLB Energy Glossary](https://glossary.slb.com/) is a JavaScript single-page application: its content is rendered client-side, and there's no public API or static HTML to fetch and parse directly. `slb-glossary` opens a real (headless, by default) browser, navigates it to the glossary the way a person's browser would, and reads the rendered result. That's slower than an HTTP request to a JSON endpoint, and it's the reason this library reaches for a local cache ([Local Search and Cache](../library/local-search.md)) as heavily as it does. The browser round trip is the one genuinely expensive step in the whole system.
 
 ## Why patchright, not plain Playwright
 
@@ -50,9 +50,7 @@ async with slb.live.session(
     ...
 ```
 
-This only governs that one initial-load retry, not every network call a session makes afterward; ordinary page timeouts are governed by `timeout` instead.
-
-## RetryPolicy elsewhere in the library
+## `RetryPolicy` elsewhere in the library
 
 `RetryPolicy` isn't specific to session startup; it's a general-purpose retry configuration used in a few other places too, and available for your own code as well:
 
@@ -70,7 +68,7 @@ async def flaky_call() -> str: ...
 result = await retry(flaky_call, policy=RetryPolicy(attempts=3, base_delay=500))
 ```
 
-`retry` also accepts `until`, a callable checked against a successful result before deciding the call actually succeeded, e.g. `until=lambda r: r is not None`, for retrying a call that returns a falsy-but-not-erroring result you'd still like another attempt at.
+`retry` also accepts `until`, a callable checked against a successful result before deciding the call actually succeeded, e.g. `until=lambda r: r is not None`, for retrying a call that returns a falsy, but not erroring result you'd still like another attempt at.
 
 ## Where to go from here
 

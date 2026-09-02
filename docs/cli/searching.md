@@ -6,7 +6,7 @@ This page covers every lookup command. All of them share the [source model](inde
 
 ## `search`
 
-Ranked, fuzzy-ish search: give it a term, a partial phrase, or even a plain-English question, and it finds the closest matching definitions.
+This command does a ranked, fuzzy-ish search. Give it a term, a partial phrase, or even a plain-English question, and it finds the closest matching definitions.
 
 ```bash
 slb search "what is porosity"
@@ -21,7 +21,7 @@ slb search "define porosity"
 slb search "tell me about porosity"
 ```
 
-A matched term can carry more than one definition, one per topic it's filed under, so `search` can return more rows than `--limit` implies: `--limit` bounds how many *terms* are looked up, not how many definitions come back for them.
+A matched term can carry more than one definition, one per topic it's filed under, so `search` can return more rows than `--limit` implies. `--limit` bounds how many *terms* are looked up, not how many definitions come back for them.
 
 ```bash
 slb search "drilling fluid" --topic Drilling --limit 10
@@ -78,7 +78,7 @@ slb compare shale sandstone limestone dolomite --concurrency 4
 
 ## `related`
 
-Lists the terms one definition's own "related terms" section links to, without printing the full definition text itself:
+Lists related terms to the term you give it, one per line. The related terms are the ones that appear as links in the definition's text, so this is a way to explore the glossary's internal network of definitions.:
 
 ```bash
 slb related "water saturation"
@@ -96,7 +96,7 @@ Fetches every term filed under one topic, rather than searching for a specific w
 slb terms Geophysics
 ```
 
-`TOPIC` doesn't need to be an exact match. The closest topic(s) the glossary actually has are used, so `slb terms drilling` still finds "Drilling Fluids" and any other topic containing that word. Unlike `search`, `terms` returns at most one result per term: the one definition filed under the topic you asked for, not every definition that term happens to have across other topics too.
+`TOPIC` doesn't need to be an exact match. The closest topic(s) the glossary actually has are used, so `slb terms drill fluids` still finds "Drilling Fluids" and any other topic containing that word. Unlike `search`, `terms` returns at most one result per term, the one definition filed under the topic you asked for, not every definition that term happens to have across other topics too.
 
 ```bash
 slb terms "Well Completions" --limit 20
@@ -151,4 +151,4 @@ slb urls fetch "https://glossary.slb.com/en/terms/p/porosity"
 
 ## Where to go from here
 
-Every command on this page can save what it finds instead of, or in addition to, printing it: see [Saving, Output and Config Files](configuration.md). For working offline on purpose, building up the local cache ahead of time, or managing that cache directly, see [Local Cache and Sync](sync.md). For the full flag list of any command shown here, see [CLI Commands](../api/cli.md), or just run it with `--help`.
+Every command on this page can save what it finds instead of, or in addition to, printing it. See [Saving, Output and Config Files](configuration.md). For working offline on purpose, building up the local cache ahead of time, or managing that cache directly, see [Local Cache and Sync](sync.md). For the full flag list of any command shown here, see [CLI Commands](../api/cli.md), or just run it with `--help`.

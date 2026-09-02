@@ -1,6 +1,6 @@
 # Local Search and Cache
 
-This page covers `slb_glossary.local`: a SQLite database on your own disk that answers instantly and needs no network or browser once something is in it.
+This page covers `slb_glossary.local`'s API. It uses a SQLite database on your own disk that answers instantly and needs no network or browser once something is in it.
 
 ---
 
@@ -24,7 +24,7 @@ asyncio.run(main())
 
 Pass no path (`slb.local.database()`) and it opens the same default-location database the CLI uses, resolved via [`platformdirs`](https://github.com/tox-dev/platformdirs) (`slb local path` prints exactly where that is). Passing an explicit path, as above, is how you keep a script's own database separate from your everyday CLI usage.
 
-Unlike `slb_glossary.live`, `slb_glossary.local.search` isn't an async generator: it returns a plain `list[SearchResult]`, since there's no network round trip to stream results out of incrementally.
+Unlike `slb_glossary.live`, `slb_glossary.local` functions do not return async generators. They returns a plain `list[SearchResult]` (in the case of `local.search`), since there's no network round trip to stream results out of incrementally.
 
 ---
 
@@ -55,7 +55,7 @@ This writes every `batch_size` results as they arrive rather than buffering the 
 
 ### 2. `slb_glossary.query`'s `persist=True`
 
-Covered in full on [Combined Search with slb_glossary.query](query.md#persist-caching-live-results-as-you-go); the short version is that `slb.search(query, db=db, session=session, persist=True)` does the fetch-then-`upsert_results_incrementally` dance above for you.
+Covered in full on [Combined Search with `slb_glossary.query`](query.md#persist-caching-live-results-as-you-go); the short version is that `slb.search(query, db=db, session=session, persist=True)` does the fetch-then-`upsert_results_incrementally` logic above for you.
 
 ### 3. Import your own data
 
@@ -76,7 +76,7 @@ This is the library counterpart of `slb local import`, useful for seeding the da
 
 ---
 
-## Search modes: lexical, semantic, hybrid
+## Search modes: `lexical`, `semantic`, `hybrid`
 
 ```python
 results = await slb.local.search(db, "reservoir rock", mode="lexical")  # the default
@@ -128,4 +128,4 @@ print(total, "terms across", len(topics), "topics")
 terms = await slb.local.get_terms_on(db, "Drilling Fluids", limit=10)
 ```
 
-`get_terms_on` mirrors `slb_glossary.live.get_terms_on`'s shape, but reads only what's already local, exactly like every other `slb_glossary.local` function: no live fallback here, ever, regardless of what's cached or not. That fallback behavior is what `slb_glossary.query` adds. See [Combined Search with slb_glossary.query](query.md).
+`get_terms_on` mirrors `slb_glossary.live.get_terms_on`'s shape, but reads only what's already local, exactly like every other `slb_glossary.local` function. There is no live fallback here, ever, regardless of what is cached or not. That fallback behavior is what `slb_glossary.query` adds. See [Combined Search with slb_glossary.query](query.md).

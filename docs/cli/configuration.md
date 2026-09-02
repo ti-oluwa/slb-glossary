@@ -1,6 +1,6 @@
 # Saving, Output and Config Files
 
-This page covers what happens to a result after it's found: printing it, saving it, and setting defaults so you're not retyping the same flags on every command.
+This page covers what happens to a result after it's found. Printing it, saving it, and setting defaults so you're not retyping the same flags on every command.
 
 ---
 
@@ -12,7 +12,7 @@ Every lookup command (`search`, `define`, `compare`, `related`, `terms`, `random
 slb search "gas lift" --save gas_lift.json
 ```
 
-The file format is chosen from the extension you give: `.json`, `.csv`, or `.xlsx` (the last needs the `xlsx` extra installed, since it depends on `openpyxl`). Pass `--format` to override the format independently of the extension, e.g. to save a file named `results.txt` as CSV anyway:
+The file format is chosen from the extension you give; `.json`, `.csv`, or `.xlsx` (the last needs the `xlsx` extra installed, since it depends on `openpyxl`). Pass `--format` to override the format independently of the extension, e.g. to save a file named `results.txt` as CSV anyway:
 
 ```bash
 slb search "gas lift" --save results.txt --format csv
@@ -62,7 +62,7 @@ slb config path
 slb config
 ```
 
-Run with no subcommand, `config` opens a guided wizard: section by section, it shows you each setting's current value and lets you accept it or type a new one. This is the easiest way to set up a config file the first time.
+Run with no subcommand, `config` opens a guided wizard. Section by section, it shows you each setting's current value and lets you accept it or type a new one. This is the easiest way to set up a config file the first time.
 
 ### The scriptable way
 
@@ -73,7 +73,7 @@ slb config set session.headless false    # change one setting and save
 slb config show --format json            # print the full effective config
 ```
 
-Settings are addressed with a dotted path: `session.*` for browser/session behavior (`headless`, `browser_type`, `timeout`, `retry.*`, ...), `local.*` for the database (`data_dir`, `db_filename`, `sync_max_age_days`, ...), `output.*` for display defaults (`default_format`, `show_topic`, ...). `config show` prints all three sections at once:
+Settings are addressed with a dotted path. `session.*` for browser/session behavior (`headless`, `browser_type`, `timeout`, `retry.*`, ...), `local.*` for the database (`data_dir`, `db_filename`, `sync_max_age_days`, ...), `output.*` for display defaults (`default_format`, `show_topic`, ...). `config show` prints all three sections at once:
 
 ```bash
 slb config set session.browser_type firefox
@@ -126,7 +126,7 @@ Every command accepts `--log-level`, `--log-to`, and `--log-sink`, for seeing (o
 slb search porosity --log-level debug --log-to run.log
 ```
 
-`--log-to` accepts a file path, or the literal `stderr`/`stdout`. `--log-sink module:ClassName` points at your own sink class instead (see [Logging](../library/logging.md#sinks) for what a sink needs to implement), and takes priority over `--log-to` if both are given. These three flags are a thin wrapper over `slb_glossary.logging.configure_logging`; see [Logging](../library/logging.md) for the full library-side API, including routing different parts of the library to different sinks at once, which the CLI's flags don't expose.
+`--log-to` accepts a file path, or the literal `stderr`/`stdout`. `--log-sink module:ClassName` points at your own sink class instead (see [Logging](../library/logging.md#sinks) for what a sink needs to implement), and takes priority over `--log-to` if both are given. These three flags are a wrapper over `slb_glossary.logging.configure_logging`; see [Logging](../library/logging.md) for the full library-side API, including routing different parts of the library to different sinks at once, which the CLI's flags don't expose.
 
 ---
 

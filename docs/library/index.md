@@ -2,7 +2,7 @@
 
 This section assumes basic comfort with `async`/`await`. If you haven't written `async def`/`await` code before, [Real Python's asyncio walkthrough](https://realpython.com/async-io-python/) is worth reading first. If you haven't installed the library yet, see [Installation](../getting-started/installation.md).
 
-`slb-glossary` is fully typed (it ships a `py.typed` marker), so everything below works with autocomplete and static type checking out of the box.
+`slb-glossary` is fully typed (it ships a `py.typed` marker), so everything below works with autocomplete and standard type checking out of the box.
 
 ---
 
@@ -16,7 +16,7 @@ Every capability in this library lives in one of three places, and they build on
 | `slb_glossary.local` | A SQLite database on your own disk | Instant | Nothing extra for lexical search; the `semantic` extra for semantic/hybrid search |
 | `slb_glossary.query` | Both of the above, combined | As fast as whichever one actually answers | Whichever of `live`/`local` the call in question needs |
 
-You can reach for any one of these on its own. The next three pages cover them in that order, since it roughly mirrors how a real script's needs tend to grow: a plain live search first, a local cache once you're calling it more than once, then `slb_glossary.query` once you want the two combined automatically without writing that logic yourself.
+You can reach for any one of these on its own. The next three pages cover them in that order.
 
 ## Every function returns the same two shapes
 

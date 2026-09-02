@@ -1,6 +1,6 @@
 # Logging
 
-Every part of this library logs through one shared logger, `slb_glossary`'s own package root logger, so a single call routes everything to wherever you want it: a file for later inspection, stderr for whatever's watching the process live, or several destinations split by which part of the library produced each record.
+Every part of this library logs through one shared logger, `slb_glossary`'s own package root logger, so a single call routes everything to wherever you want it. That can be a file for later inspection, `stderr` for whatever's watching the process live, or several destinations split by which part of the library produced each record.
 
 ---
 
@@ -21,7 +21,7 @@ slb.logging.configure_logging(sinks=[slb.log.StderrSink(), "app.log"])  # both a
 
 ## Sinks
 
-A **sink** is anywhere a log line can go. `slb_glossary.logging` (aliased `slb.log`) ships four:
+A **sink** is anywhere a (formatted) log line can go. `slb_glossary.logging` (aliased `slb.log`) ships four defautl sinks, and you can write your own as long as it satisfies the `LogSink` protocol (a `write(message)` method; `flush()`/`close()` optional):
 
 | Sink | Writes to |
 |---|---|
@@ -62,7 +62,7 @@ For changing verbosity without touching where output goes at all, `configure_log
 
 ## Where a session's own browser logs go
 
-`session()`'s `log_sink` parameter is independent of the rest of this page: it routes only that one session's own browser-automation log lines (page navigation, retries, timeouts), leaving everything else on whatever `configure_logging` set up:
+`session()`'s `log_sink` parameter is independent of the rest of this page. It routes only that one session's own browser-automation log lines (page navigation, retries, timeouts), leaving everything else on whatever `configure_logging` set up:
 
 ```python
 async with slb.live.session(log_sink=slb.log.FileSink("./this-session.log")) as session:

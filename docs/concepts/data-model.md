@@ -1,12 +1,12 @@
 # The Data Model
 
-Every function across the CLI, `slb_glossary.live`, `slb_glossary.local`, and `slb_glossary.query` ultimately hands you the same few types. This page is the single place they're all documented in full, so the rest of this documentation can link back here instead of re-explaining a field list on every page.
+Every function across the CLI, `slb_glossary.live`, `slb_glossary.local`, and `slb_glossary.query` ultimately hands you the same few types. This page documents this types so you understand them and know what fields each type holds.
 
 ---
 
 ## `SearchResult`
 
-A single term definition, extracted from one glossary page. A plain `typing.NamedTuple`, so it unpacks positionally, supports attribute access, and is immutable.
+This is a single term lookup result, extracted from a glossary term detail page.  It is a plain `typing.NamedTuple`, so it unpacks positionally, supports attribute access, and is immutable.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -27,16 +27,16 @@ print(result.value.term, result.value.definition)  # by name
 print(result.value.asdict())  # as a plain dict
 ```
 
-Only `term`, `definition`, `topic`, and `url` are ever filtered/matched on; `image`, `image_caption`, `related`, and `language` are along for the ride, carried through from whichever page produced the result.
+Only `term`, `definition`, `topic`, and `url` are ever filtered/matched on; `image`, `image_caption`, `related`, and `language` are mostly meta information, carried through from whichever page produced the result.
 
 !!! note "Why so much is `Optional`"
-    A `SearchResult` reflects what one specific glossary page actually had, not a guaranteed-complete schema. Some term pages have no image; some have no related-terms section. `definition` itself can be `None` if a page's structure defeated parsing, which is why it's worth checking for `None` before assuming you have text to print, especially in scripts fed from `--live`/live-fallback results rather than a database you've already inspected.
+    A `SearchResult` reflects what one specific glossary term page actually had, not a guaranteed-complete schema. Some term pages have no image; some have no related-terms. `definition` itself can be `None` if a page's structure defeated parsing, which is why it's worth checking for `None` before assuming you have text to print, especially in scripts fed mostly from the live-site results.
 
 ---
 
 ## `RelatedTerm`
 
-One entry in a `SearchResult.related` tuple: a link from within a definition's text to another term.
+An entry in a `SearchResult.related` tuple. It is a (hyper)link from within a definition's text to another term.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -62,7 +62,7 @@ Language.ENGLISH  # "en"
 Language.SPANISH  # "es"
 ```
 
-A `Session` is bound to one language edition for its entire lifetime (`session()`'s `language` parameter); a local database can hold terms from both editions at once, distinguished by each stored `SearchResult.language`. Passing `language` to a query function filters (for a local read) or validates against the session's own language (for a live read), see `get_term`'s `language` parameter in [Combined Search](../library/query.md).
+A `Session` is bound to one language edition for its entire lifetime (`session()`'s `language` parameter); a local database can hold terms from both language editions at once, distinguished by each stored `SearchResult.language`. Passing `language` to a query function filters (for a local read) or validates against the session's own language (for a live read), see `get_term`'s `language` parameter in [Combined Search](../library/query.md).
 
 ---
 
@@ -82,22 +82,22 @@ Covered in full on its own page: [Search Modes](search-modes.md).
 
 ## `QueryResult`
 
-Not a data model for glossary content itself, but the wrapper every `slb_glossary.query` function returns its answer in, adding provenance:
+This is not a data model for glossary content itself, but the wrapper the `slb_glossary.query` API functions return its results in, adding provenance:
 
 | Field | Type | Notes |
 |---|---|---|
-| `value` | `T` | The actual answer: a `SearchResult`, `SearchResult \| None`, a tuple of `RelatedTerm`s, etc., depending on which function returned it. |
+| `value` | `T` | The actual result: a `SearchResult`, `SearchResult \| None`, a tuple of `RelatedTerm`s, etc., depending on which function returned it. |
 | `source` | `Source` | `Source.LOCAL` or `Source.LIVE`, which one actually answered this call. |
 | `persisted` | `bool` | Whether this result was written to the local database as part of this call. |
 | `score` | `float \| None` | A relevance score in `[0.0, 1.0]` for `value` against the query it was found for, where scoring is meaningful (an exact `get_term` match scores `constants.exact_match_score`, `1.0` by default). `None` where it doesn't apply, e.g. a topic listing or a related-terms lookup. |
 
-Covered in full, with examples, in [Combined Search with slb_glossary.query](../library/query.md#queryresult-knowing-where-an-answer-came-from).
+Covered in full, with examples, in [Combined Search with `slb_glossary.query`](../library/query.md#queryresult-knowing-where-an-answer-came-from).
 
 ---
 
 ## `SimilarResult`
 
-The shape `get_term`/`compare` return instead of a bare `SearchResult` when called with `with_similar=True`: an exact match, plus nearby alternatives, for a "did you mean" experience when the exact match is `None` (or just to see what else is nearby even when it isn't).
+The is the data type `get_term`/`compare` return inside a `QueryResult` instead of a bare `SearchResult` when called with `with_similar=True`. It contains an exact match, plus nearby alternatives, for a "did you mean" experience when the exact match is `None` (or just to see what else is nearby even when it isn't).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -111,7 +111,7 @@ if similar_result.exact is None and similar_result.similar:
     print("Did you mean:", similar_result.similar[0].value.term)
 ```
 
-Covered in full, with examples, in [Combined Search with slb_glossary.query](../library/query.md#getting-similar-results-alongside-an-exact-match).
+Covered in full, with examples, in [Combined Search with `slb_glossary.query`](../library/query.md#getting-similar-results-alongside-an-exact-match).
 
 ---
 
@@ -119,4 +119,4 @@ Covered in full, with examples, in [Combined Search with slb_glossary.query](../
 
 - [Live Search](../library/live-search.md) and [Local Search and Cache](../library/local-search.md) both hand back bare `SearchResult`s (or lists/streams of them).
 - [Combined Search with slb_glossary.query](../library/query.md) wraps the same `SearchResult`s in `QueryResult`.
-- The CLI's tables and `--json` output are a formatted view of exactly these fields; see [Searching and Defining Terms](../cli/searching.md).
+- The CLI's tables and `--json` output are a formatted view of exactly these data types' fields; see [Searching and Defining Terms](../cli/searching.md).

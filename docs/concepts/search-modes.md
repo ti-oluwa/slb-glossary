@@ -8,15 +8,15 @@ Every ranked search this library does, local or live, uses one of three ranking 
 
 **The default. Needs nothing beyond the base install.**
 
-Lexical search ranks by [bm25](https://en.wikipedia.org/wiki/Okapi_BM25), a full-text ranking algorithm, over the term, definition, and topic text actually stored locally. It only ever matches words that are actually present (or close misspellings of them, if `fuzzy=True`): searching "rock that holds fluid" under lexical mode will not find a term like "porous" unless those specific words appear somewhere in its stored definition.
+Lexical search ranks by [bm25](https://en.wikipedia.org/wiki/Okapi_BM25), a full-text ranking algorithm, over the term, definition, and topic text actually stored locally. It only ever matches words that are actually present (or close misspellings of them). Searching "rock that holds fluid" under lexical mode will not find a term like "porous" unless those specific words appear somewhere in its stored definition.
 
-Live search uses a related but simpler technique, since there's no whole result set to rank against ahead of time: plain token overlap between your query and each candidate term/topic, scored as results stream in one page at a time.
+Live search uses a related but simpler technique, since there's no whole result set to rank against ahead of time. It calculates the plain token overlap between your query and each candidate term/topic, scored as results stream in one page at a time.
 
 ## Semantic: matching meaning
 
 **Needs the `semantic` extra installed (`uv add "slb-glossary[semantic]"`), and terms already embedded first.**
 
-Semantic search compares *embeddings*: numeric vectors that capture a phrase's meaning, produced by a small local model ([`minishlab/potion-retrieval-32M`](https://huggingface.co/minishlab/potion-retrieval-32M), via [model2vec](https://github.com/MinishLab/model2vec)), downloaded once and cached, with no network call needed per query afterward. Two phrases with similar meanings end up with similar vectors even if they don't share any words: searching "rock that holds fluid" surfaces "porous" this way, since the two land close together in vector space (measured by cosine similarity), despite sharing no words at all.
+Semantic search compares *embeddings*: numeric vectors that capture a phrase's meaning, produced by a small local model ([`minishlab/potion-retrieval-32M`](https://huggingface.co/minishlab/potion-retrieval-32M), via [model2vec](https://github.com/MinishLab/model2vec)), downloaded once and cached, with no network call needed per query afterward. Two phrases with similar meanings end up with similar vectors even if they don't share any words. Searching "rock that holds fluid" surfaces "porous" this way, since the two land close together in vector space (measured by cosine similarity), despite sharing no words at all.
 
 This only works on terms you've already run through `embed_terms`:
 
@@ -26,12 +26,12 @@ await slb.local.embed_terms(db)  # embeds everything not already embedded
 
 From the CLI, the equivalent is `slb local embed` - see [Local Cache and Sync](../cli/sync.md#embedding-for-semantichybrid-search).
 
-`embed_terms` is a one-time (or periodic) cost, separate from ordinary syncing: syncing fetches and stores terms, `embed_terms` computes and stores their vectors. Run it again after a `sync` that added new terms, with `only_missing=True` (the default) so it only pays for what's actually new.
+`embed_terms` is a one-time (or periodic) cost, separate from ordinary syncing. Syncing fetches and stores terms, `embed_terms` computes and stores their vectors. Run it again after a `sync` that added new terms, with `only_missing=True` (the default) so it only pays for what's actually new.
 
 !!! warning "Semantic scores aren't on the same scale as lexical scores"
-    Lexical (and hybrid) scores are calibrated to roughly `[0.0, 1.0]`. Semantic search's cosine-similarity scores aren't calibrated the same way, which matters if you're pairing `mode="semantic"` with `source=Source.AUTO`'s `relevance_threshold`: that threshold is being compared against an uncalibrated number in that combination. `mode="hybrid"` is the better pairing with `Source.AUTO` for exactly this reason.
+    Lexical (and hybrid) scores are calibrated to roughly `[0.0, 1.0]`. Semantic search's cosine-similarity scores aren't calibrated the same way, which matters if you're pairing `mode="semantic"` with `source=Source.AUTO`'s `relevance_threshold` as that threshold will be compared against an uncalibrated number in that combination. `mode="hybrid"` is better paired with `Source.AUTO` for exactly this reason.
 
-Live search has no semantic mode at all: there's no local embedding table to compare against for a page that was just fetched, so semantic (and hybrid) ranking is local-only.
+Live search has no semantic mode at all. There's no local embedding table to compare against for a page that was just fetched, so semantic (and hybrid) ranking is local-only.
 
 ## Hybrid: both, fused
 

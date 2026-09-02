@@ -49,7 +49,7 @@ toolset = MCPToolset(
 )
 ```
 
-This gives the agent a local-only, two-tool glossary: no browser, no network per call, and no ability to look up anything not already cached. Good for an agent that should be fast and predictable, at the cost of not finding terms nobody's searched for yet.
+This gives the agent a local-only, two-tool glossary. No browser, no network per call, and no ability to look up anything not already cached. Good for an agent that should be fast and predictable, at the cost of not finding terms nobody's searched for yet.
 
 !!! warning "Don't hand an agent write access without meaning to"
     `--tools all --allow-write` exposes `glossary_sync`, which fetches from the live site and writes to your local database, an unusual thing to let an LLM decide to do on its own initiative from a natural-language prompt. Unless the agent's whole job is explicitly to manage the local cache, leave `--allow-write` off and let it stick to `read_only` (the default).
@@ -63,11 +63,11 @@ glossary = MCPToolset(StdioTransport(command="slb", args=["mcp", "serve"])).pref
 agent = Agent("anthropic:claude-sonnet-4-5", toolsets=[glossary, other_toolset])
 ```
 
-Every tool this server exposes is already prefixed `glossary_` on its own (`glossary_search`, `glossary_get_term`, ...; see [Running an MCP Server](mcp-server.md#choosing-which-tools-are-exposed)), so an additional `.prefixed(...)` is mainly useful if you're running more than one instance of this same server side by side, distinguished some other way (different `--config`, different `--language`).
+Every tool this server exposes is already prefixed with `glossary_` on its own (`glossary_search`, `glossary_get_term`, ...; see [Running an MCP Server](mcp-server.md#choosing-which-tools-are-exposed)), so an additional `.prefixed(...)` is mainly useful if you're running more than one instance of this same server side by side, distinguished some other way (different `--config`, different `--language`).
 
 ## Running in-process, without a subprocess
 
-If your agent and the glossary server live in the same codebase, there's a faster option than `StdioTransport`: hand `MCPToolset` the `fastmcp.FastMCP` server object directly, and it connects in-process, no subprocess, no network round trip:
+If your agent and the glossary server live in the same codebase, there's a faster option than `StdioTransport`. You can hand `MCPToolset` the `fastmcp.FastMCP` server object directly, and it connects in-process, no subprocess, no network round trip:
 
 ```python
 import slb_glossary.mcp as slb_mcp
@@ -81,7 +81,7 @@ toolset = MCPToolset(app.server())  # in-process: same interpreter, no subproces
 agent = Agent("anthropic:claude-sonnet-4-5", toolsets=[toolset])
 ```
 
-`app.server()` builds (once, lazily) and returns the underlying `FastMCP` instance the CLI's `slb mcp serve` would otherwise run as a standalone process. This is the better choice for tests, a single-process deployment, or anywhere you're already importing `slb_glossary` directly rather than shelling out to the `slb` command, you get the exact same tool set and config surface covered in [Running an MCP Server](mcp-server.md#embedding-the-server-in-your-own-python-app), just without paying for a second process.
+`app.server()` builds and returns the underlying `FastMCP` instance the CLI's `slb mcp serve` would otherwise run as a standalone process. This is the better choice for tests, a single-process deployment, or anywhere you're already importing `slb_glossary` directly rather than shelling out to the `slb` command, you get the exact same tool set and config surface covered in [Running an MCP Server](mcp-server.md#embedding-the-server-in-your-own-python-app), just without paying for a second process.
 
 ## Managing the connection's lifecycle explicitly
 
@@ -99,4 +99,4 @@ async with agent:
 
 ## Where to go from here
 
-For every flag `slb mcp serve` accepts, and what each tool actually does underneath, see [Running an MCP Server](mcp-server.md). For anything not covered here (resources, sampling, per-user authentication for a multi-tenant agent), see [Pydantic AI's own MCP client documentation](https://ai.pydantic.dev/mcp/client/), which this page deliberately doesn't try to duplicate in full.
+For every flag `slb mcp serve` accepts, and what each tool actually does underneath, see [Running an MCP Server](mcp-server.md). For anything not covered here (resources, sampling, per-user authentication for a multi-tenant agent), see [Pydantic AI's own MCP client documentation](https://ai.pydantic.dev/mcp/client/), which this page doesn't explain in full.

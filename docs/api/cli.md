@@ -1,6 +1,6 @@
 # CLI Commands
 
-A dense, structural reference for every `slb` command and flag. For explanations and worked examples, see [Using the CLI](../cli/index.md). Run any command with `--help` for this same information from the terminal.
+This page contains a dense, structural reference for every `slb` command and flag. For explanations and worked examples, see [Using the CLI](../cli/index.md). Run any command with `--help` for this same information from the terminal.
 
 Most commands share three groups of flags: **source** (where to read from), **session** (how the browser behaves, for a command that might touch the live site), and **output** (saving/printing). They're documented once here, then referenced by name in each command's own table.
 

@@ -11,7 +11,7 @@ results = [lookup.value async for lookup in slb.search("black oil", db=db, sessi
 await slb.save(results, "black_oil.json")
 ```
 
-`save` picks a writer from `destination`'s file extension, the same way the CLI's `--save` does. Pass `format` to override that independently of the extension:
+`save` picks a writer for `destination`'s file based on its extension, the same way the CLI's `--save` does. Pass `format` to override that independently of the extension:
 
 ```python
 await slb.save(results, "black_oil.txt", format="csv")
@@ -79,7 +79,7 @@ See [`slb_glossary.readers`](../api/library.md#slb_glossaryreaders) for the full
 
 ## `Config`: the same settings, in code
 
-Everything the CLI's [`config` command](../cli/configuration.md#the-config-command) manages is a plain, typed dataclass underneath: `Config`, with three sections mirroring the CLI's dotted-key namespaces:
+Everything the CLI's [`config` command](../cli/configuration.md#the-config-command) manages is a plain, typed dataclass underneath. `Config`, with three sections the CLI's dotted-key namespaces mirror:
 
 ```python
 from slb_glossary import Config
@@ -104,7 +104,7 @@ config.session.headless = False
 config.to_file("my-config.toml")  # format inferred from the extension
 ```
 
-`Config.load()` is the one you'll reach for most: unlike `from_file`, it never raises `FileNotFoundError`, so a script can always call it and get *something* usable back, config file or not.
+`Config.load()` is what you'll reach for most. Unlike `from_file`, it never raises `FileNotFoundError`, so a script can always call it and get *something* usable back, config file or not.
 
 ### Reading and writing one setting at a time
 

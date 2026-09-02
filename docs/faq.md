@@ -33,7 +33,7 @@ slb config show --format json
 
 ## Do I need the `semantic` extra?
 
-Only for `--mode semantic`/`--mode hybrid` (CLI) or `mode="semantic"`/`"hybrid"` (library), and only on the local database, live search has no semantic mode at all. Plain lexical search (the default everywhere) needs nothing beyond the base install. See [Search Modes](concepts/search-modes.md) for what the extra actually buys you, and [`local embed`](cli/sync.md#embedding-for-semantichybrid-search)/`slb_glossary.local.embed_terms` for the one-time step semantic/hybrid search also needs beyond just installing the extra.
+Only for `--mode semantic`/`--mode hybrid` (CLI) or `mode="semantic"`/`"hybrid"` (library), and only on the local database, live search has no semantic mode at all. Plain lexical search (the default everywhere) needs nothing beyond the base install. See [Search Modes](concepts/search-modes.md) for what the extra actually gets you, and [`local embed`](cli/sync.md#embedding-for-semantichybrid-search)/`slb_glossary.local.embed_terms` for the one-time step semantic/hybrid search also needs beyond just installing the extra.
 
 ## Why does `search` sometimes return more results than my `--limit`?
 
@@ -41,7 +41,7 @@ Only for `--mode semantic`/`--mode hybrid` (CLI) or `mode="semantic"`/`"hybrid"`
 
 ## Can I use a browser other than Chromium?
 
-Yes, `--browser-type firefox`/`webkit` (CLI) or `browser_type="firefox"`/`"webkit"` (library). Chromium is the default and the one this documentation's examples assume, because the stealth patches this project relies on to scrape the glossary reliably have specifically been evaluated against Chromium; Firefox/WebKit sessions run through the same stealth setup but haven't been checked the same way against the glossary's own bot detection. See [Sessions and the Browser](concepts/sessions.md#why-patchright-not-plain-playwright).
+Yes, `--browser-type firefox`/`webkit` (CLI) or `browser_type="firefox"`/`"webkit"` (library). Chromium is the default and the one this documentation's examples assume. Firefox/WebKit sessions will run just as fine either way. See [Sessions and the Browser](concepts/sessions.md#why-patchright-not-plain-playwright).
 
 ## Something else is wrong
 

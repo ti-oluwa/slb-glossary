@@ -9,10 +9,10 @@ This page assumes you've finished [Installation](installation.md), including the
 ## Look something up
 
 ```bash
-slb search "water saturation"
+slb search "water saturation" --limit 1
 ```
 
-You'll see a table with the term, its grammatical label, the topic it's filed under, and its definition. If more than one row comes back, that's not a bug: the same term can carry a different definition under each topic it's filed under, and `search` shows all of them.
+You'll see a table with the term, its grammatical label, the topic it's filed under, and its definition. If more than one row comes back, that's not a bug. The same term can carry a different definition under each topic it's filed under, and `search` shows all of them.
 
 ## Look up one exact term
 
@@ -36,7 +36,7 @@ Every command above talked to the live glossary. Add `--cache` (the default, so 
 slb search porosity   # cached automatically
 ```
 
-Run it again, and you'll notice it comes back faster: `search` reads the local copy first by default, and only reaches the live site if nothing local is confident enough to answer.
+Run it again, and you'll notice it comes back faster because `search` reads the local copy first by default, and only reaches the live site if nothing local is confident enough to answer.
 
 ```bash
 slb local stats
@@ -51,7 +51,7 @@ Topics (1):
 
 ## See what else is there
 
-That's the shape of the whole tool: search, define, compare, and a local cache underneath all of them so repeat lookups are fast and offline-friendly. From here:
+In summary, the major lookup APIs you'll use are; search, define, and compare, and there is a local cache underneath all of them so repeat lookups are fast and offline-friendly. From here:
 
 <div class="grid cards" markdown>
 

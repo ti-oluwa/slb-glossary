@@ -7,7 +7,7 @@ This began as a hobby project to help with SPE PetroBowl prep (see [Credits](#cr
 > [!IMPORTANT]
 > This package is intended for research or instructional use only. See [Attribution and disclaimer](#attribution-and-disclaimer).
 
-This README is a tutorial, not a full API reference. It introduces what each part of the library does and how the pieces fit together. For the full documentation site - a complete CLI reference, the Python API walked through page by page, and the concepts behind search modes/sessions/the data model - see **[ti-oluwa.github.io/slb-glossary](https://ti-oluwa.github.io/slb-glossary/)**.
+This README is a summary, not a full API reference. It introduces what each part of the library does and how the pieces fit together. For the full documentation site - a complete CLI reference, the Python API walked through page by page, and the concepts behind search modes/sessions/the data model, see **[ti-oluwa.github.io/slb-glossary](https://ti-oluwa.github.io/slb-glossary/)**.
 
 ## Table of contents
 
@@ -430,7 +430,7 @@ On the CLI, this is `--mode lexical`/`semantic`/`hybrid` on `slb-glossary search
 
 ## Source-aware queries: `slb_glossary.query`
 
-`slb_glossary.local` only ever reads the local database, and `slb_glossary.live` only ever talks to the live site. `slb_glossary.query` is the layer that picks between (or combines) the two, so you don't have to hand-roll the "check local, fall back live, maybe cache what came back" dance yourself:
+`slb_glossary.local` only ever reads the local database, and `slb_glossary.live` only ever talks to the live site. `slb_glossary.query` is the layer that picks between (or combines) the two, so you don't have to hand-roll the "check local, fall back live, maybe cache what came back" logic yourself:
 
 ```python
 async with slb.local.database() as db, slb.live.session() as session:
@@ -754,7 +754,7 @@ from slb_glossary.logging import FileSink, StderrSink, configure_logging
 configure_logging(
     sinks={
         "slb_glossary.query*": FileSink("query.log"),  # every query.search/compare/... call
-        "*": StderrSink(),                             # everything else
+        "*": StderrSink(),  # everything else
     },
 )
 ```

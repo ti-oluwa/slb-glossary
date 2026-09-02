@@ -6,7 +6,7 @@ This page covers working with the local database deliberately, rather than letti
 
 ## `sync`
 
-`sync` does two things in one command: makes sure the background browser is installed, then refreshes the local database.
+`sync` does two things in one command; It makes sure the background browser is installed, and then refreshes the local database.
 
 ```bash
 slb sync
@@ -37,7 +37,7 @@ slb sync --check-only   # only report the browser state, don't touch the databas
 
 ## The `local` command group
 
-Every command under `local` talks only to the database on your own machine, regardless of any `--local`/`--live`/`--auto` flag elsewhere: there's no live fallback here even if you ask for one.
+Every command under `local` talks only to the database on your own machine, regardless of any `--local`/`--live`/`--auto` flag elsewhere. There's no live fallback here even if you ask for one.
 
 ### Where is it?
 
@@ -98,7 +98,7 @@ slb local embed --reembed    # recompute every embedding in scope, e.g. after sw
 slb local embed --batch-size 200
 ```
 
-Needs the `semantic` extra installed (`uv add "slb-glossary[semantic]"`). The embedding model itself downloads once from Hugging Face and is cached locally after that - see [Search Modes](../concepts/search-modes.md#semantic-matching-meaning) for what it costs to run and why the first `local embed` on a large database takes noticeably longer than later ones.
+Needs the `semantic` extra installed (`uv add "slb-glossary[semantic]"`). The embedding model itself downloads once from Hugging Face and is cached locally after that. See [Search Modes](../concepts/search-modes.md#semantic-matching-meaning) for what it costs to run and why the first `local embed` on a large database takes noticeably longer than later ones.
 
 ### Clearing it out
 
@@ -153,7 +153,7 @@ slb install --update chromium  # reinstall/refresh chromium specifically
 slb install --remove firefox   # remove a browser you no longer need
 ```
 
-`BROWSERS` (the positional `chromium`/`firefox`/`webkit` names above) is optional: omitted, `install` installs/updates patchright's default browser set, or lists/removes every installed browser, depending on which flag you paired it with. `--with-deps` also installs the OS-level packages a browser needs to actually run (Linux only), and `--only-shell` installs Chromium's smaller headless-shell build instead of the full browser, if you never run headed.
+`BROWSERS` (the positional `chromium`/`firefox`/`webkit` names above) is optional. Omitted, `install` installs/updates patchright's default browser set, or lists/removes every installed browser, depending on which flag you paired it with. `--with-deps` also installs the OS-level packages a browser needs to actually run (Linux only), and `--only-shell` installs Chromium's smaller headless-shell build instead of the full browser, if you never run headed.
 
 The engine underneath is [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python), a stealth-hardened fork of Playwright, not vanilla Playwright itself; see [Sessions and the Browser](../concepts/sessions.md) for why that distinction matters for a scraping tool like this one. `install`'s download-related flags reuse Playwright's own environment variables under the hood (`PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT`, `PLAYWRIGHT_DOWNLOAD_HOST`), since patchright is a drop-in fork:
 

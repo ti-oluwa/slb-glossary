@@ -1,6 +1,6 @@
 # Using the CLI
 
-No programming knowledge is assumed anywhere in this section, just the `slb` command from a terminal. If you haven't installed it yet, see [Installation](../getting-started/installation.md).
+For CLI usage, no programming knowledge is assumed in this section, just the `slb` command from a terminal. If you haven't installed it yet, see [Installation](../getting-started/installation.md).
 
 Every command below accepts `--help` for its own full option list, and every command also accepts `--tui`, which opens an interactive form for that command instead of you having to remember its flags:
 
@@ -36,7 +36,7 @@ Every lookup command (`search`, `define`, `compare`, `related`, `terms`, `random
 
 - **`--local`** only reads the database on your own machine. Instant, no network, but only finds terms you've already cached there.
 - **`--live`** always visits the live glossary through the background browser. Slower, but always current, and doesn't need anything cached first.
-- **`--auto`** (the default) tries local first. For `search`, this means the local database's best match is scored, and used alone if it's confident enough (`--relevance-threshold`, default `0.45`); otherwise the live site is queried too, and its results are shown first, with the local ones filling in any remaining slots. For the exact-lookup commands (`define`, `compare`, `related`, `terms`, `random`), auto is simpler: use the cached copy if one exists, otherwise fetch live.
+- **`--auto`** (the default) tries local first. For `search`, this means the local database's best match is scored, and used alone if it's confident enough (`--relevance-threshold`, default `0.45`); otherwise the live site is queried too, and its results are shown first, with the local ones filling in any remaining slots. For the exact-lookup commands (`define`, `compare`, `related`, `terms`, `random`), auto is simpler. It uses the cached copy if one exists, otherwise fetch live.
 
 ```bash
 slb search porosity --auto                    # the default: local first, live as a fallback
@@ -75,7 +75,7 @@ Live results are written incrementally, `--cache-batch-size` at a time (default 
 
     ---
 
-    `sync`, the `local` command group, and `install`, for working offline on purpose.
+    `sync`, the `local` command group, and `install`, for working offline.
 
     [Continue](sync.md){ .md-button }
 

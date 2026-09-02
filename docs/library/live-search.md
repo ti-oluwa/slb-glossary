@@ -1,6 +1,6 @@
 # Live Search
 
-This page covers `slb_glossary.live`: the module that actually talks to the glossary website.
+This page covers the `slb_glossary.live` API. This is the module that actually talks to the glossary website.
 
 ---
 
@@ -51,11 +51,11 @@ async with slb.live.session(
 ```
 
 !!! info "Why headless matters for `use_stealth`"
-    `session()` applies stealth patches (via `playwright-stealth`, on top of the [patchright](../concepts/sessions.md) engine underneath) automatically when `headless=True`, and skips them when `headless=False`. This isn't arbitrary: stealth patches have been observed to make the glossary *harder* to scrape reliably in headed mode, not easier. You can override this either way with `use_stealth=True`/`False`, but the default is deliberately conditional on `headless` rather than always-on.
+    `session()` applies stealth patches (via `playwright-stealth`, on top of the [patchright](../concepts/sessions.md) engine underneath) automatically when `headless=True`, and skips them when `headless=False`. This isn't arbitrary. Stealth patches have been observed to make the glossary *harder* to scrape reliably in headed mode, counterintuitively. You can override this either way with `use_stealth=True`/`False`, but the default is deliberately conditional on `headless` rather than always-on.
 
 ### Lazy initialization
 
-Opening a session doesn't, by itself, load anything from the glossary; the first call that actually needs the topic list (like `search`) triggers that automatically. If you'd rather control exactly when that first network round trip happens, say, to measure it separately, or to fail fast before doing anything else, open the session without initializing it, and call it explicitly:
+Opening a session doesn't, by itself, load anything from the glossary. The first call that actually needs the topic list (like `search`) triggers that automatically. If you'd rather control exactly when that first network round trip happens, say, to measure it separately, or to fail fast before doing anything else, open the session without initializing it, and call it explicitly:
 
 ```python
 async with slb.live.session(initialize=False) as session:
@@ -104,7 +104,7 @@ async for result in slb.live.search(
 
 ## Reading a result
 
-Every function in `slb_glossary.live` (and everywhere else in this library) hands you a `SearchResult`: a plain `NamedTuple`, so you can unpack it positionally or read fields by name.
+Every function in `slb_glossary.live` (and everywhere else in this library) hands you a `SearchResult`. A plain `NamedTuple`, so you can unpack it positionally or read fields by name.
 
 ```python
 async for result in slb.live.search(session, "porosity"):
@@ -118,4 +118,4 @@ See [The Data Model](../concepts/data-model.md#searchresult) for the full field 
 
 ## Where to go from here
 
-Every live search here re-visits the site: nothing is remembered between runs. For a local cache that makes repeat lookups instant and offline-capable, see [Local Search and Cache](local-search.md). For a function that reads the cache first and only falls back to exactly what's on this page when needed, see [Combined Search with slb_glossary.query](query.md).
+Every live search here re-visits the site, and nothing is remembered between runs. For a local cache that makes repeat lookups instant and offline-capable, see [Local Search and Cache](local-search.md). For an API that reads the cache first and only falls back to exactly what's on this page when needed, see [Combined Search with slb_glossary.query](query.md).

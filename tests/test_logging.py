@@ -76,7 +76,7 @@ class TestConsoleSink:
     def test_close_does_not_close_the_underlying_stream(self):
         """`close()` is a no-op: it never closes a shared std stream."""
         stream = io.StringIO()
-        sink = ConsoleSink(stream)
+        sink = ConsoleSink(stream, close=False)
         sink.close()
         assert not stream.closed
 

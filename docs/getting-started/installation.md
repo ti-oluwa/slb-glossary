@@ -6,9 +6,9 @@ Every path through this documentation passes through this page once. If you only
 
 ## Requirements
 
-- **Python 3.10 or newer.** `slb-glossary` uses modern typing syntax (`str | None`) throughout, which is why the floor is 3.10 rather than something older.
+- **Python 3.10 or newer.** `slb-glossary` uses modern typing syntax (`str | None`) throughout and some of the libraries it depneds on only support this version upwards, which is why the floor is 3.10 rather than something older.
 - **About 300MB of free disk space**, for the background browser build. See [below](#installing-the-browser-build) for exactly why.
-- **A network connection**, at least the first time you look up any given term. After that, the [local cache](../library/local-search.md#1-cache-live-results-as-you-go) can serve it without one.
+- **A network connection**, to install the browser engine neede to look up any given term which are not already cache locally. You can sync the glossary to your local machine though, after which the [local cache](../library/local-search.md#1-cache-live-results-as-you-go) can serve lookups without an internet connection. Searches still work offline as long as the term has been cached, else its just returns no results. See [Syncing the glossary](../cli/sync.md) for details.
 
 No account, API key, or paid access to anything is needed. The glossary itself is free to browse.
 
@@ -32,11 +32,11 @@ Any of the methods below give you two identical commands: `slb-glossary` and the
     uvx slb-glossary search porosity
     ```
 
-    `uvx` downloads the package into a temporary environment, runs the one command, and throws the environment away afterward. Handy for a one-off check; `uv tool install` is what you want for regular use, since it keeps the environment around.
+    `uvx` downloads the package into a temporary environment, runs the one command, and throws the environment away afterward. Handy if you just need a one-off check; `uv tool install` is what you want for regular use, since it keeps the environment around.
 
 === "pipx"
 
-    [pipx](https://pipx.pypa.io/) does the same isolated-install job as `uv tool install`, if you already have it set up and would rather not add uv as well.
+    [pipx](https://pipx.pypa.io/) does the same isolated-install job as `uv tool install`, if you already have it set up and would rather not add `uv` as well.
 
     ```bash
     pipx install "slb-glossary[all]"
@@ -61,7 +61,7 @@ Any of the methods below give you two identical commands: `slb-glossary` and the
     powershell -c "irm https://astral.sh/uv/install.ps1 | iex; uv tool install slb-glossary"
     ```
 
-Once installed, jump to [Installing the browser build](#installing-the-browser-build). You do not also need [Installing the library](#installing-the-library) unless you're also writing Python code against it.
+Once installed, jump to [Installing the browser build](#installing-the-browser-build). You may decide to skip [Installing the library](#installing-the-library) if you're not writing Python code against it.
 
 ---
 
@@ -112,7 +112,7 @@ The base install covers live search (`slb_glossary.live`) and local search (`slb
 
 ## Installing the browser build
 
-**Whichever path above you took, this step is shared and required by both.** The glossary site is a JavaScript application, so `slb-glossary` doesn't just fetch a URL and parse HTML: it drives a real, invisible ("headless") browser to load the page the way a person's browser would, then reads the rendered result. That browser has to actually be downloaded once, and it's a real download of a browser engine, not a small package:
+**Whichever path above you took, this step is shared and required by both.** The glossary site is a JavaScript application, so `slb-glossary` doesn't just fetch a URL and parse HTML. It drives a real "headed" or "headless" browser to load the page the way a person's browser would, then reads the rendered result. That browser has to actually be downloaded once. You can do that with the `install` command:
 
 ```bash
 slb install chromium
@@ -162,7 +162,7 @@ This should print a version number with no error. If either of these fails, the 
 
     ---
 
-    Your first search, defining an exact term, and working offline once you've cached something.
+    Your first search, defining a term, and working offline once you've cached something.
 
     [Using the CLI](../cli/index.md){ .md-button }
 

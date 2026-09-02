@@ -1,6 +1,6 @@
-# Combined Search with slb_glossary.query
+# Combined Search with `slb_glossary.query`
 
-This page covers `slb_glossary.query`, the module that reads from [Local Search and Cache](local-search.md) and [Live Search](live-search.md) together, so you don't have to write that combining logic yourself.
+This page covers `slb_glossary.query`, the module that reads from [Local Search and Cache](local-search.md) and [Live Search](live-search.md) intelligently, so you don't have to write the logic yourself.
 
 Every function on this page (and the top-level `slb_glossary` package, which re-exports all of them) shares the same core keyword arguments, described once here rather than repeated on every function.
 
@@ -19,10 +19,10 @@ async with slb.local.database("glossary.db") as db, slb.live.session() as sessio
 - **`Source.LOCAL`** never touches the network. Requires `db`.
 - **`Source.LIVE`** never touches the local database. Requires `session`.
 - **`Source.AUTO`** (the default) tries local first, falling back to live only when needed. What "needed" means differs slightly by function:
-    - For `search`, the local database's best-scoring result is checked against `relevance_threshold` (`0.0`–`1.0`, default from `constants.relevance_threshold`). If it clears that bar, only local results are yielded; otherwise, live results are yielded first, with local results filling in any remaining slots.
-    - For single-value lookups (`get_term`, `compare`, `related_terms`, `get_random_term`), it's simpler: use the cached copy if it exists, otherwise fetch live.
+  - For `search`, the local database's best-scoring result is checked against `relevance_threshold` (`0.0`–`1.0`, default from `constants.relevance_threshold`). If it clears that bar, only local results are yielded; otherwise, live results are yielded first, with local results filling in any remaining slots.
+  - For single-value lookups (`get_term`, `compare`, `related_terms`, `get_random_term`), it's simpler: use the cached copy if it exists, otherwise fetch live.
 
-You only need to pass whichever of `db`/`session` the resolved `source` actually requires; passing both and leaving `source` at its `AUTO` default is the normal way to get "fast when possible, correct when not" without thinking about it further.
+You only need to pass whichever of `db`/`session` the resolved `source` actually requires. Passing both and leaving `source` at its `AUTO` default is the normal way to get "fast when possible, correct when not" without thinking about it further.
 
 ---
 
@@ -35,7 +35,7 @@ async for lookup in slb.search("water saturation", db=db, session=session, persi
 
 `persist=True` writes any result that came from a live fetch back into `db`, so the next call for the same term doesn't need the network at all. This is exactly the mechanism [Local Search and Cache](local-search.md#1-cache-live-results-as-you-go)'s `upsert_results_incrementally` implements, wired up automatically. A local-only result (`source=Source.LOCAL`, or an `AUTO` call that never fell through to live) is never re-persisted, since it's already there.
 
-`persist` defaults to `False` when not passed explicitly, from `constants.persist_by_default`: a write to your local database is a side effect worth opting into deliberately, not one a library call should do silently. Set `SLB_GLOSSARY_PERSIST_BY_DEFAULT=true` (or `constants.persist_by_default = True` directly) to flip that default for every call site in a process that doesn't pass `persist=` itself, rather than adding it to every call individually.
+`persist` defaults to `False` when not passed explicitly, from `constants.persist_by_default`. A write to your local database is a side effect worth opting into deliberately, not one a library call should do silently. Set `SLB_GLOSSARY_PERSIST_BY_DEFAULT=true` (or `constants.persist_by_default = True` directly) to flip that default for every call site in a process that doesn't pass `persist=` itself, rather than adding it to every call individually.
 
 ---
 
@@ -50,7 +50,7 @@ print(lookup.source)  # Source.LOCAL or Source.LIVE - which one actually answere
 print(lookup.persisted)  # whether this result was just written to `db`
 ```
 
-For a streamed lookup (`search`, `get_terms_on`), `persisted` reflects whether persistence was *requested* for the call as a whole, not a per-item write confirmation.
+For a streamed lookup (`search`, `get_terms_on`), `persisted` reflects whether persistence was *requested* for the call as a whole, not a per-item.
 
 ---
 
@@ -78,7 +78,7 @@ async for lookup in slb.search(
 
 ## The rest of the module, at a glance
 
-Each of these is a thinner, more specific tool than `search`, sharing the same `db`/`session`/`source`/`persist` arguments described above:
+Each of these is a lighter, more specific tool than `search`, sharing the same `db`/`session`/`source`/`persist` arguments described above:
 
 ```python
 lookup = await slb.get_term("black oil", db=db, session=session)  # one exact term
@@ -109,7 +109,7 @@ for name, lookup in results.items():
     print(name, "->", lookup.value.term if lookup.value else "not found")
 ```
 
-`related_terms` is a thin convenience wrapper: it calls `get_term` and returns just the `.related` field, rather than something you'd need to write yourself on top of `get_term`.
+`related_terms` is a convenience wrapper. it calls `get_term` and returns just the `.related` field, rather than something you'd need to write yourself on top of `get_term`.
 
 ## Getting similar results alongside an exact match
 
@@ -127,7 +127,7 @@ elif result.similar:
         print(f"  {alt.value.term} (score={alt.score:.2f})")
 ```
 
-This is the "did you mean" building block: `result.exact` is `None` exactly when a plain call would have returned `None` too, and `result.similar` is populated the same way either way, so you don't need a separate lookup to get alternatives only when the exact match fails.
+This is the "did you mean" building block; `result.exact` is `None` exactly when a plain call would have returned `None` too, and `result.similar` is populated the same way either way, so you don't need a separate lookup to get alternatives only when the exact match fails.
 
 ```python
 results = await slb.compare(["porocity", "permeabilty"], db=db, session=session, with_similar=True)

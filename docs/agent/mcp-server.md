@@ -1,8 +1,8 @@
 # Running an MCP Server
 
-Connecting an AI agent (Claude Desktop, Claude Code, a custom agent) to this glossary, whether or not you're writing Python. Needs the `mcp` extra: `uv add "slb-glossary[mcp]"` for library use, or the CLI already has it if you installed with `[all]`.
+Connecting an AI agent to this glossary, whether or not you're writing Python, needs the `mcp` extra: `uv add "slb-glossary[mcp]"` for library use, or the CLI. You already have it if you installed with the `[all]` option.
 
-[MCP](https://modelcontextprotocol.io/) (Model Context Protocol) is the open standard this server speaks: an agent connects to it, sees a list of tools, and calls them the same way it would call any other tool. Everything here is a thin layer over exactly the [`slb_glossary.query`](../library/query.md) functions already covered elsewhere in this documentation, the server doesn't reimplement any lookup logic of its own.
+[MCP](https://modelcontextprotocol.io/) (Model Context Protocol) is the open standard this server speaks. An agent connects to it, sees a list of tools, and calls them the same way it would call any other tool. Everything here is a thin layer over exactly the [`slb_glossary.query`](../library/query.md) functions already covered elsewhere in this documentation, the server doesn't reimplement any lookup logic of its own.
 
 ---
 
@@ -16,7 +16,7 @@ This starts a server over `stdio` (the default transport, reading/writing MCP me
 
 ### Connecting Claude Desktop or Claude Code
 
-Add this to your MCP client's config (Claude Desktop's `claude_desktop_config.json`, or Claude Code's `.mcp.json`):
+Add this to your MCP client's config (Your Desktop's `*desktop_config.json`, or LLM's `.mcp.json`):
 
 ```json
 {
@@ -29,7 +29,7 @@ Add this to your MCP client's config (Claude Desktop's `claude_desktop_config.js
 }
 ```
 
-The client launches `slb mcp serve` itself as a subprocess and talks to it over stdio; there's no separate "start the server first" step for this transport.
+The client launches `slb mcp serve` itself as a subprocess and talks to it over stdio.
 
 ### Serving over HTTP instead
 
@@ -49,7 +49,7 @@ slb mcp serve --tools read_only                # the default: every non-writing 
 slb mcp serve --tools all                       # read_only, plus glossary_sync
 ```
 
-Every tool corresponds directly to a `slb_glossary.query` function, prefixed `glossary_`: `glossary_search`, `glossary_get_term`, `glossary_get_terms_on`, `glossary_get_terms_urls`, `glossary_get_topics`, `glossary_related_terms`, `glossary_random_term`, `glossary_compare`, and `glossary_sync`. `read_only` is every one of these except `glossary_sync`, which is the only tool that ever writes to the local database.
+Every tool corresponds directly to a `slb_glossary.query` function, prefixed with `glossary_`. They include: `glossary_search`, `glossary_get_term`, `glossary_get_terms_on`, `glossary_get_terms_urls`, `glossary_get_topics`, `glossary_related_terms`, `glossary_random_term`, `glossary_compare`, and `glossary_sync`. `read_only` is every one of these except `glossary_sync`, which is the only tool that ever writes to the local database.
 
 !!! warning "`glossary_sync` needs `--allow-write` too, even under `--tools all`"
     `--allow-write` is a separate switch from `--tools`, off by default. With it off, `glossary_sync` is never registered regardless of `--tools`, and every read tool's `persist` argument is silently ignored rather than actually caching anything. This is a deliberate two-key lock: an agent that can only read the glossary can't accidentally (or be prompted to) write to your local database, even if it's given the full tool list.
@@ -81,7 +81,7 @@ config = slb_mcp.MCPConfig(
 )
 ```
 
-Leaving `allowed` unset computes it automatically from `session.enabled`/`local.enabled`: both enabled allows all three (`LOCAL`/`LIVE`/`AUTO`), either alone restricts to just that one plus `AUTO`.
+Leaving `allowed` unset computes it automatically from `session.enabled`/`local.enabled`. Both enabled allows all three (`LOCAL`/`LIVE`/`AUTO`), either alone restricts to just that one plus `AUTO`.
 
 ## Locking it down for anything beyond local, trusted use
 
@@ -97,7 +97,7 @@ slb mcp serve --rate-limit 30 --rate-limit-window 60
 
 ## Embedding the server in your own Python app
 
-The CLI's flags cover the common cases. `MCPConfig` itself is considerably deeper (per-tool timeouts, lifecycle/per-call hooks, structured logging sinks, progress streaming, and a real `AuthProvider` rather than a bare token), and building it directly in code is how you reach the rest of it:
+The CLI's flags cover the common cases. `MCPConfig` itself is considerably deeper (per-tool timeouts, lifecycle/per-call hooks, structured logging sinks, progress streaming, and `AuthProvider` usage rather than a bare token), and building it directly in code is how you reach the rest of it:
 
 ```python
 import slb_glossary as slb
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     app.run(transport="streamable-http")
 ```
 
-`MCPApp(config)` is cheap and does no I/O; the underlying `fastmcp.FastMCP` server and its tools are only assembled on the first `server()`/`run()`/`run_async()` call. `MCPConfig()` alone (no arguments) is a fully valid default: read-only, local and live both enabled, unauthenticated, unlimited rate, `SessionMode.LAZY` - exactly what `slb mcp serve` with no flags gives you. Every section is independently optional; the CLI's own flags (`--tools`, `--allow-write`, `--rate-limit`, ...) each set one narrow slice of this same config for you.
+Instantiating `MCPApp(config)` is cheap and does no I/O. The underlying `fastmcp.FastMCP` server and its tools are only assembled on the first `server()`/`run()`/`run_async()` call. `MCPConfig()` alone (no arguments) is a fully valid default. It is read-only, has local and live access both enabled, allows unauthenticated tools calls, unlimited rate, and `SessionMode.LAZY` mode. Which is exactly what `slb mcp serve` with no flags gives you. Every section is independently optional; the CLI's own flags (`--tools`, `--allow-write`, `--rate-limit`, ...) each set one narrow slice of this same config for you.
 
 A few fields worth knowing about that the CLI has no flag for at all:
 
@@ -138,7 +138,7 @@ A few fields worth knowing about that the CLI has no flag for at all:
 
 See [`slb_glossary.mcp`](../api/library.md#slb_glossarymcp) for the full field list of every one of these.
 
-### A real `AuthProvider`, not just a bare token
+### Use a real `AuthProvider`, not just a bare token
 
 The CLI's `--auth-token` is a convenience for `slb_mcp.StaticTokenVerifier`. For anything past a handful of fixed keys, build a real `AuthProvider` (FastMCP's own auth abstraction) and pass it as `auth.provider`:
 
@@ -161,7 +161,7 @@ config = slb_mcp.MCPConfig(
 slb mcp serve app.main:app
 ```
 
-`app.main:app` is a uvicorn-style import path: `app/main.py` containing a module-level `app = MCPApp(...)` (or a zero-argument factory function returning one). When `APP_PATH` is given this way, every flag except `--transport`/`--host`/`--port`/`--log-level` is ignored, since the app is already fully configured in code; passing one of the ignored flags alongside `APP_PATH` is an error, specifically so you can't accidentally think a flag did something it didn't.
+`app.main:app` is a uvicorn-style import path. `app/main.py` containing a module-level `app = MCPApp(...)` (or a zero-argument factory function returning one). When `APP_PATH` is given this way, every flag except `--transport`/`--host`/`--port`/`--log-level` is ignored, since the app is already fully configured in code; passing one of the ignored flags alongside `APP_PATH` is an error, specifically so you can't accidentally think a flag did something it didn't.
 
 ## Logging
 
@@ -179,13 +179,13 @@ config = slb_mcp.MCPConfig(
 
 This mirrors `slb_glossary.logging.configure_logging` closely enough that anything covered in [Logging](../library/logging.md) (routing different loggers to different sinks, a custom `LogSink` class, changing the format string) applies here too, just scoped to the `logging=` field instead of a direct function call. Leave it unset (the default) to inherit whatever logging setup, if any, is already in place when the server starts.
 
-## Getting the underlying FastMCP instance
+## Getting the underlying `FastMCP` instance
 
-`MCPApp` doesn't hide the `fastmcp.FastMCP` server it builds. `app.server()` returns it directly, built (once, lazily) from your `MCPConfig`. From there, it's a regular FastMCP app you can extend with anything FastMCP itself supports, beyond what `MCPConfig` has a dedicated field for:
+`MCPApp` doesn't hide the `fastmcp.FastMCP` server it builds. `app.server()` returns it directly, built (once, lazily) from your `MCPConfig`. From there, it's a regular `FastMCP` app you can extend with anything `FastMCP` itself supports, beyond what `MCPConfig` has a dedicated field for:
 
 ```python
 app = slb_mcp.MCPApp(config)
-mcp = app.server()  # the actual fastmcp.FastMCP instance
+mcp = app.server()  # the actual `fastmcp.FastMCP` instance
 
 
 @mcp.tool()
@@ -200,10 +200,10 @@ def about() -> str:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")  # run the FastMCP instance directly, or app.run(), works the same
+    mcp.run(transport="stdio")  # run the FastMCP instance directly, or app.run(), works too
 ```
 
-This is the escape hatch for anything `MCPConfig` doesn't model directly: extra tools/resources/prompts unrelated to the glossary, FastMCP middleware, or mounting this server inside a larger ASGI app's own routing. `app.server()` is idempotent: calling it again returns the same instance rather than rebuilding it, so mixing this with `app.run()`/`app.run_async()` afterward is safe.
+This is the escape hatch for anything `MCPConfig` doesn't model directly. Extra tools/resources/prompts unrelated to the glossary, `FastMCP` middleware, or mounting this server inside a larger ASGI app's own routing. `app.server()` is idempotent so you calling it again returns the same instance rather than rebuilding it, so mixing this with `app.run()`/`app.run_async()` afterward is safe.
 
 ---
 
