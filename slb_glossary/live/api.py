@@ -9,9 +9,11 @@ from collections.abc import Collection
 
 from patchright.async_api import Page
 
-from slb_glossary.errors import SessionNotInitializedError
+from slb_glossary.errors import NetworkError, ParsingError, SessionNotInitializedError
 from slb_glossary.live.browser import Session
 from slb_glossary.live.parsers import (
+    TERM_DETAIL_SELECTOR,
+    TERM_NAME_SELECTOR,
     TermBlock,
     get_result_links,
     get_results_header_text,
@@ -424,6 +426,11 @@ async def get_results_from_url(
         it automatically (the default) or raise. See `ensure_initialized`.
     :raises SessionNotInitializedError: If `session` isn't initialized and
         `auto_initialize` is `False`.
+    :raises ParsingError: If the page loaded but its structure didn't
+        match what this parser expects, e.g. no term name heading, or no
+        definition sections. This almost always means the glossary's
+        markup changed rather than this particular term genuinely having
+        nothing to show.
     """
     excluded_urls, excluded_names = split_exclude(exclude)
     if excluded_urls and url in excluded_urls:
@@ -439,9 +446,30 @@ async def get_results_from_url(
     try:
         term_name = await get_term_name(current_page)
         detail_sections = await get_term_detail_blocks(current_page)
-        if not term_name or not detail_sections:
-            logger.debug("No definitions found at %s (%.3fs)", url, time.monotonic() - started_at)
-            return
+        if not term_name:
+            # The page loaded (no `NetworkError`), but the one thing every
+            # real term detail page has - a term name heading - wasn't
+            # found. That's not "this term has no value", it's the
+            # glossary's markup no longer matching what this parser
+            # expects, and should be visible as such rather than quietly
+            # yielding nothing (see the corrections doc's "Scraper
+            # failures must be explicit").
+            raise ParsingError(
+                f"Could not parse a term name from {url}: expected heading "
+                f"{TERM_NAME_SELECTOR!r} was not found or was empty. The "
+                f"glossary's page structure may have changed."
+            )
+        if not detail_sections:
+            # Likewise: a page with a term name but zero definition
+            # sections isn't a term that "genuinely has no definition" -
+            # every real term page has at least one - it's the definition
+            # block markup (`TERM_DETAIL_SELECTOR`) not matching anymore.
+            raise ParsingError(
+                f"Could not parse any definition sections from {url} for "
+                f"term {term_name!r}: expected blocks matching "
+                f"{TERM_DETAIL_SELECTOR!r} were not found. The glossary's "
+                f"page structure may have changed."
+            )
 
         if excluded_names and " ".join(term_name.strip().lower().split()) in excluded_names:
             logger.debug("Skipping excluded term %r at %s", term_name, url)
@@ -564,6 +592,13 @@ async def get_results_from_urls(
     :raises ValueError: If `concurrency` is less than 1.
     :raises SessionNotInitializedError: If `session` isn't initialized and
         `auto_initialize` is `False`.
+    :raises ParsingError: With `concurrency=1`, if a page's structure
+        didn't match what the parser expects (see
+        `get_results_from_url`). With `concurrency` > 1, a single URL's
+        `ParsingError`/`NetworkError` is logged and skipped instead
+        (this function's fetch is best-effort per URL there), but any
+        other, unexpected exception still propagates rather than being
+        swallowed.
     """
     await ensure_initialized(session, auto_initialize)
     if concurrency < 1:
@@ -619,7 +654,7 @@ async def get_results_from_urls(
     logger.debug("Fetching with %d concurrent worker(s)", len(worker_pages))
 
     url_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=concurrency * 2)
-    result_queue: asyncio.Queue[SearchResult | None] = asyncio.Queue()
+    result_queue: asyncio.Queue[SearchResult | BaseException | None] = asyncio.Queue()
 
     async def produce() -> None:
         async for url in url_iter:
@@ -645,8 +680,22 @@ async def get_results_from_urls(
                     await result_queue.put(result)
                     if first_only:
                         break
-            except Exception:
-                logger.warning("Failed to fetch %s", url, exc_info=True)
+            except (NetworkError, ParsingError) as exc:
+                # Expected, page-specific failure modes for a best-effort
+                # bulk fetch. So we log with enough context to diagnose an
+                # upstream change, but not a full page dump, and move on
+                # to the next URL rather than aborting the whole batch
+                # over one bad page.
+                logger.warning("Failed to fetch %s: %s", url, exc)
+            except Exception as exc:
+                # Anything else is unexpected. Route it to the main
+                # generator loop below instead of letting it vanish into
+                # this worker task, which `asyncio.gather(...,
+                # return_exceptions=True)` in the `finally` block would
+                # otherwise discard unseen.
+                logger.exception("Unexpected error fetching %s", url)
+                await result_queue.put(exc)
+                break
         await result_queue.put(None)  # this worker is done
 
     producer_task = asyncio.create_task(produce())
@@ -660,6 +709,8 @@ async def get_results_from_urls(
             if item is None:
                 finished_workers += 1
                 continue
+            if isinstance(item, BaseException):
+                raise item
             yielded += 1
             yield item
     finally:

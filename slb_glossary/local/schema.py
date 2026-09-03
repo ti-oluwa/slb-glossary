@@ -4,17 +4,59 @@ import aiosqlite
 
 from slb_glossary.errors import DatabaseError
 
-__all__ = ["SCHEMA_VERSION", "initialize"]
+__all__ = ["SCHEMA_VERSION", "get_schema_version", "initialize", "set_schema_version"]
 
 SCHEMA_VERSION = 1
 """
 Local database schema version. Bumped alongside any DDL change below
-that isn't purely additive. 
+that isn't purely additive.
 
-`slb_glossary.local.open_db` compares this against a database's stored 
-`slb_glossary.local.types.Metadata.schema_version` and discards/recreates 
+`slb_glossary.local.open_db` compares this against a database's stored
+`slb_glossary.local.types.Metadata.schema_version` and discards/recreates
 it on a mismatch, since there's currently no migration path between versions.
+
+`get_schema_version`/`set_schema_version` read/write the same version
+directly on a database's own connection (via `PRAGMA user_version`),
+independent of `Metadata`.
 """
+
+
+async def get_schema_version(connection: aiosqlite.Connection) -> int:
+    """
+    Read the schema version stamped on `connection`'s own database file.
+
+    Backed by SQLite's built-in `PRAGMA user_version` (a plain integer
+    the database file itself carries, defaulting to `0` for a database
+    that's never had it set), not what `slb_glossary.local.types.Metadata` holds.
+    So this reflects what's actually inside the `.db` file even if its
+    `metadata.json` sidecar were missing, stale, or edited by hand.
+
+    :param connection: An open `aiosqlite` connection.
+    :return: The stamped schema version, or `0` for a database that's
+        never had one set (e.g. one created before this existed, or a
+        brand new file `initialize` hasn't stamped yet).
+    """
+    cursor = await connection.execute("PRAGMA user_version")
+    row = await cursor.fetchone()
+    await cursor.close()
+    return int(row[0]) if row is not None else 0
+
+
+async def set_schema_version(connection: aiosqlite.Connection, version: int) -> None:
+    """
+    Stamp `version` onto `connection`'s own database file, via `PRAGMA user_version`.
+
+    This does not commit. `initialize` folds this into its own final commit,
+    and a caller doing this outside `initialize` should do the same.
+
+    :param connection: An open `aiosqlite` connection.
+    :param version: The schema version to stamp. This should always be
+        an internally controlled constant (`SCHEMA_VERSION`), not
+        user input. `PRAGMA` doesn't support bound parameters, so this
+        interpolates `version` directly.
+    """
+    await connection.execute(f"PRAGMA user_version = {int(version)}")
+
 
 TERMS_TABLE_CREATE_STATEMENT = """
 CREATE TABLE IF NOT EXISTS terms (
@@ -94,10 +136,12 @@ FTS_TRIGGERS_CREATE_STATEMENTS = [
 
 async def initialize(connection: aiosqlite.Connection) -> None:
     """
-    Create every table, index, and trigger the local database needs, if missing.
+    Create every table, index, and trigger the local database needs, if missing,
+    and stamp it with `SCHEMA_VERSION` (see `set_schema_version`).
 
     Safe to call every time a database is opened as every statement here is
-    `IF NOT EXISTS`, so this is a no-op on an already-initialized database.
+    `IF NOT EXISTS`, so this is a no-op on an already-initialized database
+    (re-stamping the same `SCHEMA_VERSION` every time is harmless).
 
     :param connection: An open `aiosqlite` connection.
     :raises DatabaseError: If the installed SQLite build lacks the FTS5
@@ -120,4 +164,5 @@ async def initialize(connection: aiosqlite.Connection) -> None:
     for statement in FTS_TRIGGERS_CREATE_STATEMENTS:
         await connection.execute(statement)
 
+    await set_schema_version(connection, SCHEMA_VERSION)
     await connection.commit()

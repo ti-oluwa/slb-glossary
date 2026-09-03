@@ -44,6 +44,7 @@ class Runtime(NamedComponent):
         self._session_lock = asyncio.Lock()
         self._session_semaphore = asyncio.Semaphore(config.session.max_concurrent)
         self._session_last_used: float = 0.0
+        self._session_users: int = 0
         self._reaper_task: asyncio.Task[None] | None = None
         self._started = False
         self._closed = False
@@ -103,21 +104,6 @@ class Runtime(NamedComponent):
 
         logger.info("[%s] Runtime closed in %.3fs", self.name, time.monotonic() - started_at)
 
-    async def open_db(self) -> Database:
-        """
-        Return the shared local `Database`, opening it on first use.
-
-        Unlike `acquire`, this doesn't route through `Source` resolution.
-        Meant for callers (like the `glossary_sync` tool) that always need a
-        writable local database regardless of which `Source` a call
-        otherwise resolves to.
-
-        :raises MCPError: If this runtime's `MCPConfig.local.enabled` is `False`.
-        """
-        if not self.config.local.enabled:
-            raise MCPError(f"[{self.name}] This server has local database access disabled.")
-        return await self._open_db()
-
     async def _open_db(self) -> Database:
         async with self._db_lock:
             if self._db is None:
@@ -127,10 +113,6 @@ class Runtime(NamedComponent):
                     "[%s] Local database opened in %.3fs", self.name, time.monotonic() - opened_at
                 )
             return self._db
-
-    async def open_session(self) -> Session:
-        async with self._session_lock:
-            return await self._open_session()
 
     async def _open_session(self) -> Session:
         """
@@ -163,8 +145,49 @@ class Runtime(NamedComponent):
         self._session_last_used = time.monotonic()
         return typing.cast(Session, self._session)
 
+    async def _acquire_session(self) -> Session:
+        """
+        Open the shared session (if needed) and check it out for one caller.
+
+        `_session_lock` is held only long enough to open the session and
+        bump `_session_users`, not for the caller's whole use of it.
+
+        `Session` is explicitly designed to be driven concurrently (each
+        caller checks out its own page from `session.pages`, bounded by
+        `Session.max_pages`, so holding one exclusive lock across
+        every call would wrongly serialize that.
+
+        Pair with `_release_session`.
+        """
+        async with self._session_lock:
+            session = await self._open_session()
+            self._session_users += 1
+            return session
+
+    async def _release_session(self) -> None:
+        """
+        Release one checkout from `_acquire_session`, refreshing `_session_last_used`.
+        """
+        async with self._session_lock:
+            self._session_users -= 1
+            self._session_last_used = time.monotonic()
+            if self._session_users < 0:
+                # This path should be unreachable as every `_acquire_session` is paired
+                # with exactly one `_release_session` in `acquire`'s
+                # `try`/`finally`. But we guard against it anyway rather than
+                # letting the count go negative and permanently fool the
+                # reaper into thinking the session is still in use one
+                # call fewer than it really is.
+                self._session_users = 0
+                raise RuntimeError(f"[{self.name}] MCP session reference count went negative.")
+
     async def _reap_idle_session(self) -> None:
-        """Background task. Closes the shared session after it's sat idle past `idle_timeout`."""
+        """
+        Background task.
+
+        Closes the shared session after it's sat idle past `idle_timeout`
+        with no active user.
+        """
         idle_timeout = self.config.session.idle_timeout
         assert idle_timeout is not None, (
             f"[{self.name}] `_reap_idle_session` started with `idle_timeout=None`; "
@@ -178,24 +201,24 @@ class Runtime(NamedComponent):
         try:
             while True:
                 await asyncio.sleep(max(idle_timeout / 4, 5.0))
-                await self._reap_once(idle_timeout)
+                await self.close_idle_session(idle_timeout)
         except asyncio.CancelledError:
             raise
 
-    async def _reap_once(self, idle_timeout: float) -> None:
+    async def close_idle_session(self, idle_timeout: float) -> None:
         """
         Run one idle-session check/close cycle.
 
-        Takes `_session_lock` for the whole check, which is what makes
-        this safe because `acquire` (see below) holds that same lock for the
-        entire duration of a shared-session call, so this can never see
-        `self._session` while a call is still using it. So either the call
-        hasn't started yet (nothing to reap prematurely) or it has already
-        finished (idle timing starts fresh from that point, via the
-        `_session_last_used` refresh `acquire` does on release).
+        A session may only be closed/reaped when it exists, is unused
+        (`_session_users == 0`), and has sat idle for at least `idle_timeout`.
+
+        All three are checked under `_session_lock`, the same lock
+        `_acquire_session`/`_release_session` use to update
+        `_session_users`/`_session_last_used`, so this can never observe
+        a call's checkout/release half-done.
         """
         async with self._session_lock:
-            if self._session is None:
+            if self._session is None or self._session_users > 0:
                 return
             idle_for = time.monotonic() - self._session_last_used
             if idle_for >= idle_timeout:
@@ -208,6 +231,24 @@ class Runtime(NamedComponent):
                 await close_session(self._session)
                 self._session = None
 
+    async def open_db(self) -> Database:
+        """
+        Return the shared local `Database`, opening it on first use.
+
+        Unlike `acquire`, this doesn't route through `Source` resolution.
+        Meant for callers that always need a writable local database regardless
+        of which `Source` a call otherwise resolves to.
+
+        :raises MCPError: If this runtime's `MCPConfig.local.enabled` is `False`.
+        """
+        if not self.config.local.enabled:
+            raise MCPError(f"[{self.name}] This server has local database access disabled.")
+        return await self._open_db()
+
+    async def open_session(self) -> Session:
+        async with self._session_lock:
+            return await self._open_session()
+
     @contextlib.asynccontextmanager
     async def acquire(
         self, source: Source
@@ -215,12 +256,23 @@ class Runtime(NamedComponent):
         """
         Yield the `(db, session)` pair a tool call needs to satisfy `source`.
 
-        Honors `SessionMode`. For `PER_CALL`, a fresh session is opened for
+        Honours `SessionMode`. For `PER_CALL`, a fresh session is opened for
         the duration of the `async with` block and closed on exit (bounded
-        by `SessionAccess.max_concurrent` via a semaphore). For `EAGER`/`LAZY`,
-        the shared session is reused (and lazily opened on first use, for `LAZY`),
-        with `_session_lock` held for the whole duration of the caller's
-        `async with` block.
+        by `SessionAccess.max_concurrent` via a semaphore).
+
+        For `EAGER`/`LAZY`, the shared session is reused (and lazily opened on
+        first use, for `LAZY`) and checked out via `_acquire_session`/`_release_session`
+        for the duration of the caller's `async with` block.
+
+        That checkout is deliberately not exclusive as concurrent `EAGER`/`LAZY`
+        calls all share the one session object, each checking out its own page
+        internally (see `Session.max_pages`), the same way `PER_CALL`
+        calls run concurrently against their own, separate sessions.
+
+        What the checkout does guarantee is that the idle-session reaper
+        (`_reap_idle_session`/`close_idle_session`) can never close the session
+        while any call still holds a checkout on it. It only reaps when
+        `_session_users == 0`.
 
         :param source: The resolved `Source` this call needs resources for.
         :yield: A `(db, session)` tuple, either of which may be `None` if
@@ -267,9 +319,8 @@ class Runtime(NamedComponent):
                     )
             return
 
-        async with self._session_lock:
-            session = await self._open_session()
-            try:
-                yield db, session
-            finally:
-                self._session_last_used = time.monotonic()
+        session = await self._acquire_session()
+        try:
+            yield db, session
+        finally:
+            await self._release_session()

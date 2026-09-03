@@ -31,6 +31,42 @@ class TestBuildFtsQuery:
         result = build_fts_query("don't")
         assert result.startswith('"') and result.endswith("*")
 
+    def test_literal_double_quote_is_escaped_by_doubling(self):
+        """A literal `"` inside a token is escaped as `""`, not left to close the quote early."""
+        assert build_fts_query('foo"bar') == '"foo""bar"*'
+
+    def test_multiple_literal_double_quotes_are_each_doubled(self):
+        """Every `"` in a token is doubled, not just the first."""
+        assert build_fts_query('a"b"c') == '"a""b""c"*'
+
+    @pytest.mark.parametrize("operator", ["OR", "NOT", "NEAR", "or", "not", "near"])
+    def test_fts5_operators_are_quoted_as_literal_tokens(self, operator: str):
+        """
+        `OR`/`NOT`/`NEAR` (any case) are quoted like any other token, not
+        left bare where FTS5 would parse them as boolean/proximity operators.
+        """
+        result = build_fts_query(f"foo {operator} bar")
+        assert result == f'"foo"* AND "{operator}"* AND "bar"*'
+
+    def test_parentheses_are_quoted_safely(self):
+        """FTS5 grouping parens inside a token don't break out of its quotes."""
+        assert build_fts_query("(foo)") == '"(foo)"*'
+
+    @pytest.mark.parametrize("token", ["*", "foo*", "*foo", "foo*bar"])
+    def test_wildcard_characters_are_quoted_within_the_token(self, token: str):
+        """A literal `*` inside a token stays inside the quotes, not appended as a live prefix marker."""
+        result = build_fts_query(token)
+        assert result == f'"{token}"*'
+        # Exactly one trailing, unquoted `*` - the prefix marker this
+        # function itself adds - not one contributed by the input.
+        assert result.endswith('"*')
+        assert not result.endswith("**")
+
+    @pytest.mark.parametrize("query", ["café", "naïve", "北京", "पानी", "🔥drill"])
+    def test_unicode_input_is_quoted_like_any_other_token(self, query: str):
+        """Non-ASCII input is quoted the same way ASCII input is, not rejected or mangled."""
+        assert build_fts_query(query) == f'"{query}"*'
+
 
 @pytest.mark.anyio
 class TestLexicalSearch:
@@ -195,3 +231,86 @@ class TestLexicalSearch:
         )
         results = await lexical_search(db, "porosity", topic="geologyy", fuzzy=True)
         assert [r.term for r, _ in results] == ["Porosity"]
+
+    async def test_literal_double_quote_in_query_does_not_raise(self, db):
+        """A literal `"` in the query text reaches SQLite as safely-quoted, not a syntax error."""
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
+        results = await lexical_search(db, 'poros"ity')
+        assert results == []
+
+    @pytest.mark.parametrize("query", ["foo OR bar", "foo or bar"])
+    async def test_or_in_query_is_literal_text_not_a_boolean_operator(self, db, query: str):
+        """
+        `OR` in the query text is ANDed as a literal token like any other,
+        never interpreted as FTS5's boolean `OR`.
+
+        If `OR` were left unquoted, this query would match either
+        "foo"-containing or "bar"-containing rows (a boolean union). Two
+        rows exist, one matching each half, and neither contains the
+        literal word "or" - so a correct, literal-text implementation
+        matches neither.
+        """
+        await upsert_results(
+            db,
+            [
+                make_search_result(url="https://x.com/a", term="Foo Term", definition="foo"),
+                make_search_result(url="https://x.com/b", term="Bar Term", definition="bar"),
+            ],
+        )
+        results = await lexical_search(db, query)
+        assert results == []
+
+    async def test_not_in_query_is_literal_text_not_a_unary_operator(self, db):
+        """
+        `NOT` in the query text is ANDed as a literal token, never
+        interpreted as FTS5's unary `NOT`.
+
+        `NOT drilling`, if `NOT` were left unquoted, would be a syntax
+        error (FTS5's `NOT` needs a left-hand operand) or, parsed some
+        other way, could match rows that *don't* mention "drilling". A
+        literal-text implementation just looks for both "not" and
+        "drilling" as tokens, which matches nothing here.
+        """
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Mud", definition="drilling")]
+        )
+        results = await lexical_search(db, "NOT drilling")
+        assert results == []
+
+    async def test_near_in_query_is_literal_text_not_a_proximity_operator(self, db):
+        """
+        `NEAR` in the query text doesn't trigger FTS5's `NEAR(...)`
+        proximity syntax (which additionally requires parentheses this
+        query doesn't supply, and would otherwise raise a syntax error).
+        """
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Porosity", definition="rock")]
+        )
+        results = await lexical_search(db, "porosity NEAR rock")
+        assert results == []
+
+    @pytest.mark.parametrize("query", ["*", "foo*bar", "(foo", "foo)", "foo*bar OR (baz"])
+    async def test_syntax_looking_queries_execute_without_raising(self, db, query: str):
+        """
+        Wildcards, unbalanced parens, and operator/wildcard combinations
+        never reach SQLite as anything but a safely-quoted literal, so
+        none of them should raise - whether or not anything matches.
+        """
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
+        results = await lexical_search(db, query)
+        assert isinstance(results, list)
+
+    @pytest.mark.parametrize("query", ["café", "naïve", "北京", "पानी", "🔥drill"])
+    async def test_unicode_query_executes_without_raising(self, db, query: str):
+        """Non-ASCII query text reaches SQLite fine and returns a (possibly empty) list."""
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
+        results = await lexical_search(db, query)
+        assert isinstance(results, list)
+
+    async def test_unicode_query_matches_stored_unicode_term(self, db):
+        """A Unicode query still matches a stored term containing the same text."""
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Porosidad", definition="café")]
+        )
+        results = await lexical_search(db, "café")
+        assert any(r.term == "Porosidad" for r, _ in results)

@@ -60,45 +60,83 @@ async def enable_wal(connection: aiosqlite.Connection) -> str:
     return mode
 
 
-def discard_on_mismatch(db_path: pathlib.Path, metadata_path: pathlib.Path) -> Metadata | None:
+def get_metadata_schema_version(metadata_path: pathlib.Path) -> int | None:
     """
-    Delete an existing database/metadata pair if its schema version doesn't
-    match the current one.
+    Read the schema version an existing `metadata.json` reports, if any.
 
-    There's currently no migration path between schema versions, so a mismatch
-    means the stored terms and embeddings aren't safely readable under
-    the current code. The local database is a disposable cache of
-    glossary content (see `slb_glossary.local`'s own module docstring),
-    so we just discard it and let it get recreated fresh, not to
-    fail outright. Its sync history is lost along with it; run a sync
-    again afterward to repopulate it.
-
-    :param db_path: Path to the database file.
-    :param metadata_path: Path to its `metadata.json`.
-    :return: The metadata that was loaded (and, if mismatched, just
-        discarded), or `None` if there was no existing metadata file
-        to check.
+    :param metadata_path: Path to a `metadata.json` file.
+    :return: The reported schema version, or `None` if `metadata_path`
+        doesn't exist (no existing database to check at all).
     """
     if not metadata_path.exists():
         return None
+    return Metadata.load(metadata_path).schema_version
 
-    metadata = Metadata.load(metadata_path)
-    if metadata.schema_version == SCHEMA_VERSION:
-        return metadata
 
-    logger.warning(
-        "Local database at %s uses schema version %d; the current version "
-        "is %d, and there's no migration path between them. Discarding its "
-        "stored terms and embeddings and recreating it fresh. Sync again "
-        "to repopulate it.",
-        db_path,
-        metadata.schema_version,
-        SCHEMA_VERSION,
-    )
+def reset_incompatible_schema(db_path: pathlib.Path, metadata_path: pathlib.Path) -> None:
+    """
+    Delete an existing database/metadata pair whose schema version doesn't
+    match the current one.
+
+    There's currently no migration path between schema versions (see
+    `slb_glossary.local.schema.SCHEMA_VERSION`), so a mismatch in either
+    direction (older or newer than what this code understands), means
+    the stored terms and embeddings aren't safely readable under the
+    current code.
+
+    The local database is a disposable cache of glossary content, so we just
+    discard it and let it get recreated fresh, to avoid outright failure.
+    Its sync history is lost along with it; run a sync again afterward to
+    repopulate it.
+
+    :param db_path: Path to the database file.
+    :param metadata_path: Path to its `metadata.json`.
+    """
     for suffix in ("", "-wal", "-shm"):
         db_path.with_name(db_path.name + suffix).unlink(missing_ok=True)
     metadata_path.unlink(missing_ok=True)
-    return None
+
+
+def check_schema_version(db_path: pathlib.Path, metadata_path: pathlib.Path) -> None:
+    """
+    Reset `db_path`/`metadata_path` if their recorded schema version isn't
+    the one this code understands.
+
+    A no-op if there's no existing `metadata_path` to check (a brand new
+    database, nothing to reset) or its recorded version already matches
+    `SCHEMA_VERSION`.
+
+    :param db_path: Path to the database file.
+    :param metadata_path: Path to its `metadata.json`.
+    """
+    found_version = get_metadata_schema_version(metadata_path)
+    if found_version is None:
+        return
+
+    if found_version == SCHEMA_VERSION:
+        return
+    elif found_version < SCHEMA_VERSION:
+        logger.warning(
+            "Local database at %s uses schema version %d, older than the "
+            "current version %d, and there's no migration path between "
+            "them yet. Discarding its stored terms and embeddings and "
+            "recreating it fresh. Sync again to repopulate it.",
+            db_path,
+            found_version,
+            SCHEMA_VERSION,
+        )
+    else:
+        logger.warning(
+            "Local database at %s uses schema version %d, newer than the "
+            "version %d this build of slb_glossary understands (it was "
+            "likely created by a newer release), and there's no migration "
+            "path between them yet. Discarding its stored terms and "
+            "embeddings and recreating it fresh. Sync again to repopulate it.",
+            db_path,
+            found_version,
+            SCHEMA_VERSION,
+        )
+    reset_incompatible_schema(db_path, metadata_path)
 
 
 async def open_db(
@@ -150,7 +188,7 @@ async def open_db(
         metadata_path=metadata_path,
         db_path_was_given=path is not None,
     )
-    discard_on_mismatch(resolved_db_path, resolved_metadata_path)
+    check_schema_version(resolved_db_path, resolved_metadata_path)
 
     connection = await aiosqlite.connect(resolved_db_path)
     connection.row_factory = aiosqlite.Row

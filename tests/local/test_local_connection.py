@@ -9,7 +9,13 @@ import aiosqlite
 import pytest
 
 from slb_glossary.errors import DatabaseError
-from slb_glossary.local.connection import close_db, database, open_db
+from slb_glossary.local.connection import (
+    check_schema_version,
+    close_db,
+    database,
+    open_db,
+    reset_incompatible_schema,
+)
 from slb_glossary.local.schema import SCHEMA_VERSION
 from slb_glossary.local.types import Metadata
 
@@ -81,7 +87,7 @@ class TestOpenDb:
             await close_db(db)
 
     async def test_discards_and_recreates_on_schema_version_mismatch(self, tmp_path: pathlib.Path):
-        """A database whose metadata reports an older schema version is discarded and rebuilt."""
+        """A database whose metadata reports a newer schema version is discarded and rebuilt."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
 
@@ -122,12 +128,34 @@ class TestOpenDb:
         finally:
             await close_db(reopened)
 
+    async def test_discards_and_recreates_on_older_schema_version(self, tmp_path: pathlib.Path):
+        """
+        A database reporting an *older* schema version than this code
+        understands is discarded and rebuilt - the explicit `<` branch in
+        `check_schema_version`, distinct from the `>` ("newer") branch the
+        `test_discards_and_recreates_on_schema_version_mismatch` test
+        above already covers via `SCHEMA_VERSION + 1`.
+        """
+        db_path = tmp_path / "t.db"
+        metadata_path = tmp_path / "t.metadata.json"
+
+        db_path.write_text("not a real sqlite file, just needs to exist", encoding="utf-8")
+        Metadata(schema_version=max(SCHEMA_VERSION - 1, 0), term_count=123).save(metadata_path)
+
+        db = await open_db(db_path, metadata_path=metadata_path)
+        try:
+            metadata = Metadata.load(db.metadata_path)
+            assert metadata.schema_version == SCHEMA_VERSION
+            assert metadata.term_count == 0
+        finally:
+            await close_db(db)
+
     async def test_raises_database_error_when_fts5_unavailable(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ):
         """`open_db` propagates `initialize`'s `DatabaseError` when FTS5 is unavailable,
         and closes the just-opened connection itself rather than leaking it
-        (see `open_db`'s try/except around `_enable_wal`/`initialize`)."""
+        (see `open_db`'s try/except around `enable_wal`/`initialize`)."""
 
         async def broken_initialize(connection):
             raise DatabaseError("no FTS5")
@@ -163,6 +191,86 @@ class TestOpenDb:
         # A closed aiosqlite connection raises on further use.
         with pytest.raises(ValueError, match="no active connection"):
             await opened_connections[0].execute("SELECT 1")
+
+
+class TestCheckSchemaVersion:
+    """Direct tests of `check_schema_version`'s explicit `==`/`<`/`else` branching."""
+
+    def test_no_existing_metadata_is_a_no_op(self, tmp_path: pathlib.Path):
+        """No `metadata.json` at all means no existing database to check - nothing happens."""
+        db_path = tmp_path / "t.db"
+        db_path.write_text("placeholder", encoding="utf-8")
+        metadata_path = tmp_path / "missing.metadata.json"
+
+        check_schema_version(db_path, metadata_path)
+
+        assert db_path.exists()  # untouched
+
+    def test_matching_version_is_a_no_op(self, tmp_path: pathlib.Path):
+        """A matching schema version leaves both files untouched."""
+        db_path = tmp_path / "t.db"
+        metadata_path = tmp_path / "t.metadata.json"
+        db_path.write_text("placeholder", encoding="utf-8")
+        Metadata(schema_version=SCHEMA_VERSION, term_count=5).save(metadata_path)
+
+        check_schema_version(db_path, metadata_path)
+
+        assert db_path.exists()
+        assert Metadata.load(metadata_path).term_count == 5
+
+    def test_older_version_resets(self, tmp_path: pathlib.Path):
+        """An older schema version resets both files."""
+        db_path = tmp_path / "t.db"
+        metadata_path = tmp_path / "t.metadata.json"
+        db_path.write_text("placeholder", encoding="utf-8")
+        Metadata(schema_version=max(SCHEMA_VERSION - 1, 0), term_count=5).save(metadata_path)
+
+        check_schema_version(db_path, metadata_path)
+
+        assert not db_path.exists()
+        assert not metadata_path.exists()
+
+    def test_newer_version_resets(self, tmp_path: pathlib.Path):
+        """A newer schema version also resets both files (no migration path yet, either direction)."""
+        db_path = tmp_path / "t.db"
+        metadata_path = tmp_path / "t.metadata.json"
+        db_path.write_text("placeholder", encoding="utf-8")
+        Metadata(schema_version=SCHEMA_VERSION + 1, term_count=5).save(metadata_path)
+
+        check_schema_version(db_path, metadata_path)
+
+        assert not db_path.exists()
+        assert not metadata_path.exists()
+
+
+class TestResetIncompatibleSchema:
+    def test_removes_db_and_sidecar_files_and_metadata(self, tmp_path: pathlib.Path):
+        """Removes the main db file, its `-wal`/`-shm` sidecars, and metadata.json."""
+        db_path = tmp_path / "t.db"
+        metadata_path = tmp_path / "t.metadata.json"
+        db_path.write_text("x", encoding="utf-8")
+        db_path.with_name(db_path.name + "-wal").write_text("x", encoding="utf-8")
+        db_path.with_name(db_path.name + "-shm").write_text("x", encoding="utf-8")
+        metadata_path.write_text("{}", encoding="utf-8")
+
+        reset_incompatible_schema(db_path, metadata_path)
+
+        assert not db_path.exists()
+        assert not db_path.with_name(db_path.name + "-wal").exists()
+        assert not db_path.with_name(db_path.name + "-shm").exists()
+        assert not metadata_path.exists()
+
+    def test_missing_sidecar_files_do_not_raise(self, tmp_path: pathlib.Path):
+        """Only the main db file existing (no `-wal`/`-shm`) doesn't raise."""
+        db_path = tmp_path / "t.db"
+        metadata_path = tmp_path / "t.metadata.json"
+        db_path.write_text("x", encoding="utf-8")
+        metadata_path.write_text("{}", encoding="utf-8")
+
+        reset_incompatible_schema(db_path, metadata_path)  # should not raise
+
+        assert not db_path.exists()
+        assert not metadata_path.exists()
 
 
 @pytest.mark.anyio
