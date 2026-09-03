@@ -16,6 +16,7 @@ actually responsible for.
 
 import pytest
 
+from slb_glossary.errors import ParsingError
 from slb_glossary.live.parsers import (
     RESULT_LINK_SELECTOR,
     RESULTS_HEADER_SELECTOR,
@@ -65,7 +66,8 @@ class MockPage:
     should return (the JS string itself is accepted but ignored).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, url: str = "https://x.com/porosity") -> None:
+        self.url = url
         self.locators: dict[str, MockLocator] = {}
         self.eval_results: dict[str, object] = {}
         self.eval_should_raise: set[str] = set()
@@ -247,9 +249,15 @@ class TestGetTermName:
         page.locators[TERM_NAME_SELECTOR] = MockLocator(text="Porosity")
         assert await get_term_name(page) == "Porosity"
 
-    async def test_returns_none_when_no_heading(self):
-        """No heading text at all returns `None`, not `""`."""
-        assert await get_term_name(MockPage()) is None
+    async def test_raises_parsing_error_when_no_heading(self):
+        """No heading text at all raises `ParsingError`, not a silent `None`."""
+        with pytest.raises(ParsingError, match="term name"):
+            await get_term_name(MockPage())
+
+    async def test_parsing_error_names_the_page_url(self):
+        """The raised error carries the page's URL for diagnosis."""
+        with pytest.raises(ParsingError, match="https://x.com/broken"):
+            await get_term_name(MockPage(url="https://x.com/broken"))
 
 
 @pytest.mark.anyio
@@ -277,9 +285,15 @@ class TestGetTermDetailBlocks:
             ]
         ]
 
-    async def test_no_sections_returns_empty_list(self):
-        """No definition sections at all returns `[]`."""
-        assert await get_term_detail_blocks(MockPage()) == []
+    async def test_raises_parsing_error_when_no_sections(self):
+        """No definition sections at all raises `ParsingError`, not a silent `[]`."""
+        with pytest.raises(ParsingError, match="definition sections"):
+            await get_term_detail_blocks(MockPage())
+
+    async def test_parsing_error_names_the_page_url(self):
+        """The raised error carries the page's URL for diagnosis."""
+        with pytest.raises(ParsingError, match="https://x.com/broken"):
+            await get_term_detail_blocks(MockPage(url="https://x.com/broken"))
 
     async def test_cleans_invisible_characters_in_paragraph_text(self):
         """Each paragraph's text goes through `clean_text` too."""

@@ -12,8 +12,6 @@ from patchright.async_api import Page
 from slb_glossary.errors import NetworkError, ParsingError, SessionNotInitializedError
 from slb_glossary.live.browser import Session
 from slb_glossary.live.parsers import (
-    TERM_DETAIL_SELECTOR,
-    TERM_NAME_SELECTOR,
     TermBlock,
     get_result_links,
     get_results_header_text,
@@ -446,30 +444,6 @@ async def get_results_from_url(
     try:
         term_name = await get_term_name(current_page)
         detail_sections = await get_term_detail_blocks(current_page)
-        if not term_name:
-            # The page loaded (no `NetworkError`), but the one thing every
-            # real term detail page has - a term name heading - wasn't
-            # found. That's not "this term has no value", it's the
-            # glossary's markup no longer matching what this parser
-            # expects, and should be visible as such rather than quietly
-            # yielding nothing (see the corrections doc's "Scraper
-            # failures must be explicit").
-            raise ParsingError(
-                f"Could not parse a term name from {url}: expected heading "
-                f"{TERM_NAME_SELECTOR!r} was not found or was empty. The "
-                f"glossary's page structure may have changed."
-            )
-        if not detail_sections:
-            # Likewise: a page with a term name but zero definition
-            # sections isn't a term that "genuinely has no definition" -
-            # every real term page has at least one - it's the definition
-            # block markup (`TERM_DETAIL_SELECTOR`) not matching anymore.
-            raise ParsingError(
-                f"Could not parse any definition sections from {url} for "
-                f"term {term_name!r}: expected blocks matching "
-                f"{TERM_DETAIL_SELECTOR!r} were not found. The glossary's "
-                f"page structure may have changed."
-            )
 
         if excluded_names and " ".join(term_name.strip().lower().split()) in excluded_names:
             logger.debug("Skipping excluded term %r at %s", term_name, url)

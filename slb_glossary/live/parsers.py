@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 
 from patchright.async_api import Page
 
+from slb_glossary.errors import ParsingError
 from slb_glossary.live.urls import BASE_URL
 from slb_glossary.types import Language, RelatedTerm
 from slb_glossary.utils import parse_int
@@ -225,15 +226,25 @@ async def get_result_links(page: Page) -> list[str]:
     return links
 
 
-async def get_term_name(page: Page) -> str | None:
+async def get_term_name(page: Page) -> str:
     """
     Return the term name heading on a term detail page.
 
     :param page: A page currently showing a term detail page.
-    :return: The term name, or `None` if the page has no term heading.
+    :return: The term name.
+    :raises ParsingError: If the page has no term name heading. Every
+        real term detail page has one, so this almost always means the
+        glossary's markup changed underneath this selector rather than
+        this particular term genuinely having no name.
     """
     text = await get_element_text(page, TERM_NAME_SELECTOR)
-    return text or None
+    if not text:
+        raise ParsingError(
+            f"Could not parse a term name from {page.url}: expected heading "
+            f"{TERM_NAME_SELECTOR!r} was not found or was empty. The "
+            f"glossary's page structure may have changed."
+        )
+    return text
 
 
 class TermBlock(typing.NamedTuple):
@@ -261,7 +272,13 @@ async def get_term_detail_blocks(page: Page) -> list[list[TermBlock]]:
     terms (see `TermBlock.links`).
 
     :param page: A page currently showing a term detail page.
-    :return: One list of `TermBlock`s per definition block.
+    :return: One list of `TermBlock`s per definition block. Never empty -
+        see `:raises:` below.
+    :raises ParsingError: If no definition sections were found at all.
+        Every real term detail page has at least one, so this almost
+        always means the glossary's markup changed underneath
+        `TERM_DETAIL_SELECTOR` rather than this particular term
+        genuinely having no definition.
     """
     sections = await page.eval_on_selector_all(
         TERM_DETAIL_SELECTOR,
@@ -279,7 +296,7 @@ async def get_term_detail_blocks(page: Page) -> list[list[TermBlock]]:
         )
         """,
     )
-    return [
+    blocks = [
         [
             TermBlock(
                 text=clean_text(block["text"]),
@@ -292,6 +309,13 @@ async def get_term_detail_blocks(page: Page) -> list[list[TermBlock]]:
         ]
         for section in sections
     ]
+    if not blocks:
+        raise ParsingError(
+            f"Could not parse any definition sections from {page.url}: "
+            f"expected blocks matching {TERM_DETAIL_SELECTOR!r} were not "
+            f"found. The glossary's page structure may have changed."
+        )
+    return blocks
 
 
 class TermImage(typing.NamedTuple):

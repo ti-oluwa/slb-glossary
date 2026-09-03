@@ -708,7 +708,7 @@ async def handle_sync(
     if args.mode != "all" and not args.value:
         raise ValueError(f"`value` is required for mode={args.mode!r}.")
 
-    db = await runtime.open_local_db()
+    db = await runtime.open_db()
     async with runtime.acquire(Source.LIVE) as (_, session):
         assert session is not None, (
             "`runtime.acquire(Source.LIVE)` should always yield a session; `Runtime.acquire` "

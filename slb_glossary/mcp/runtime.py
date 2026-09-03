@@ -257,22 +257,27 @@ class Runtime(NamedComponent):
         Yield the `(db, session)` pair a tool call needs to satisfy `source`.
 
         Honours `SessionMode`. For `PER_CALL`, a fresh session is opened for
-        the duration of the `async with` block and closed on exit (bounded
-        by `SessionAccess.max_concurrent` via a semaphore).
-
-        For `EAGER`/`LAZY`, the shared session is reused (and lazily opened on
+        the duration of the `async with` block and closed on exit. For
+        `EAGER`/`LAZY`, the shared session is reused (and lazily opened on
         first use, for `LAZY`) and checked out via `_acquire_session`/`_release_session`
         for the duration of the caller's `async with` block.
 
-        That checkout is deliberately not exclusive as concurrent `EAGER`/`LAZY`
-        calls all share the one session object, each checking out its own page
-        internally (see `Session.max_pages`), the same way `PER_CALL`
-        calls run concurrently against their own, separate sessions.
+        Either way, `SessionAccess.max_concurrent` bounds how many calls
+        are inside this method's `yield` at once, via `_session_semaphore` -
+        separate live sessions queued up for `PER_CALL`, or concurrent
+        checkouts of the one shared session for `EAGER`/`LAZY`.
 
-        What the checkout does guarantee is that the idle-session reaper
-        (`_reap_idle_session`/`close_idle_session`) can never close the session
-        while any call still holds a checkout on it. It only reaps when
-        `_session_users == 0`.
+        For `EAGER`/`LAZY`, that checkout is otherwise not exclusive:
+        concurrent calls all share the one session object, each checking
+        out its own page internally (see `Session.max_pages`), the same
+        way `PER_CALL` calls run concurrently against their own, separate
+        sessions - `max_concurrent` limits *how many* run at once, it
+        doesn't force them to run one at a time.
+
+        What the checkout does guarantee, independently of the semaphore,
+        is that the idle-session reaper (`_reap_idle_session`/`close_idle_session`)
+        can never close the session while any call still holds a checkout
+        on it. It only reaps when `_session_users == 0`.
 
         :param source: The resolved `Source` this call needs resources for.
         :yield: A `(db, session)` tuple, either of which may be `None` if
@@ -319,8 +324,9 @@ class Runtime(NamedComponent):
                     )
             return
 
-        session = await self._acquire_session()
-        try:
-            yield db, session
-        finally:
-            await self._release_session()
+        async with self._session_semaphore:
+            session = await self._acquire_session()
+            try:
+                yield db, session
+            finally:
+                await self._release_session()

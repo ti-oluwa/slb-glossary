@@ -54,19 +54,33 @@ DETAIL_SECTION = [
 def patch_parsers(
     monkeypatch: pytest.MonkeyPatch,
     *,
-    term_name: str | None,
-    detail_sections: list[list[TermBlock]],
+    term_name: str | Exception = "Porosity",
+    detail_sections: list[list[TermBlock]] | Exception,
 ) -> None:
-    """Stub out the parser calls `get_results_from_url` makes on the page."""
+    """
+    Stub out the parser calls `get_results_from_url` makes on the page.
 
-    async def mock_get_term_name(page: object) -> str | None:
+    `term_name`/`detail_sections` can each be a plain return value, or an
+    `Exception` instance to raise instead - simulating `get_term_name`/
+    `get_term_detail_blocks` themselves raising `ParsingError` on a
+    structural parse failure, which is where that raise actually lives
+    (see `slb_glossary.live.parsers`); `get_results_from_url` itself just
+    calls them and doesn't inspect what they return.
+    """
+
+    async def mock_get_term_name(page: object) -> str:
+        if isinstance(term_name, Exception):
+            raise term_name
         return term_name
 
     async def mock_get_term_detail_blocks(page: object) -> list[list[TermBlock]]:
+        if isinstance(detail_sections, Exception):
+            raise detail_sections
         return detail_sections
 
     async def mock_get_term_images(page: object) -> list[None]:
-        return [None] * len(detail_sections)
+        sections = detail_sections if isinstance(detail_sections, list) else []
+        return [None] * len(sections)
 
     monkeypatch.setattr(api_module, "get_term_name", mock_get_term_name)
     monkeypatch.setattr(api_module, "get_term_detail_blocks", mock_get_term_detail_blocks)
@@ -74,6 +88,14 @@ def patch_parsers(
 
 
 class TestGetResultsFromUrlParseFailures:
+    """
+    `get_results_from_url` doesn't itself decide what counts as a parse
+    failure anymore - `get_term_name`/`get_term_detail_blocks` raise
+    `ParsingError` themselves (see `tests/live/test_live_parsers.py`).
+    What matters here is that `get_results_from_url` doesn't catch and
+    swallow that (or any other) exception from them.
+    """
+
     async def test_valid_result_with_content_succeeds(self, monkeypatch: pytest.MonkeyPatch):
         """The happy path: a term name and at least one definition section yields normally."""
         patch_parsers(monkeypatch, term_name="Porosity", detail_sections=[DETAIL_SECTION])
@@ -85,29 +107,30 @@ class TestGetResultsFromUrlParseFailures:
         ]
         assert [r.term for r in results] == ["Porosity"]
 
-    async def test_missing_term_name_raises_parsing_error(self, monkeypatch: pytest.MonkeyPatch):
-        """No term name heading found -> `ParsingError`, not a silent empty result."""
-        patch_parsers(monkeypatch, term_name=None, detail_sections=[DETAIL_SECTION])
+    async def test_parsing_error_from_get_term_name_propagates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """A `ParsingError` from `get_term_name` isn't caught into an empty result."""
+        patch_parsers(
+            monkeypatch,
+            term_name=ParsingError("could not parse a term name"),
+            detail_sections=[DETAIL_SECTION],
+        )
         with pytest.raises(ParsingError, match="term name"):
             async for _ in api_module.get_results_from_url(
                 MockSession(), "https://x.com/broken", page=MockPage()
             ):
                 pass
 
-    async def test_missing_term_name_error_names_the_url(self, monkeypatch: pytest.MonkeyPatch):
-        """The raised error carries the URL for diagnosis, without dumping page content."""
-        patch_parsers(monkeypatch, term_name=None, detail_sections=[DETAIL_SECTION])
-        with pytest.raises(ParsingError, match=r"https://x.com/broken"):
-            async for _ in api_module.get_results_from_url(
-                MockSession(), "https://x.com/broken", page=MockPage()
-            ):
-                pass
-
-    async def test_empty_definition_sections_raises_parsing_error(
+    async def test_parsing_error_from_get_term_detail_blocks_propagates(
         self, monkeypatch: pytest.MonkeyPatch
     ):
-        """A term name but zero definition sections -> `ParsingError`, not a silent empty result."""
-        patch_parsers(monkeypatch, term_name="Porosity", detail_sections=[])
+        """A `ParsingError` from `get_term_detail_blocks` isn't caught into an empty result."""
+        patch_parsers(
+            monkeypatch,
+            term_name="Porosity",
+            detail_sections=ParsingError("could not parse definition sections"),
+        )
         with pytest.raises(ParsingError, match="definition sections"):
             async for _ in api_module.get_results_from_url(
                 MockSession(), "https://x.com/porosity", page=MockPage()
@@ -118,11 +141,7 @@ class TestGetResultsFromUrlParseFailures:
         self, monkeypatch: pytest.MonkeyPatch
     ):
         """A genuine bug in the parser layer isn't converted into an empty result either."""
-
-        async def raising_get_term_name(page: object) -> str | None:
-            raise ValueError("boom")
-
-        monkeypatch.setattr(api_module, "get_term_name", raising_get_term_name)
+        patch_parsers(monkeypatch, term_name=ValueError("boom"), detail_sections=[DETAIL_SECTION])
         with pytest.raises(ValueError, match="boom"):
             async for _ in api_module.get_results_from_url(
                 MockSession(), "https://x.com/porosity", page=MockPage()

@@ -213,9 +213,14 @@ class SessionAccess(Updatable):
 
     max_concurrent: int = 1
     """
-    Maximum number of live sessions (browser instances) open at once.
-    Bounded with a semaphore; relevant mainly to `PER_CALL` mode, where
-    concurrent tool calls can each want their own session.
+    Maximum number of calls allowed inside `Runtime.acquire`'s live-session
+    section at once, bounded with a semaphore. For `PER_CALL` mode, that's
+    the number of separate live sessions (browser instances) open at once. 
+    
+    For `EAGER`/`LAZY` mode, there's only ever one shared session,
+    so this instead bounds how many calls may be checked out on it
+    concurrently (each still drives its own page within that shared
+    session; see `slb_glossary.live.types.Session.max_pages`).
     """
 
     options: SessionOptions = dataclasses.field(default_factory=SessionOptions)

@@ -28,11 +28,11 @@ class MockSession:
 
 
 def make_runtime(
-    monkeypatch: pytest.MonkeyPatch, *, mode: SessionMode
+    monkeypatch: pytest.MonkeyPatch, *, mode: SessionMode, max_concurrent: int = 1
 ) -> tuple[Runtime, list[str]]:
     """
     Build a `Runtime` with local access disabled (so only the live-session
-    path is exercised) and `open_session`/`close_session` faked out.
+    path is exercised) and `open_session`/`close_session` mocked out.
 
     :return: The `Runtime`, and a list `calls` "open"/"close" append to, in
         order, for assertions.
@@ -51,7 +51,9 @@ def make_runtime(
 
     config = MCPConfig(
         local=LocalAccess(enabled=False),
-        session=SessionAccess(enabled=True, mode=mode, idle_timeout=60.0),
+        session=SessionAccess(
+            enabled=True, mode=mode, idle_timeout=60.0, max_concurrent=max_concurrent
+        ),
     )
     return Runtime(config), calls
 
@@ -147,8 +149,14 @@ class TestSharedSessionCheckout:
     async def test_concurrent_calls_share_one_session_without_double_open(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Concurrent `acquire()` calls under LAZY mode all share one session."""
-        runtime, calls = make_runtime(monkeypatch, mode=SessionMode.LAZY)
+        """
+        Concurrent `acquire()` calls under LAZY mode all share one session,
+        genuinely overlapping rather than serializing - given enough
+        `max_concurrent` headroom to let them (see `SessionAccess.max_concurrent`'s
+        own docstring: it bounds concurrent shared-session checkouts too,
+        not just separate `PER_CALL` sessions).
+        """
+        runtime, calls = make_runtime(monkeypatch, mode=SessionMode.LAZY, max_concurrent=5)
         peak_users = 0
         both_entered = asyncio.Event()
 
@@ -170,6 +178,35 @@ class TestSharedSessionCheckout:
         assert peak_users == 5
         assert runtime._session_users == 0
 
+    async def test_max_concurrent_also_bounds_shared_session_checkouts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        `max_concurrent` gates `EAGER`/`LAZY` checkouts too, not just
+        separate `PER_CALL` sessions - the same semaphore now wraps both
+        branches of `acquire`.
+        """
+        runtime, calls = make_runtime(monkeypatch, mode=SessionMode.LAZY, max_concurrent=2)
+        peak_users = 0
+        release = asyncio.Event()
+
+        async def one_call() -> None:
+            nonlocal peak_users
+            async with runtime.acquire(Source.LIVE) as (_, session):
+                assert session is not None
+                peak_users = max(peak_users, runtime._session_users)
+                await release.wait()
+
+        tasks = [asyncio.create_task(one_call()) for _ in range(5)]
+        await asyncio.sleep(0.05)
+        # Only `max_concurrent=2` should have gotten a checkout; the rest
+        # are waiting on the semaphore, never having reached `_acquire_session`.
+        assert peak_users == 2
+        assert calls.count("open") == 1  # still one shared session, just gated concurrency
+        release.set()
+        await asyncio.gather(*tasks)
+        assert runtime._session_users == 0
+
     async def test_per_call_mode_still_opens_and_closes_its_own_session(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -185,7 +222,11 @@ class TestSharedSessionCheckout:
     async def test_per_call_mode_bounds_concurrency_with_max_concurrent(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """`max_concurrent` still gates PER_CALL sessions; it's unrelated to the shared-session checkout."""
+        """
+        `max_concurrent` gates `PER_CALL` sessions too - the `PER_CALL`-specific
+        case of the same semaphore `test_max_concurrent_also_bounds_shared_session_checkouts`
+        exercises for `EAGER`/`LAZY`.
+        """
         calls: list[str] = []
 
         async def mock_open_session(**kwargs: object) -> MockSession:
