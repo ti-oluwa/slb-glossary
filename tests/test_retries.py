@@ -4,6 +4,7 @@
 
 import asyncio
 import math
+import typing
 
 import pytest
 
@@ -14,26 +15,26 @@ pytestmark = pytest.mark.unit
 
 class TestRetryPolicyDelayForAttempt:
     @pytest.mark.parametrize("attempt", [1, 2, 5])
-    def test_constant_delay_is_fixed_across_attempts(self, attempt: int):
+    def test_constant_delay_is_fixed_across_attempts(self, attempt: int) -> None:
         """`CONSTANT` backoff waits `base_delay` regardless of attempt number."""
         policy = RetryPolicy.constant(base_delay=800, jitter=False, max_delay=None)
         assert policy.delay_for_attempt(attempt) == 800
 
-    def test_linear_delay_grows_by_base_delay_per_attempt(self):
+    def test_linear_delay_grows_by_base_delay_per_attempt(self) -> None:
         """`LINEAR` backoff grows by `base_delay` per attempt."""
         policy = RetryPolicy.linear(base_delay=100, jitter=False, max_delay=None)
         assert policy.delay_for_attempt(1) == 100
         assert policy.delay_for_attempt(2) == 200
         assert policy.delay_for_attempt(3) == 300
 
-    def test_exponential_delay_grows_by_factor_per_attempt(self):
+    def test_exponential_delay_grows_by_factor_per_attempt(self) -> None:
         """`EXPONENTIAL` backoff grows by `base_delay * factor ** (attempt - 1)`."""
         policy = RetryPolicy.exponential(base_delay=100, factor=2.0, jitter=False, max_delay=None)
         assert policy.delay_for_attempt(1) == 100
         assert policy.delay_for_attempt(2) == 200
         assert policy.delay_for_attempt(3) == 400
 
-    def test_logarithmic_delay_grows_by_log_of_attempt(self):
+    def test_logarithmic_delay_grows_by_log_of_attempt(self) -> None:
         """`LOGARITHMIC` backoff grows by `base_delay * log(attempt + 1, factor)`."""
 
         policy = RetryPolicy.logarithmic(base_delay=100, factor=2.0, jitter=False, max_delay=None)
@@ -41,33 +42,35 @@ class TestRetryPolicyDelayForAttempt:
             expected = 100 * math.log(attempt + 1, 2.0)
             assert policy.delay_for_attempt(attempt) == pytest.approx(expected)
 
-    def test_delay_is_capped_at_max_delay(self):
+    def test_delay_is_capped_at_max_delay(self) -> None:
         """A delay that would exceed `max_delay` is capped to it."""
         policy = RetryPolicy.exponential(
             base_delay=1000, factor=10.0, jitter=False, max_delay=5000
         )
         assert policy.delay_for_attempt(5) == 5000
 
-    def test_max_delay_none_means_uncapped(self):
+    def test_max_delay_none_means_uncapped(self) -> None:
         """`max_delay=None` leaves an exponentially growing delay uncapped."""
         policy = RetryPolicy.exponential(
             base_delay=1000, factor=10.0, jitter=False, max_delay=None
         )
         assert policy.delay_for_attempt(5) == 1000 * 10.0**4
 
-    def test_jitter_off_gives_deterministic_delay(self):
+    def test_jitter_off_gives_deterministic_delay(self) -> None:
         """`jitter=False` returns the exact, unrandomized delay."""
         policy = RetryPolicy.constant(base_delay=500, jitter=False, max_delay=None)
         assert policy.delay_for_attempt(1) == 500
         assert policy.delay_for_attempt(1) == 500
 
-    def test_jitter_on_stays_within_plus_minus_50_percent(self, monkeypatch):
+    def test_jitter_on_stays_within_plus_minus_50_percent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """`jitter=True` scales the (already-capped) delay by a factor in `[0.5, 1.5]`."""
         monkeypatch.setattr("random.uniform", lambda a, b: 1.25)
         policy = RetryPolicy.constant(base_delay=400, jitter=True, max_delay=None)
         assert policy.delay_for_attempt(1) == pytest.approx(400 * 1.25)
 
-    def test_delay_never_negative(self):
+    def test_delay_never_negative(self) -> None:
         """`delay_for_attempt` never returns a value below zero."""
         policy = RetryPolicy.constant(base_delay=0, jitter=False, max_delay=None)
         assert policy.delay_for_attempt(1) >= 0.0
@@ -83,25 +86,31 @@ class TestRetryPolicyConstructors:
             (RetryPolicy.logarithmic, BackoffType.LOGARITHMIC),
         ],
     )
-    def test_constant_classmethod_sets_backoff_type(self, constructor, expected_backoff):
+    def test_constant_classmethod_sets_backoff_type(
+        self,
+        constructor: typing.Callable[..., RetryPolicy],
+        expected_backoff: BackoffType,
+    ) -> None:
         """Each shortcut constructor sets the matching `BackoffType`."""
         policy = constructor()
         assert policy.backoff_type is expected_backoff
 
 
 @pytest.fixture
-def anyio_backend(anyio_backend_asyncio_only):
+def anyio_backend(
+    anyio_backend_asyncio_only: tuple[str, dict[str, typing.Any]],
+) -> tuple[str, dict[str, typing.Any]]:
     """`retry()` calls raw `asyncio.sleep` internally, so it isn't trio-safe either."""
     return anyio_backend_asyncio_only
 
 
 @pytest.mark.anyio
 class TestRetry:
-    async def test_returns_first_successful_result_without_retrying_further(self):
+    async def test_returns_first_successful_result_without_retrying_further(self) -> None:
         """A func that succeeds on attempt 1 is only called once."""
         calls = 0
 
-        async def func():
+        async def func() -> str:
             nonlocal calls
             calls += 1
             return "ok"
@@ -110,11 +119,11 @@ class TestRetry:
         assert result == "ok"
         assert calls == 1
 
-    async def test_retries_until_success_within_attempts_budget(self):
+    async def test_retries_until_success_within_attempts_budget(self) -> None:
         """A func that fails twice then succeeds is called exactly 3 times."""
         calls = 0
 
-        async def func():
+        async def func() -> str:
             nonlocal calls
             calls += 1
             if calls < 3:
@@ -125,19 +134,21 @@ class TestRetry:
         assert result == "ok"
         assert calls == 3
 
-    async def test_gives_up_after_attempts_exhausted_and_reraises_by_default(self):
+    async def test_gives_up_after_attempts_exhausted_and_reraises_by_default(self) -> None:
         """Once `policy.attempts` is exhausted, the last error is reraised."""
 
-        async def func():
+        async def func() -> typing.NoReturn:
             raise ValueError("always fails")
 
         with pytest.raises(ValueError, match="always fails"):
             await retry(func, policy=RetryPolicy.constant(base_delay=0, attempts=3))
 
-    async def test_raise_exception_false_returns_last_falsy_result_instead_of_raising(self):
+    async def test_raise_exception_false_returns_last_falsy_result_instead_of_raising(
+        self,
+    ) -> None:
         """`raise_exception=False` returns the last (falsy) result instead of raising."""
 
-        async def func():
+        async def func() -> typing.NoReturn:
             raise ValueError("boom")
 
         result = await retry(
@@ -147,11 +158,11 @@ class TestRetry:
         )
         assert result is None
 
-    async def test_until_predicate_controls_when_a_result_counts_as_success(self):
+    async def test_until_predicate_controls_when_a_result_counts_as_success(self) -> None:
         """A falsy-but-no-exception result keeps retrying until `until` passes."""
         calls = 0
 
-        async def func():
+        async def func() -> int:
             nonlocal calls
             calls += 1
             return calls
@@ -168,12 +179,12 @@ class TestRetry:
         "exception_type", [SystemExit, KeyboardInterrupt, asyncio.CancelledError]
     )
     async def test_system_exit_and_keyboard_interrupt_and_cancelled_error_propagate_immediately_without_retry(
-        self, exception_type
-    ):
+        self, exception_type: type[BaseException]
+    ) -> None:
         """`SystemExit`/`KeyboardInterrupt`/`asyncio.CancelledError` propagate immediately, without retry."""
         calls = 0
 
-        async def func():
+        async def func() -> typing.NoReturn:
             nonlocal calls
             calls += 1
             raise exception_type("stop")

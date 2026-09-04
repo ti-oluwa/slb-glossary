@@ -2,6 +2,8 @@
 `local.schema.initialize`: idempotent table/index/trigger/FTS creation.
 """
 
+import pathlib
+
 import aiosqlite
 import pytest
 
@@ -32,33 +34,33 @@ async def trigger_names(connection: aiosqlite.Connection) -> set[str]:
 
 @pytest.mark.anyio
 class TestInitialize:
-    async def test_creates_terms_table(self, tmp_path):
+    async def test_creates_terms_table(self, tmp_path: pathlib.Path) -> None:
         """Creates the `terms` table."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
             assert "terms" in await table_names(connection)
 
-    async def test_creates_fts_table(self, tmp_path):
+    async def test_creates_fts_table(self, tmp_path: pathlib.Path) -> None:
         """Creates the `terms_fts` FTS5 virtual table."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
             assert "terms_fts" in await table_names(connection)
 
-    async def test_creates_sync_triggers(self, tmp_path):
+    async def test_creates_sync_triggers(self, tmp_path: pathlib.Path) -> None:
         """Creates the `terms_ai`/`terms_ad`/`terms_au` FTS sync triggers."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
             triggers = await trigger_names(connection)
             assert {"terms_ai", "terms_ad", "terms_au"} <= triggers
 
-    async def test_is_idempotent_when_run_twice(self, tmp_path):
+    async def test_is_idempotent_when_run_twice(self, tmp_path: pathlib.Path) -> None:
         """Calling `initialize` a second time on the same connection is a no-op, not an error."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
             await initialize(connection)  # should not raise
             assert "terms" in await table_names(connection)
 
-    async def test_fts_trigger_keeps_index_in_sync_on_insert(self, tmp_path):
+    async def test_fts_trigger_keeps_index_in_sync_on_insert(self, tmp_path: pathlib.Path) -> None:
         """Inserting into `terms` is mirrored into `terms_fts` via the AFTER INSERT trigger."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
@@ -74,7 +76,7 @@ class TestInitialize:
             await cursor.close()
             assert [row[0] for row in rows] == ["Porosity"]
 
-    async def test_fts_trigger_keeps_index_in_sync_on_delete(self, tmp_path):
+    async def test_fts_trigger_keeps_index_in_sync_on_delete(self, tmp_path: pathlib.Path) -> None:
         """Deleting a row removes its entry from `terms_fts` via the AFTER DELETE trigger."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
@@ -91,7 +93,7 @@ class TestInitialize:
             await cursor.close()
             assert rows == []
 
-    async def test_foreign_keys_pragma_is_enabled(self, tmp_path):
+    async def test_foreign_keys_pragma_is_enabled(self, tmp_path: pathlib.Path) -> None:
         """`PRAGMA foreign_keys` is turned on."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
@@ -101,11 +103,11 @@ class TestInitialize:
             assert value == 1
 
     async def test_raises_database_error_if_fts5_unavailable(
-        self, tmp_path, monkeypatch: pytest.MonkeyPatch
-    ):
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """An `OperationalError` creating the FTS5 table is wrapped in `DatabaseError`."""
 
-        async def broken_execute(statement, *args, **kwargs):
+        async def broken_execute(statement: str, *args, **kwargs):
             if "VIRTUAL TABLE" in statement:
                 raise aiosqlite.OperationalError("no such module: fts5")
             return await aiosqlite.Connection.execute(connection, statement, *args, **kwargs)
@@ -115,7 +117,7 @@ class TestInitialize:
             with pytest.raises(DatabaseError, match="FTS5"):
                 await initialize(connection)
 
-    async def test_stamps_current_schema_version(self, tmp_path):
+    async def test_stamps_current_schema_version(self, tmp_path: pathlib.Path) -> None:
         """`initialize` stamps `SCHEMA_VERSION` onto the database via `PRAGMA user_version`."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await initialize(connection)
@@ -124,18 +126,18 @@ class TestInitialize:
 
 @pytest.mark.anyio
 class TestGetSetSchemaVersion:
-    async def test_unstamped_database_reads_as_version_zero(self, tmp_path):
+    async def test_unstamped_database_reads_as_version_zero(self, tmp_path: pathlib.Path) -> None:
         """A brand new, never-`initialize`d database reads `0` (SQLite's own `user_version` default)."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             assert await get_schema_version(connection) == 0
 
-    async def test_set_then_get_round_trips(self, tmp_path):
+    async def test_set_then_get_round_trips(self, tmp_path: pathlib.Path) -> None:
         """`set_schema_version` followed by `get_schema_version` returns what was set."""
         async with aiosqlite.connect(tmp_path / "t.db") as connection:
             await set_schema_version(connection, 7)
             assert await get_schema_version(connection) == 7
 
-    async def test_version_persists_across_reconnects(self, tmp_path):
+    async def test_version_persists_across_reconnects(self, tmp_path: pathlib.Path) -> None:
         """The stamped version is part of the database file itself, not connection-local state."""
         db_path = tmp_path / "t.db"
         async with aiosqlite.connect(db_path) as connection:
@@ -145,7 +147,9 @@ class TestGetSetSchemaVersion:
         async with aiosqlite.connect(db_path) as reopened:
             assert await get_schema_version(reopened) == 3
 
-    async def test_reads_directly_from_the_database_not_a_side_channel(self, tmp_path):
+    async def test_reads_directly_from_the_database_not_a_side_channel(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """
         `get_schema_version` reflects `PRAGMA user_version` itself, so it's
         correct even with no `metadata.json` anywhere near it - unlike a

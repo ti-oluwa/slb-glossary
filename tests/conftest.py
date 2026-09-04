@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime
+import pathlib
 import platform
 import time
 import typing
@@ -134,7 +135,7 @@ def no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
-def tmp_data_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):
+def tmp_data_dir(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.Path:
     """
     A `tmp_path` subdirectory used as the app's data/config dir for a test.
 
@@ -150,7 +151,7 @@ def tmp_data_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
-def freeze_time(monkeypatch: pytest.MonkeyPatch):
+def freeze_time(monkeypatch: pytest.MonkeyPatch) -> datetime.datetime:
     """
     Freeze `time.monotonic` and `datetime.now(UTC)` to a fixed instant.
 
@@ -165,7 +166,7 @@ def freeze_time(monkeypatch: pytest.MonkeyPatch):
 
     class FrozenDatetime(datetime.datetime):
         @classmethod
-        def now(cls, tz: datetime.timezone | None = None) -> typing.Self:  # type: ignore
+        def now(cls, tz: datetime.timezone | None = None) -> typing.Self:  # type: ignore[override]
             if tz is not None:
                 return frozen_datetime.astimezone(tz)  # type: ignore[return-value]
             return frozen_datetime  # type: ignore[return-value]

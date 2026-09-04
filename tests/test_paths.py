@@ -15,7 +15,7 @@ pytestmark = pytest.mark.unit
 class TestGetDataDir:
     def test_uses_platformdirs_default_when_env_var_unset(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-    ):
+    ) -> None:
         """Without an override or env var, `get_data_dir` uses `platformdirs.user_data_dir`."""
         monkeypatch.delenv(paths.DATA_DIR_ENV_VAR, raising=False)
         fake_dir = tmp_path / "platformdirs-data"
@@ -25,7 +25,7 @@ class TestGetDataDir:
 
     def test_env_var_overrides_default(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-    ):
+    ) -> None:
         """`SLB_GLOSSARY_DATA_DIR` overrides the platformdirs default."""
         env_dir = tmp_path / "env-data"
         monkeypatch.setenv(paths.DATA_DIR_ENV_VAR, str(env_dir))
@@ -34,7 +34,7 @@ class TestGetDataDir:
 
     def test_override_argument_wins_over_everything(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-    ):
+    ) -> None:
         """An explicit `override` argument wins over both the env var and the default."""
         monkeypatch.setenv(paths.DATA_DIR_ENV_VAR, str(tmp_path / "env-data"))
         override_dir = tmp_path / "override-data"
@@ -45,7 +45,7 @@ class TestGetDataDir:
 class TestGetConfigDir:
     def test_uses_platformdirs_default_when_env_var_unset(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-    ):
+    ) -> None:
         """Without an override or env var, `get_config_dir` uses `platformdirs.user_config_dir`."""
         monkeypatch.delenv(paths.CONFIG_DIR_ENV_VAR, raising=False)
         fake_dir = tmp_path / "platformdirs-config"
@@ -55,7 +55,7 @@ class TestGetConfigDir:
 
     def test_env_var_overrides_default(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-    ):
+    ) -> None:
         """`SLB_GLOSSARY_CONFIG_DIR` overrides the platformdirs default."""
         env_dir = tmp_path / "env-config"
         monkeypatch.setenv(paths.CONFIG_DIR_ENV_VAR, str(env_dir))
@@ -66,21 +66,21 @@ class TestGetConfigDir:
 class TestDefaultPaths:
     def test_default_db_path_is_under_data_dir(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-    ):
+    ) -> None:
         """`default_db_path()` is `glossary.db` inside the resolved data dir."""
         monkeypatch.setenv(paths.DATA_DIR_ENV_VAR, str(tmp_path))
         assert paths.default_db_path() == tmp_path / "glossary.db"
 
     def test_default_metadata_path_is_under_data_dir(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-    ):
+    ) -> None:
         """`default_metadata_path()` is `metadata.json` inside the resolved data dir."""
         monkeypatch.setenv(paths.DATA_DIR_ENV_VAR, str(tmp_path))
         assert paths.default_metadata_path() == tmp_path / "metadata.json"
 
     def test_default_config_path_is_under_config_dir(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-    ):
+    ) -> None:
         """`default_config_path()` is `config.toml` inside the resolved config dir."""
         monkeypatch.setenv(paths.CONFIG_DIR_ENV_VAR, str(tmp_path))
         assert paths.default_config_path() == tmp_path / "config.toml"

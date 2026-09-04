@@ -7,6 +7,7 @@ Uses `anyio_backend_asyncio_only`: `probe()` uses raw
 
 import asyncio
 import time
+import typing
 
 import pytest
 
@@ -17,12 +18,14 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-def anyio_backend(anyio_backend_asyncio_only):
+def anyio_backend(
+    anyio_backend_asyncio_only: tuple[str, dict[str, typing.Any]],
+) -> tuple[str, dict[str, typing.Any]]:
     return anyio_backend_asyncio_only
 
 
 @pytest.fixture(autouse=True)
-def clear_connectivity_cache():
+def clear_connectivity_cache() -> typing.Iterator[None]:
     """`connectivity._CACHE` is a module-level global; reset it around every test."""
     connectivity._CACHE = None
     yield
@@ -31,35 +34,39 @@ def clear_connectivity_cache():
 
 @pytest.mark.anyio
 class TestProbe:
-    async def test_returns_true_on_successful_connect(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_returns_true_on_successful_connect(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """`probe` returns `True` when `asyncio.open_connection` succeeds."""
 
         class MockWriter:
-            def close(self):
+            def close(self) -> None:
                 pass
 
-            async def wait_closed(self):
+            async def wait_closed(self) -> None:
                 pass
 
-        async def mock_open_connection(host, port):
+        async def mock_open_connection(host: str, port: int) -> tuple[object, MockWriter]:
             return object(), MockWriter()
 
         monkeypatch.setattr(asyncio, "open_connection", mock_open_connection)
         assert await connectivity.probe("1.1.1.1", 53, timeout=1.0) is True
 
-    async def test_returns_false_on_connection_error(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_returns_false_on_connection_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """`probe` returns `False` when the connection attempt raises."""
 
-        async def mock_open_connection(host, port):
+        async def mock_open_connection(host: str, port: int) -> typing.NoReturn:
             raise ConnectionRefusedError
 
         monkeypatch.setattr(asyncio, "open_connection", mock_open_connection)
         assert await connectivity.probe("1.1.1.1", 53, timeout=1.0) is False
 
-    async def test_returns_false_on_timeout(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_returns_false_on_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """`probe` returns `False` when the connection attempt times out."""
 
-        async def hanging_open_connection(host, port):
+        async def hanging_open_connection(host: str, port: int) -> typing.NoReturn:
             await asyncio.sleep(10)
             raise AssertionError("should have timed out first")
 
@@ -69,10 +76,12 @@ class TestProbe:
 
 @pytest.mark.anyio
 class TestHasInternetConnection:
-    async def test_true_if_any_probe_target_succeeds(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_true_if_any_probe_target_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """`True` as soon as any one probe target succeeds, without waiting for the rest sequentially."""
 
-        async def mock_probe(host, port, timeout):
+        async def mock_probe(host: str, port: int, timeout: float) -> bool:
             if host == connectivity.PROBE_TARGETS[0][0]:
                 return True
             await asyncio.sleep(0.2)
@@ -87,20 +96,22 @@ class TestHasInternetConnection:
         # (failing) target's delay, not the sum of every target's delay.
         assert elapsed < 0.2 * len(connectivity.PROBE_TARGETS)
 
-    async def test_false_if_every_probe_target_fails(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_false_if_every_probe_target_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """`False` only once every probe target has failed."""
 
-        async def mock_probe(host, port, timeout):
+        async def mock_probe(host: str, port: int, timeout: float) -> bool:
             return False
 
         monkeypatch.setattr(connectivity, "probe", mock_probe)
         assert await connectivity.has_internet_connection(use_cache=False) is False
 
-    async def test_uses_cache_within_ttl(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_uses_cache_within_ttl(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Two quick calls within the cache TTL only probe once."""
         calls = 0
 
-        async def mock_probe(host, port, timeout):
+        async def mock_probe(host: str, port: int, timeout: float) -> bool:
             nonlocal calls
             calls += 1
             return True
@@ -110,11 +121,13 @@ class TestHasInternetConnection:
         await connectivity.has_internet_connection(use_cache=True)
         assert calls == len(connectivity.PROBE_TARGETS)
 
-    async def test_use_cache_false_forces_a_fresh_probe(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_use_cache_false_forces_a_fresh_probe(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """`use_cache=False` always probes again, ignoring any cached result."""
         calls = 0
 
-        async def mock_probe(host, port, timeout):
+        async def mock_probe(host: str, port: int, timeout: float) -> bool:
             nonlocal calls
             calls += 1
             return True
@@ -124,11 +137,11 @@ class TestHasInternetConnection:
         await connectivity.has_internet_connection(use_cache=False)
         assert calls == len(connectivity.PROBE_TARGETS) * 2
 
-    async def test_cache_expires_after_ttl(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_cache_expires_after_ttl(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A cached result older than `constants.internet_check_cache_ttl` triggers a fresh probe."""
         calls = 0
 
-        async def mock_probe(host, port, timeout):
+        async def mock_probe(host: str, port: int, timeout: float) -> bool:
             nonlocal calls
             calls += 1
             return True

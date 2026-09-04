@@ -7,6 +7,7 @@ primitives.
 """
 
 import asyncio
+import typing
 
 import pytest
 
@@ -19,7 +20,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.mcp]
 
 
 @pytest.fixture
-def anyio_backend(anyio_backend_asyncio_only):
+def anyio_backend(
+    anyio_backend_asyncio_only: tuple[str, dict[str, typing.Any]],
+) -> tuple[str, dict[str, typing.Any]]:
     return anyio_backend_asyncio_only
 
 

@@ -20,27 +20,27 @@ ALL_ERROR_CLASSES = [
 
 class TestExceptionHierarchy:
     @pytest.mark.parametrize("error_class", ALL_ERROR_CLASSES)
-    def test_every_error_is_an_slb_glossary_error(self, error_class: type[Exception]):
+    def test_every_error_is_an_slb_glossary_error(self, error_class: type[Exception]) -> None:
         """Every exported exception class is a subclass of `SLBGlossaryError`."""
         assert issubclass(error_class, errors.SLBGlossaryError)
 
-    def test_session_not_initialized_error_is_a_browser_error(self):
+    def test_session_not_initialized_error_is_a_browser_error(self) -> None:
         """`SessionNotInitializedError` is a `BrowserError`."""
         assert issubclass(errors.SessionNotInitializedError, errors.BrowserError)
 
-    def test_network_error_is_a_connection_error(self):
+    def test_network_error_is_a_connection_error(self) -> None:
         """`NetworkError` is a builtin `ConnectionError`."""
         assert issubclass(errors.NetworkError, ConnectionError)
 
-    def test_unsupported_format_error_is_a_value_error(self):
+    def test_unsupported_format_error_is_a_value_error(self) -> None:
         """`UnsupportedFormatError` is a builtin `ValueError`."""
         assert issubclass(errors.UnsupportedFormatError, ValueError)
 
-    def test_writer_error_is_an_os_error(self):
+    def test_writer_error_is_an_os_error(self) -> None:
         """`WriterError` is a builtin `OSError`."""
         assert issubclass(errors.WriterError, OSError)
 
-    def test_writer_error_carries_destination_and_format(self):
+    def test_writer_error_carries_destination_and_format(self) -> None:
         """`WriterError` stores the `destination`/`format` it was constructed with."""
         error = errors.WriterError(
             "could not write", destination=pathlib.Path("out.csv"), format="csv"

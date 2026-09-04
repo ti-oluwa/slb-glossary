@@ -24,7 +24,7 @@ pytestmark = pytest.mark.unit
 
 @pytest.mark.anyio
 class TestOpenDb:
-    async def test_creates_db_file_and_parent_directories(self, tmp_path: pathlib.Path):
+    async def test_creates_db_file_and_parent_directories(self, tmp_path: pathlib.Path) -> None:
         """`open_db` creates the database file and any missing parent directories."""
         db_path = tmp_path / "nested" / "dir" / "glossary.db"
         db = await open_db(db_path)
@@ -33,7 +33,7 @@ class TestOpenDb:
         finally:
             await close_db(db)
 
-    async def test_uses_wal_journal_mode(self, tmp_path: pathlib.Path):
+    async def test_uses_wal_journal_mode(self, tmp_path: pathlib.Path) -> None:
         """The opened connection runs in WAL journal mode."""
         db = await open_db(tmp_path / "t.db")
         try:
@@ -44,7 +44,9 @@ class TestOpenDb:
         finally:
             await close_db(db)
 
-    async def test_creates_metadata_file_with_defaults_if_missing(self, tmp_path: pathlib.Path):
+    async def test_creates_metadata_file_with_defaults_if_missing(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """A fresh database gets a `metadata.json` with default `Metadata` fields."""
         db_path = tmp_path / "t.db"
         db = await open_db(db_path)
@@ -55,7 +57,7 @@ class TestOpenDb:
         finally:
             await close_db(db)
 
-    async def test_does_not_overwrite_existing_metadata_file(self, tmp_path: pathlib.Path):
+    async def test_does_not_overwrite_existing_metadata_file(self, tmp_path: pathlib.Path) -> None:
         """An existing `metadata.json` (matching schema version) is left untouched."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
@@ -68,7 +70,9 @@ class TestOpenDb:
         finally:
             await close_db(db)
 
-    async def test_default_metadata_path_next_to_custom_db_path(self, tmp_path: pathlib.Path):
+    async def test_default_metadata_path_next_to_custom_db_path(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """With a custom `path` but no `metadata_path`, metadata defaults to `<stem>.metadata.json`."""
         db_path = tmp_path / "custom.db"
         db = await open_db(db_path)
@@ -77,7 +81,7 @@ class TestOpenDb:
         finally:
             await close_db(db)
 
-    async def test_default_paths_used_when_path_is_none(self, tmp_data_dir: pathlib.Path):
+    async def test_default_paths_used_when_path_is_none(self, tmp_data_dir: pathlib.Path) -> None:
         """With no `path` given, both db and metadata paths resolve to the app's default data dir."""
         db = await open_db()
         try:
@@ -86,7 +90,9 @@ class TestOpenDb:
         finally:
             await close_db(db)
 
-    async def test_discards_and_recreates_on_schema_version_mismatch(self, tmp_path: pathlib.Path):
+    async def test_discards_and_recreates_on_schema_version_mismatch(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """A database whose metadata reports a newer schema version is discarded and rebuilt."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
@@ -106,7 +112,7 @@ class TestOpenDb:
         finally:
             await close_db(db)
 
-    async def test_keeps_database_on_matching_schema_version(self, tmp_path: pathlib.Path):
+    async def test_keeps_database_on_matching_schema_version(self, tmp_path: pathlib.Path) -> None:
         """A database whose metadata matches the current schema version is opened as-is."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
@@ -128,7 +134,9 @@ class TestOpenDb:
         finally:
             await close_db(reopened)
 
-    async def test_discards_and_recreates_on_older_schema_version(self, tmp_path: pathlib.Path):
+    async def test_discards_and_recreates_on_older_schema_version(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """
         A database reporting an *older* schema version than this code
         understands is discarded and rebuilt - the explicit `<` branch in
@@ -152,12 +160,12 @@ class TestOpenDb:
 
     async def test_raises_database_error_when_fts5_unavailable(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    ) -> None:
         """`open_db` propagates `initialize`'s `DatabaseError` when FTS5 is unavailable,
         and closes the just-opened connection itself rather than leaking it
         (see `open_db`'s try/except around `enable_wal`/`initialize`)."""
 
-        async def broken_initialize(connection):
+        async def broken_initialize(connection: aiosqlite.Connection):
             raise DatabaseError("no FTS5")
 
         monkeypatch.setattr("slb_glossary.local.connection.initialize", broken_initialize)
@@ -166,7 +174,7 @@ class TestOpenDb:
 
     async def test_closes_connection_when_initialize_fails(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    ) -> None:
         """The connection `open_db` had just opened is closed before the
         error propagates, so nothing leaks a background worker thread."""
 
@@ -178,7 +186,7 @@ class TestOpenDb:
             opened_connections.append(connection)
             return connection
 
-        async def broken_initialize(connection):
+        async def broken_initialize(connection: aiosqlite.Connection):
             raise DatabaseError("no FTS5")
 
         monkeypatch.setattr("slb_glossary.local.connection.aiosqlite.connect", tracking_connect)
@@ -196,7 +204,7 @@ class TestOpenDb:
 class TestCheckSchemaVersion:
     """Direct tests of `check_schema_version`'s explicit `==`/`<`/`else` branching."""
 
-    def test_no_existing_metadata_is_a_no_op(self, tmp_path: pathlib.Path):
+    def test_no_existing_metadata_is_a_no_op(self, tmp_path: pathlib.Path) -> None:
         """No `metadata.json` at all means no existing database to check - nothing happens."""
         db_path = tmp_path / "t.db"
         db_path.write_text("placeholder", encoding="utf-8")
@@ -206,7 +214,7 @@ class TestCheckSchemaVersion:
 
         assert db_path.exists()  # untouched
 
-    def test_matching_version_is_a_no_op(self, tmp_path: pathlib.Path):
+    def test_matching_version_is_a_no_op(self, tmp_path: pathlib.Path) -> None:
         """A matching schema version leaves both files untouched."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
@@ -218,7 +226,7 @@ class TestCheckSchemaVersion:
         assert db_path.exists()
         assert Metadata.load(metadata_path).term_count == 5
 
-    def test_older_version_resets(self, tmp_path: pathlib.Path):
+    def test_older_version_resets(self, tmp_path: pathlib.Path) -> None:
         """An older schema version resets both files."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
@@ -230,7 +238,7 @@ class TestCheckSchemaVersion:
         assert not db_path.exists()
         assert not metadata_path.exists()
 
-    def test_newer_version_resets(self, tmp_path: pathlib.Path):
+    def test_newer_version_resets(self, tmp_path: pathlib.Path) -> None:
         """A newer schema version also resets both files (no migration path yet, either direction)."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
@@ -244,7 +252,7 @@ class TestCheckSchemaVersion:
 
 
 class TestResetIncompatibleSchema:
-    def test_removes_db_and_sidecar_files_and_metadata(self, tmp_path: pathlib.Path):
+    def test_removes_db_and_sidecar_files_and_metadata(self, tmp_path: pathlib.Path) -> None:
         """Removes the main db file, its `-wal`/`-shm` sidecars, and metadata.json."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
@@ -260,7 +268,7 @@ class TestResetIncompatibleSchema:
         assert not db_path.with_name(db_path.name + "-shm").exists()
         assert not metadata_path.exists()
 
-    def test_missing_sidecar_files_do_not_raise(self, tmp_path: pathlib.Path):
+    def test_missing_sidecar_files_do_not_raise(self, tmp_path: pathlib.Path) -> None:
         """Only the main db file existing (no `-wal`/`-shm`) doesn't raise."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
@@ -275,20 +283,20 @@ class TestResetIncompatibleSchema:
 
 @pytest.mark.anyio
 class TestCloseDb:
-    async def test_closes_the_connection(self, tmp_path: pathlib.Path):
+    async def test_closes_the_connection(self, tmp_path: pathlib.Path) -> None:
         """After `close_db`, further use of the connection raises."""
         db = await open_db(tmp_path / "t.db")
         await close_db(db)
         with pytest.raises(ValueError, match="no active connection"):
             await db.connection.execute("SELECT 1")
 
-    async def test_safe_to_call_twice(self, tmp_path: pathlib.Path):
+    async def test_safe_to_call_twice(self, tmp_path: pathlib.Path) -> None:
         """Calling `close_db` a second time is a no-op, not an error."""
         db = await open_db(tmp_path / "t.db")
         await close_db(db)
         await close_db(db)  # should not raise
 
-    async def test_folds_wal_back_into_main_file_on_close(self, tmp_path: pathlib.Path):
+    async def test_folds_wal_back_into_main_file_on_close(self, tmp_path: pathlib.Path) -> None:
         """Once the last connection closes, the `-wal`/`-shm` sidecar files are removed."""
         db_path = tmp_path / "t.db"
         db = await open_db(db_path)
@@ -305,7 +313,7 @@ class TestCloseDb:
 
 @pytest.mark.anyio
 class TestDatabaseContextManager:
-    async def test_yields_an_open_database(self, tmp_path: pathlib.Path):
+    async def test_yields_an_open_database(self, tmp_path: pathlib.Path) -> None:
         """The `async with database(...)` block yields a usable, open `Database`."""
         async with database(tmp_path / "t.db") as db:
             cursor = await db.connection.execute("SELECT 1")
@@ -313,7 +321,7 @@ class TestDatabaseContextManager:
             await cursor.close()
             assert value == 1
 
-    async def test_closes_on_normal_exit(self, tmp_path: pathlib.Path):
+    async def test_closes_on_normal_exit(self, tmp_path: pathlib.Path) -> None:
         """The database is closed once the `async with` block exits normally."""
         db_path = tmp_path / "t.db"
         async with database(db_path) as db:
@@ -321,7 +329,7 @@ class TestDatabaseContextManager:
         with pytest.raises(ValueError, match="no active connection"):
             await db.connection.execute("SELECT 1")
 
-    async def test_closes_on_exception_inside_block(self, tmp_path: pathlib.Path):
+    async def test_closes_on_exception_inside_block(self, tmp_path: pathlib.Path) -> None:
         """The database is still closed if the block raises."""
         db_path = tmp_path / "t.db"
         held_db = None

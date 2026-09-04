@@ -7,40 +7,41 @@ import pytest
 from slb_glossary.constants import constants
 from slb_glossary.local.api import upsert_results
 from slb_glossary.local.lexical import build_fts_query, lexical_search
+from slb_glossary.local.types import Database
 from tests.factories import make_search_result
 
 pytestmark = pytest.mark.unit
 
 
 class TestBuildFtsQuery:
-    def test_single_token_becomes_a_quoted_prefix_match(self):
+    def test_single_token_becomes_a_quoted_prefix_match(self) -> None:
         """A single token becomes `"token"*`."""
         assert build_fts_query("poros") == '"poros"*'
 
-    def test_multiple_tokens_are_anded_together(self):
+    def test_multiple_tokens_are_anded_together(self) -> None:
         """Multiple tokens are quoted, prefix-matched, and ANDed."""
         assert build_fts_query("drilling fluid") == '"drilling"* AND "fluid"*'
 
-    def test_empty_query_returns_empty_quoted_string(self):
+    def test_empty_query_returns_empty_quoted_string(self) -> None:
         """An empty (or whitespace-only) query returns `'""'`, matching nothing."""
         assert build_fts_query("") == '""'
         assert build_fts_query("   ") == '""'
 
-    def test_punctuation_in_a_token_is_quoted_safely(self):
+    def test_punctuation_in_a_token_is_quoted_safely(self) -> None:
         """Punctuation within a token doesn't break out of its quotes."""
         result = build_fts_query("don't")
         assert result.startswith('"') and result.endswith("*")
 
-    def test_literal_double_quote_is_escaped_by_doubling(self):
+    def test_literal_double_quote_is_escaped_by_doubling(self) -> None:
         """A literal `"` inside a token is escaped as `""`, not left to close the quote early."""
         assert build_fts_query('foo"bar') == '"foo""bar"*'
 
-    def test_multiple_literal_double_quotes_are_each_doubled(self):
+    def test_multiple_literal_double_quotes_are_each_doubled(self) -> None:
         """Every `"` in a token is doubled, not just the first."""
         assert build_fts_query('a"b"c') == '"a""b""c"*'
 
     @pytest.mark.parametrize("operator", ["OR", "NOT", "NEAR", "or", "not", "near"])
-    def test_fts5_operators_are_quoted_as_literal_tokens(self, operator: str):
+    def test_fts5_operators_are_quoted_as_literal_tokens(self, operator: str) -> None:
         """
         `OR`/`NOT`/`NEAR` (any case) are quoted like any other token, not
         left bare where FTS5 would parse them as boolean/proximity operators.
@@ -48,12 +49,12 @@ class TestBuildFtsQuery:
         result = build_fts_query(f"foo {operator} bar")
         assert result == f'"foo"* AND "{operator}"* AND "bar"*'
 
-    def test_parentheses_are_quoted_safely(self):
+    def test_parentheses_are_quoted_safely(self) -> None:
         """FTS5 grouping parens inside a token don't break out of its quotes."""
         assert build_fts_query("(foo)") == '"(foo)"*'
 
     @pytest.mark.parametrize("token", ["*", "foo*", "*foo", "foo*bar"])
-    def test_wildcard_characters_are_quoted_within_the_token(self, token: str):
+    def test_wildcard_characters_are_quoted_within_the_token(self, token: str) -> None:
         """A literal `*` inside a token stays inside the quotes, not appended as a live prefix marker."""
         result = build_fts_query(token)
         assert result == f'"{token}"*'
@@ -63,21 +64,21 @@ class TestBuildFtsQuery:
         assert not result.endswith("**")
 
     @pytest.mark.parametrize("query", ["café", "naïve", "北京", "पानी", "🔥drill"])
-    def test_unicode_input_is_quoted_like_any_other_token(self, query: str):
+    def test_unicode_input_is_quoted_like_any_other_token(self, query: str) -> None:
         """Non-ASCII input is quoted the same way ASCII input is, not rejected or mangled."""
         assert build_fts_query(query) == f'"{query}"*'
 
 
 @pytest.mark.anyio
 class TestLexicalSearch:
-    async def test_exact_term_match_scores_exact_match_score(self, db):
+    async def test_exact_term_match_scores_exact_match_score(self, db: Database) -> None:
         """An exact (case/whitespace-insensitive) term match scores `constants.exact_match_score`."""
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
         [(result, score)] = await lexical_search(db, "porosity")
         assert result.term == "Porosity"
         assert score == constants.exact_match_score
 
-    async def test_prefix_term_match_scores_prefix_match_score(self, db):
+    async def test_prefix_term_match_scores_prefix_match_score(self, db: Database) -> None:
         """A term starting with the query (but not exact) scores `constants.prefix_match_score`."""
         await upsert_results(
             db, [make_search_result(url="https://x.com/a", term="Porosity Index")]
@@ -86,7 +87,9 @@ class TestLexicalSearch:
         assert result.term == "Porosity Index"
         assert score == constants.prefix_match_score
 
-    async def test_content_only_match_scores_below_content_match_score_cap(self, db):
+    async def test_content_only_match_scores_below_content_match_score_cap(
+        self, db: Database
+    ) -> None:
         """
         A definition-only match's score is capped at `content_match_score_cap`.
 
@@ -117,7 +120,7 @@ class TestLexicalSearch:
         best_score = results[0][1]
         assert 0.0 < best_score <= constants.content_match_score_cap
 
-    async def test_exact_match_ranks_ahead_of_content_only_match(self, db):
+    async def test_exact_match_ranks_ahead_of_content_only_match(self, db: Database) -> None:
         """
         A name match is never outranked by a content-only match, however often the
         content-only result repeats the query word (the motivating example from the
@@ -137,18 +140,18 @@ class TestLexicalSearch:
         results = await lexical_search(db, "mud")
         assert results[0][0].term == "Mud"
 
-    async def test_natural_language_query_is_cleaned_before_matching(self, db):
+    async def test_natural_language_query_is_cleaned_before_matching(self, db: Database) -> None:
         """`"what is porosity"` finds `"Porosity"` via `clean_query`'s stripping."""
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
         results = await lexical_search(db, "what is porosity")
         assert any(r.term == "Porosity" for r, _ in results)
 
-    async def test_no_match_returns_empty_list(self, db):
+    async def test_no_match_returns_empty_list(self, db: Database) -> None:
         """A query matching nothing returns an empty list, not an error."""
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
         assert await lexical_search(db, "zzz_no_such_term_zzz") == []
 
-    async def test_results_ordered_best_first(self, db):
+    async def test_results_ordered_best_first(self, db: Database) -> None:
         """Results come back ordered best match first (descending score)."""
         await upsert_results(
             db,
@@ -161,7 +164,7 @@ class TestLexicalSearch:
         scores = [score for _, score in results]
         assert scores == sorted(scores, reverse=True)
 
-    async def test_respects_limit(self, db):
+    async def test_respects_limit(self, db: Database) -> None:
         """`limit` caps the number of results."""
         await upsert_results(
             db,
@@ -170,7 +173,7 @@ class TestLexicalSearch:
         results = await lexical_search(db, "porosity", limit=2)
         assert len(results) == 2
 
-    async def test_respects_topic_filter(self, db):
+    async def test_respects_topic_filter(self, db: Database) -> None:
         """`topic` restricts results to that topic."""
         await upsert_results(
             db,
@@ -182,7 +185,7 @@ class TestLexicalSearch:
         results = await lexical_search(db, "porosity", topic="Geology")
         assert [r.term for r, _ in results] == ["Porosity"]
 
-    async def test_respects_start_letter_filter(self, db):
+    async def test_respects_start_letter_filter(self, db: Database) -> None:
         """`start_letter` restricts results to terms starting with that letter.
 
         Both terms need to actually match the query via FTS for this to
@@ -200,7 +203,7 @@ class TestLexicalSearch:
         results = await lexical_search(db, "porosity", start_letter="P")
         assert [r.term for r, _ in results] == ["Porosity"]
 
-    async def test_respects_language_filter(self, db):
+    async def test_respects_language_filter(self, db: Database) -> None:
         """`language` restricts results to that glossary language edition."""
         await upsert_results(
             db,
@@ -212,7 +215,7 @@ class TestLexicalSearch:
         results = await lexical_search(db, "poros", language="en")
         assert [r.term for r, _ in results] == ["Porosity"]
 
-    async def test_respects_exclude(self, db):
+    async def test_respects_exclude(self, db: Database) -> None:
         """`exclude` filters out matching URLs/term names before `limit` is applied."""
         await upsert_results(
             db,
@@ -224,7 +227,7 @@ class TestLexicalSearch:
         results = await lexical_search(db, "porosity", exclude=["Porosity"])
         assert [r.term for r, _ in results] == ["Porosity Log"]
 
-    async def test_fuzzy_topic_resolves_against_stored_topics(self, db):
+    async def test_fuzzy_topic_resolves_against_stored_topics(self, db: Database) -> None:
         """`fuzzy=True` resolves a misspelled `topic` against stored topic names."""
         await upsert_results(
             db, [make_search_result(url="https://x.com/a", term="Porosity", topic="Geology")]
@@ -232,14 +235,16 @@ class TestLexicalSearch:
         results = await lexical_search(db, "porosity", topic="geologyy", fuzzy=True)
         assert [r.term for r, _ in results] == ["Porosity"]
 
-    async def test_literal_double_quote_in_query_does_not_raise(self, db):
+    async def test_literal_double_quote_in_query_does_not_raise(self, db: Database) -> None:
         """A literal `"` in the query text reaches SQLite as safely-quoted, not a syntax error."""
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
         results = await lexical_search(db, 'poros"ity')
         assert results == []
 
     @pytest.mark.parametrize("query", ["foo OR bar", "foo or bar"])
-    async def test_or_in_query_is_literal_text_not_a_boolean_operator(self, db, query: str):
+    async def test_or_in_query_is_literal_text_not_a_boolean_operator(
+        self, db: Database, query: str
+    ) -> None:
         """
         `OR` in the query text is ANDed as a literal token like any other,
         never interpreted as FTS5's boolean `OR`.
@@ -260,7 +265,7 @@ class TestLexicalSearch:
         results = await lexical_search(db, query)
         assert results == []
 
-    async def test_not_in_query_is_literal_text_not_a_unary_operator(self, db):
+    async def test_not_in_query_is_literal_text_not_a_unary_operator(self, db: Database) -> None:
         """
         `NOT` in the query text is ANDed as a literal token, never
         interpreted as FTS5's unary `NOT`.
@@ -277,7 +282,9 @@ class TestLexicalSearch:
         results = await lexical_search(db, "NOT drilling")
         assert results == []
 
-    async def test_near_in_query_is_literal_text_not_a_proximity_operator(self, db):
+    async def test_near_in_query_is_literal_text_not_a_proximity_operator(
+        self, db: Database
+    ) -> None:
         """
         `NEAR` in the query text doesn't trigger FTS5's `NEAR(...)`
         proximity syntax (which additionally requires parentheses this
@@ -290,7 +297,9 @@ class TestLexicalSearch:
         assert results == []
 
     @pytest.mark.parametrize("query", ["*", "foo*bar", "(foo", "foo)", "foo*bar OR (baz"])
-    async def test_syntax_looking_queries_execute_without_raising(self, db, query: str):
+    async def test_syntax_looking_queries_execute_without_raising(
+        self, db: Database, query: str
+    ) -> None:
         """
         Wildcards, unbalanced parens, and operator/wildcard combinations
         never reach SQLite as anything but a safely-quoted literal, so
@@ -301,13 +310,13 @@ class TestLexicalSearch:
         assert isinstance(results, list)
 
     @pytest.mark.parametrize("query", ["café", "naïve", "北京", "पानी", "🔥drill"])
-    async def test_unicode_query_executes_without_raising(self, db, query: str):
+    async def test_unicode_query_executes_without_raising(self, db: Database, query: str) -> None:
         """Non-ASCII query text reaches SQLite fine and returns a (possibly empty) list."""
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
         results = await lexical_search(db, query)
         assert isinstance(results, list)
 
-    async def test_unicode_query_matches_stored_unicode_term(self, db):
+    async def test_unicode_query_matches_stored_unicode_term(self, db: Database) -> None:
         """A Unicode query still matches a stored term containing the same text."""
         await upsert_results(
             db, [make_search_result(url="https://x.com/a", term="Porosidad", definition="café")]
