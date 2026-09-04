@@ -103,12 +103,11 @@ class Pages:
 
     Callers that each want an independently-owned page should acquire
     one with `get()` instead of sharing (and racing over) a single page.
-    `max_size` caps how many pages can be open on `context`
-    at once; once that many are checked out, further `get()` calls wait
-    for one to close.
+    `max_size` caps how many pages can be open on `context` at once; 
+    once that many are checked out, further `get()` calls wait for one to close.
 
     Accounting is driven by the page's own `close` event rather than by
-    callers remembering to "release" anything, so a page closed any way
+    callers remembering to release th page, so a page closed any way
     (via `PageHandle`, a direct `page.close()`, or the context tearing it
     down) always frees its slot exactly once.
     """
