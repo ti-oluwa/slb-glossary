@@ -100,7 +100,7 @@ class TestRetryPolicyConstructors:
 def anyio_backend(
     anyio_backend_asyncio_only: tuple[str, dict[str, typing.Any]],
 ) -> tuple[str, dict[str, typing.Any]]:
-    """`retry()` calls raw `asyncio.sleep` internally, so it isn't trio-safe either."""
+    """`retry()` calls raw `asyncio.sleep` internally, so it is not trio-safe either."""
     return anyio_backend_asyncio_only
 
 

@@ -80,7 +80,7 @@ class TestScoreResult:
         assert score == constants.exact_match_score
 
     def test_lexical_mode_falls_back_to_content_overlap(self) -> None:
-        """LEXICAL mode falls back to `score_content_overlap` when the term doesn't match."""
+        """LEXICAL mode falls back to `score_content_overlap` when the term does not match."""
         result = make_search_result(
             term="Unrelated Name", definition="about rock storage", topic=None
         )

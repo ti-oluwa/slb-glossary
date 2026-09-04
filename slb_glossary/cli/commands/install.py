@@ -19,7 +19,7 @@ __all__ = ["install"]
 def _validate_browsers(
     ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
 ) -> tuple[str, ...]:
-    """Reject any browser name click accepted but patchright doesn't recognize."""
+    """Reject any browser name click accepted but patchright does not recognize."""
     unknown = sorted(set(value) - set(KNOWN_BROWSERS))
     if unknown:
         raise click.BadParameter(

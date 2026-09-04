@@ -133,7 +133,7 @@ class TestUpsertResults:
         assert await count(db) == 3
 
     async def test_skips_results_with_no_url(self, db: Database) -> None:
-        """A result with no `url` is skipped and doesn't count toward the return value."""
+        """A result with no `url` is skipped and does not count toward the return value."""
         results = [make_search_result(url=None), make_search_result(url="https://x.com/a")]
         written = await upsert_results(db, results)
         assert written == 1
@@ -552,7 +552,7 @@ class TestGetRandomTerm:
         assert await get_random_term(db) is None
 
     async def test_returns_a_stored_term(self, db: Database) -> None:
-        """Returns some stored term when the database isn't empty."""
+        """Returns some stored term when the database is not empty."""
         await upsert_results(db, make_search_results(3))
         result = await get_random_term(db)
         assert result is not None

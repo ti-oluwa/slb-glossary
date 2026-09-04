@@ -33,7 +33,7 @@ ProgressReporter = Callable[[int, int | None], Awaitable[None]]
 """
 `async def report(count: int, total: int | None) -> None`.
 
-A thin callback tools use to report incremental progress, so this module doesn't
+A thin callback tools use to report incremental progress, so this module does not
 need to import FastMCP's `Context` to stream. `slb_glossary.mcp.api.MCPApp` adapts
 a real `Context.report_progress` into this shape when wiring tools up.
 """
@@ -42,7 +42,7 @@ a real `Context.report_progress` into this shape when wiring tools up.
 DEFAULT_INSTRUCTIONS = """\
 This server is a deterministic source of truth for oil-and-gas/energy
 industry terminology, backed by the SLB Energy Glossary (glossary.slb.com).
-It doesn't generate or paraphrase definitions as every result is the
+It does not generate or paraphrase definitions as every result is the
 glossary's own published wording, looked up exactly (from a local cached
 copy, the live site, or both), never invented or approximated. Call a
 tool whenever a definition, spelling, or topic classification needs to be
@@ -58,7 +58,7 @@ Tool selection:
   whether a term exists at all? Use `glossary_search`.
 - Want every term under one subject area (e.g. "Drilling", "Geology")?
   Use `glossary_get_terms_on`; call `glossary_get_topics` first if you
-  don't already know the exact topic name.
+  do not already know the exact topic name.
 - Want to see how several specific terms relate/compare? Use
   `glossary_compare` (several terms at once) or `glossary_related_terms`
   (terms linked from one term's own definition).
@@ -176,7 +176,7 @@ class SearchArgs:
     everywhere), `"semantic"` (embedding similarity) or `"hybrid"` (both,
     combined). `None` (the default) uses this server's own configured
     default. `"semantic"`/`"hybrid"` need the local database to have
-    embedded terms; falls back to `"lexical"` where it doesn't. 
+    embedded terms; falls back to `"lexical"` where it does not. 
     
     Only affects local reads. A live fetch always ranks by relevance.
     """
@@ -459,7 +459,7 @@ def resolve_source(requested: Source, config: MCPConfig) -> Source:
     if source not in allowed:
         choices = ", ".join(sorted(item.value for item in allowed))
         raise MCPError(
-            f"source={source.value!r} isn't permitted by this server's policy. Allowed: {choices}."
+            f"source={source.value!r} is not permitted by this server's policy. Allowed: {choices}."
         )
     return source
 
@@ -712,7 +712,7 @@ async def handle_sync(
     async with runtime.acquire(Source.LIVE) as (_, session):
         assert session is not None, (
             "`runtime.acquire(Source.LIVE)` should always yield a session; `Runtime.acquire` "
-            "only returns a None session when it isn't asked for one."
+            "only returns a None session when it is not asked for one."
         )
         if args.mode == "query":
             assert args.value is not None

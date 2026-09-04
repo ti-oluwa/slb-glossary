@@ -30,7 +30,7 @@ slb compare "water flooding" "gas flooding"
 
 ## Cache what you looked up
 
-Every command above talked to the live glossary. Add `--cache` (the default, so you don't even need to type it) and the result is also written to a local SQLite database:
+Every command above talked to the live glossary. Add `--cache` (the default, so you do not even need to type it) and the result is also written to a local SQLite database:
 
 ```bash
 slb search porosity   # cached automatically

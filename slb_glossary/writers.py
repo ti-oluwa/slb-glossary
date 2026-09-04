@@ -268,7 +268,7 @@ async def save(
     iterable - including the async generators returned by
     `slb_glossary.search.search` and `slb_glossary.search.get_terms_on`, which
     this collects before writing. `destination`'s parent directory is
-    created automatically if it doesn't exist yet.
+    created automatically if it does not exist yet.
 
     :param records: The records to save. Each record must support
         `_asdict()` and `_fields`, as `typing.NamedTuple` instances do.

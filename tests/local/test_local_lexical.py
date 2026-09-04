@@ -28,8 +28,8 @@ class TestBuildFtsQuery:
         assert build_fts_query("   ") == '""'
 
     def test_punctuation_in_a_token_is_quoted_safely(self) -> None:
-        """Punctuation within a token doesn't break out of its quotes."""
-        result = build_fts_query("don't")
+        """Punctuation within a token does not break out of its quotes."""
+        result = build_fts_query("do not")
         assert result.startswith('"') and result.endswith("*")
 
     def test_literal_double_quote_is_escaped_by_doubling(self) -> None:
@@ -50,7 +50,7 @@ class TestBuildFtsQuery:
         assert result == f'"foo"* AND "{operator}"* AND "bar"*'
 
     def test_parentheses_are_quoted_safely(self) -> None:
-        """FTS5 grouping parens inside a token don't break out of its quotes."""
+        """FTS5 grouping parens inside a token do not break out of its quotes."""
         assert build_fts_query("(foo)") == '"(foo)"*'
 
     @pytest.mark.parametrize("token", ["*", "foo*", "*foo", "foo*bar"])
@@ -272,7 +272,7 @@ class TestLexicalSearch:
 
         `NOT drilling`, if `NOT` were left unquoted, would be a syntax
         error (FTS5's `NOT` needs a left-hand operand) or, parsed some
-        other way, could match rows that *don't* mention "drilling". A
+        other way, could match rows that *do not* mention "drilling". A
         literal-text implementation just looks for both "not" and
         "drilling" as tokens, which matches nothing here.
         """
@@ -286,9 +286,9 @@ class TestLexicalSearch:
         self, db: Database
     ) -> None:
         """
-        `NEAR` in the query text doesn't trigger FTS5's `NEAR(...)`
+        `NEAR` in the query text does not trigger FTS5's `NEAR(...)`
         proximity syntax (which additionally requires parentheses this
-        query doesn't supply, and would otherwise raise a syntax error).
+        query does not supply, and would otherwise raise a syntax error).
         """
         await upsert_results(
             db, [make_search_result(url="https://x.com/a", term="Porosity", definition="rock")]

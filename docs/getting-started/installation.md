@@ -44,7 +44,7 @@ Any of the methods below give you two identical commands: `slb-glossary` and the
 
 === "One-line script (macOS/Linux/WSL)"
 
-    Picks `uv` or `pipx` for you, installing `uv` first if you have neither. Useful for a fresh machine or a CI image where you don't want to think about which installer to reach for.
+    Picks `uv` or `pipx` for you, installing `uv` first if you have neither. Useful for a fresh machine or a CI image where you do not want to think about which installer to reach for.
 
     ```bash
     curl -fsSL https://raw.githubusercontent.com/ti-oluwa/slb-glossary/main/scripts/install.sh | sh
@@ -112,7 +112,7 @@ The base install covers live search (`slb_glossary.live`) and local search (`slb
 
 ## Installing the browser build
 
-**Whichever path above you took, this step is shared and required by both.** The glossary site is a JavaScript application, so `slb-glossary` doesn't just fetch a URL and parse HTML. It drives a real "headed" or "headless" browser to load the page the way a person's browser would, then reads the rendered result. That browser has to actually be downloaded once. You can do that with the `install` command:
+**Whichever path above you took, this step is shared and required by both.** The glossary site is a JavaScript application, so `slb-glossary` does not just fetch a URL and parse HTML. It drives a real "headed" or "headless" browser to load the page the way a person's browser would, then reads the rendered result. That browser has to actually be downloaded once. You can do that with the `install` command:
 
 ```bash
 slb install chromium

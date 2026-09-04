@@ -110,7 +110,7 @@ class TestLoadModel:
         self, fake_model2vec: type[FakeStaticModel], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """`httpx`/`httpcore`/`huggingface_hub`/`filelock` loggers are raised to WARNING,
-        so their own INFO-level request/progress chatter doesn't bleed into our
+        so their own INFO-level request/progress chatter does not bleed into our
         configured log sinks."""
         monkeypatch.setattr("slb_glossary.constants.constants.embedding_dim", 4)
         for noisy_logger_name in ("httpx", "httpcore", "huggingface_hub", "filelock"):

@@ -98,7 +98,7 @@ class Constant(typing.Generic[T]):
         Initialize a constant.
 
         :param default: The constant's built-in value, used whenever `env_var`
-            isn't set in the environment (or isn't given at all). Also fixes
+            is not set in the environment (or is not given at all). Also fixes
             the expected type (and so how an environment string is cast)
             unless `type` is given explicitly.
         :param env_var: Name of an environment variable that can override
@@ -115,7 +115,7 @@ class Constant(typing.Generic[T]):
         :param cache: If `True`, resolve this constant once, on first access,
             and reuse that value for the rest of the process, instead of
             re-reading/re-validating its environment variable on every access.
-            Ignored when `env_var` isn't given.
+            Ignored when `env_var` is not given.
         """
         self.default = default
         self.env_var = env_var
@@ -230,13 +230,13 @@ class Constants:
     )
     """
     Default for `slb_glossary.query`'s `persist` parameter (`search`,
-    `get_term`, `terms`, and friends) when a caller doesn't pass one
+    `get_term`, `terms`, and friends) when a caller does not pass one
     explicitly. `False` out of the box and writing to the local database is
     a side effect a library caller should opt into. 
     
     Set `SLB_GLOSSARY_PERSIST_BY_DEFAULT=true`, or
     `constants.persist_by_default = True` directly, to flip that for
-    every call site in a process that doesn't pass `persist=` itself.
+    every call site in a process that does not pass `persist=` itself.
     """
 
     cli_cache_by_default = Constant(
@@ -261,7 +261,7 @@ class Constants:
     """
     Default `relevance_threshold` for `slb_glossary.query.search`'s
     `Source.AUTO` behavior. Below this score, the local database's best
-    match isn't trusted alone and a live search is added on.
+    match is not trusted alone and a live search is added on.
     """
 
     similar_terms_pool_size = Constant(
@@ -463,7 +463,7 @@ class Constants:
     )
     """
     Default `mode` for `slb_glossary.local.search`/the `search` CLI
-    command when the caller doesn't pass one explicitly. One of
+    command when the caller does not pass one explicitly. One of
     `"lexical"` (the default), `"semantic"`, or `"hybrid"`; see
     `slb_glossary.types.SearchMode`.
 

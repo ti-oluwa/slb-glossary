@@ -188,8 +188,8 @@ async def load_file(
         afterward to make imported terms searchable via
         `slb_glossary.local.vector_search`/`hybrid_search`.
     :raises DatabaseError: If `format` (or `path`'s extension) is
-        unsupported, `path` isn't a well-formed file of that format, or
-        `.xlsx` support isn't installed.
+        unsupported, `path` is not a well-formed file of that format, or
+        `.xlsx` support is not installed.
     :raises ValueError: If `batch_size` is given and is less than 1.
     """
     resolved_batch_size = batch_size if batch_size is not None else constants.import_batch_size

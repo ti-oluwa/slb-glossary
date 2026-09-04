@@ -2,7 +2,7 @@
 
 Connecting an AI agent to this glossary, whether or not you're writing Python, needs the `mcp` extra: `uv add "slb-glossary[mcp]"` for library use, or the CLI. You already have it if you installed with the `[all]` option.
 
-[MCP](https://modelcontextprotocol.io/) (Model Context Protocol) is the open standard this server speaks. An agent connects to it, sees a list of tools, and calls them the same way it would call any other tool. What we use here is a wrapper over the [`slb_glossary.query`](../library/query.md) functions already covered in this documentation, the server doesn't reimplement any lookup logic of its own.
+[MCP](https://modelcontextprotocol.io/) (Model Context Protocol) is the open standard this server speaks. An agent connects to it, sees a list of tools, and calls them the same way it would call any other tool. What we use here is a wrapper over the [`slb_glossary.query`](../library/query.md) functions already covered in this documentation, the server does not reimplement any lookup logic of its own.
 
 ---
 
@@ -181,7 +181,7 @@ This mirrors `slb_glossary.logging.configure_logging` closely enough that anythi
 
 ## Getting the underlying `FastMCP` instance
 
-`MCPApp` doesn't hide the `fastmcp.FastMCP` server it builds. `app.server()` returns it directly, built (once, lazily) from your `MCPConfig`. From there, it's a regular `FastMCP` app you can extend with anything `FastMCP` itself supports, beyond what `MCPConfig` has a dedicated field for:
+`MCPApp` does not hide the `fastmcp.FastMCP` server it builds. `app.server()` returns it directly, built (once, lazily) from your `MCPConfig`. From there, it's a regular `FastMCP` app you can extend with anything `FastMCP` itself supports, beyond what `MCPConfig` has a dedicated field for:
 
 ```python
 app = slb_mcp.MCPApp(config)
@@ -203,7 +203,7 @@ if __name__ == "__main__":
     mcp.run(transport="stdio")  # run the FastMCP instance directly, or app.run(), works too
 ```
 
-This is the escape hatch for anything `MCPConfig` doesn't model directly. Extra tools/resources/prompts unrelated to the glossary, `FastMCP` middleware, or mounting this server inside a larger ASGI app's own routing. `app.server()` is idempotent so you calling it again returns the same instance rather than rebuilding it, so mixing this with `app.run()`/`app.run_async()` afterward is safe.
+This is the escape hatch for anything `MCPConfig` does not model directly. Extra tools/resources/prompts unrelated to the glossary, `FastMCP` middleware, or mounting this server inside a larger ASGI app's own routing. `app.server()` is idempotent so you calling it again returns the same instance rather than rebuilding it, so mixing this with `app.run()`/`app.run_async()` afterward is safe.
 
 ---
 

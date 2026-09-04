@@ -24,7 +24,7 @@ PATTERNS: tuple[re.Pattern[str], ...] = tuple(
 """
 Recognized phrasings. Each is matched whole-string (not just a prefix),
 so a query that merely contains one of these words somewhere ("geometric
-mean", "explain and give an example") isn't mangled. Only a query that
+mean", "explain and give an example") is not mangled. Only a query that
 is one of these phrasings, start to end, gets stripped down to its `term` group.
 """
 

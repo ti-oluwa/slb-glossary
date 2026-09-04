@@ -18,7 +18,7 @@ This pag contains a dense, structural reference across `slb_glossary`'s modules.
 | `get_terms_urls(session, *, query=None, topic=None, start_letter=None, limit=None)` | async generator -> `str` | Raw URLs, no content fetched. |
 | `refresh_topics(session)` | coroutine -> `Session` | Reloads `session.topics`/`session.size` in place, reusing `session.retry` (the exact reload `open_session`/`session()` already does once at startup). Call this again later if the glossary's topic list may have changed mid-run. |
 | `score_result(result, query)` | function -> `float` | Token-overlap relevance score used internally by `search`; exposed for custom ranking. |
-| `ensure_initialized(session, auto_initialize=True)` | coroutine | Loads `session.topics`/`session.size` if not already loaded; raises `SessionNotInitializedError` if `auto_initialize=False` and it isn't. |
+| `ensure_initialized(session, auto_initialize=True)` | coroutine | Loads `session.topics`/`session.size` if not already loaded; raises `SessionNotInitializedError` if `auto_initialize=False` and it is not. |
 | `Session` | class | See [Sessions and the Browser](../concepts/sessions.md#what-opening-a-session-actually-does). Key attributes: `topics`, `size`, `pages` (the page pool), `language`. |
 | `BrowserType` | `StrEnum` | `CHROMIUM` \| `FIREFOX` \| `WEBKIT`. |
 | `ResourceType` | `IntFlag` | `DOCUMENT`, `STYLESHEET`, `IMAGE`, `MEDIA`, `FONT`, `SCRIPT`, `TEXTTRACK`, `XHR`, and more, combine with `|` for `block_resources`. |
@@ -120,7 +120,7 @@ The read-side counterpart to `writers`, used internally by `local.load_file` and
 | `reader(format)` | decorator | Registers a new format: `@reader("yaml")` on a function matching the `Reader` signature below teaches `read_rows` (and `local.load_file`) that format. |
 | `Reader` | type alias | `Callable[[pathlib.Path], AsyncIterator[dict[str, Any]]]`: what a function decorated with `@reader(...)` must look like, an async generator. |
 | `READERS` | `dict[str, Reader]` | The registry `reader(...)` writes to and `read_rows` reads from directly, if you'd rather inspect or call a specific reader yourself. |
-| `read_csv_rows` / `read_json_rows` / `read_xlsx_rows` | `Reader`s | The built-in readers `read_rows` dispatches to; callable directly for lower-level control. Each offloads its actual file I/O to a worker thread internally (`asyncio.to_thread`), so reading a large file doesn't blocks the event loop. |
+| `read_csv_rows` / `read_json_rows` / `read_xlsx_rows` | `Reader`s | The built-in readers `read_rows` dispatches to; callable directly for lower-level control. Each offloads its actual file I/O to a worker thread internally (`asyncio.to_thread`), so reading a large file does not blocks the event loop. |
 
 ```python
 import slb_glossary as slb
@@ -179,7 +179,7 @@ A representative sample, every one follows the same `SLB_GLOSSARY_<NAME>` patter
 | `import_batch_size` / `export_batch_size` | `SLB_GLOSSARY_IMPORT_BATCH_SIZE` / `SLB_GLOSSARY_EXPORT_BATCH_SIZE` | `local.load_file` / `local export`. |
 | `rrf_k`, `lexical_weight`, `semantic_weight` | `SLB_GLOSSARY_RRF_K`, `SLB_GLOSSARY_LEXICAL_WEIGHT`, `SLB_GLOSSARY_SEMANTIC_WEIGHT` | `local.hybrid_search`'s Reciprocal Rank Fusion, see [Search Modes](../concepts/search-modes.md). |
 | `session_auto_initialize` | `SLB_GLOSSARY_SESSION_AUTO_INITIALIZE` | Whether `session()` initializes eagerly or lazily by default. |
-| `persist_by_default` | `SLB_GLOSSARY_PERSIST_BY_DEFAULT` | `slb_glossary.query`'s `persist` default when a caller doesn't pass one. `False` out of the box: a silent write to your local database is a bigger surprise from a library call than from a command you just typed. |
+| `persist_by_default` | `SLB_GLOSSARY_PERSIST_BY_DEFAULT` | `slb_glossary.query`'s `persist` default when a caller does not pass one. `False` out of the box: a silent write to your local database is a bigger surprise from a library call than from a command you just typed. |
 | `cli_cache_by_default` | `SLB_GLOSSARY_CLI_CACHE_BY_DEFAULT` | The CLI's `--cache`/`--no-cache` default. `True` out of the box, matching this flag's long-standing default. Deliberately a separate constant from `persist_by_default`, not shared with it, since the two have always defaulted differently and unifying them would have to pick one default and silently change the other. |
 | `similar_terms_pool_size` | `SLB_GLOSSARY_SIMILAR_POOL_SIZE` | `get_term`/`compare`'s `with_similar=True`: how many candidates are pulled before alternatives are drawn from them. |
 | `max_similar_terms` | `SLB_GLOSSARY_MAX_SIMILAR_TERMS` | `get_term`/`compare`'s `with_similar=True`: how many alternatives are actually returned. |

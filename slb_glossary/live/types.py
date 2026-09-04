@@ -103,7 +103,7 @@ class Pages:
 
     Callers that each want an independently-owned page should acquire
     one with `get()` instead of sharing (and racing over) a single page.
-    `max_size` caps how many pages can be open on `context` at once; 
+    `max_size` caps how many pages can be open on `context` at once;
     once that many are checked out, further `get()` calls wait for one to close.
 
     Accounting is driven by the page's own `close` event rather than by
@@ -300,7 +300,7 @@ class Session:
     reuse an already-warmed-up page instead of opening and warming up
     their own each time.
 
-    The glossary site blocks requests that don't originate from a page
+    The glossary site blocks requests that do not originate from a page
     that's already been interacted with, so a brand-new page has to run a
     throwaway search first before it can be trusted with a real one.
     `base_page` has already paid that cost during `initialize()`, and
@@ -348,7 +348,7 @@ class Session:
             `base_page`, instead of being closed once this call finishes.
             See `base_page`'s own docstring for what that buys later
             callers, and its limits. Pass `False` to close the page
-            immediately instead, e.g. if you don't expect to need a
+            immediately instead, e.g. if you do not expect to need a
             warmed-up page again soon and would rather not hold one open.
         :raises NetworkError: If the glossary site could not be reached.
         """

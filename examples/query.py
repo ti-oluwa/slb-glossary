@@ -63,7 +63,7 @@ async def enable_semantic_search(db: slb.local.Database) -> None:
     Embed whatever's now cached, so a paraphrase can find it too.
 
     Needs the `semantic` extra installed (`uv add "slb-glossary[semantic]"`).
-    Skipped gracefully if it isn't, since this is an optional step.
+    Skipped gracefully if it is not, since this is an optional step.
     """
     print("\n### embedding cached terms for semantic search ###")
     try:

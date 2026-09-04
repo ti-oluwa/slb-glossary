@@ -51,11 +51,11 @@ async with slb.live.session(
 ```
 
 !!! info "Why headless matters for `use_stealth`"
-    `session()` applies stealth patches (via `playwright-stealth`, on top of the [patchright](../concepts/sessions.md) engine underneath) automatically when `headless=True`, and skips them when `headless=False`. This isn't arbitrary. Stealth patches have been observed to make the glossary *harder* to scrape reliably in headed mode, counterintuitively. You can override this either way with `use_stealth=True`/`False`, but the default is deliberately conditional on `headless` rather than always-on.
+    `session()` applies stealth patches (via `playwright-stealth`, on top of the [patchright](../concepts/sessions.md) engine underneath) automatically when `headless=True`, and skips them when `headless=False`. This is not arbitrary. Stealth patches have been observed to make the glossary *harder* to scrape reliably in headed mode, counterintuitively. You can override this either way with `use_stealth=True`/`False`, but the default is deliberately conditional on `headless` rather than always-on.
 
 ### Lazy initialization
 
-Opening a session doesn't, by itself, load anything from the glossary. The first call that actually needs the topic list (like `search`) triggers that automatically. If you'd rather control exactly when that first network round trip happens, say, to measure it separately, or to fail fast before doing anything else, open the session without initializing it, and call it explicitly:
+Opening a session does not, by itself, load anything from the glossary. The first call that actually needs the topic list (like `search`) triggers that automatically. If you'd rather control exactly when that first network round trip happens, say, to measure it separately, or to fail fast before doing anything else, open the session without initializing it, and call it explicitly:
 
 ```python
 async with slb.live.session(initialize=False) as session:
@@ -84,7 +84,7 @@ A few defaults worth knowing, since they're easy to trip over:
         ...
     ```
 
-- **A matched term can yield more than one result.** The same term can be filed under more than one topic, with a different definition each time, so the number of `SearchResult`s you get back isn't capped at `limit`; `limit` bounds how many terms are looked up, not how many definitions come back for them.
+- **A matched term can yield more than one result.** The same term can be filed under more than one topic, with a different definition each time, so the number of `SearchResult`s you get back is not capped at `limit`; `limit` bounds how many terms are looked up, not how many definitions come back for them.
 
 - **Results arrive in relevance order only if `concurrency=1` (the default).** Raise `concurrency` to fetch multiple term pages in parallel and finish faster, at the cost of results no longer necessarily arriving best-match-first:
 

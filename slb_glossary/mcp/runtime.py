@@ -5,7 +5,6 @@ import contextlib
 import logging
 import pathlib
 import time
-import typing
 from collections.abc import AsyncIterator
 
 from slb_glossary.config import DatabaseOptions
@@ -14,8 +13,10 @@ from slb_glossary.local.connection import close_db, open_db
 from slb_glossary.local.types import Database
 from slb_glossary.mcp.config import MCPConfig, SessionMode
 from slb_glossary.mcp.errors import MCPError
+from slb_glossary.mcp.session_pool import SessionPool
 from slb_glossary.mcp.types import NamedComponent
 from slb_glossary.query import Source
+from slb_glossary.types import Language
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,17 @@ def get_db_path(database_config: DatabaseOptions) -> str | None:
 
 class Runtime(NamedComponent):
     """
-    Owns and manages the shared resources (`Database`/`Session`) for
+    Owns and manages the shared resources (`Database` and/or `Sessions`) for
     one running MCP application.
+
+    Live sessions are pooled per language for `EAGER`/`LAZY` mode, since a `Session`
+    is bound to one glossary language for its whole lifetime
+
+    A `Runtime` asked to serve calls in more than one language needs one pool per
+    language, not one session shared across all of them. `PER_CALL` mode does not use the
+    pool map at all. It opens and closes a fresh session per call regardless of language, which
+    is its whole point (see `acquire`'s docstring for when that isolation is worth the extra
+    session opening cost pooling avoids).
     """
 
     def __init__(self, config: MCPConfig) -> None:
@@ -40,11 +50,9 @@ class Runtime(NamedComponent):
         self.config = config
         self._db: Database | None = None
         self._db_lock = asyncio.Lock()
-        self._session: Session | None = None
-        self._session_lock = asyncio.Lock()
-        self._session_semaphore = asyncio.Semaphore(config.session.max_concurrent)
-        self._session_last_used: float = 0.0
-        self._session_users: int = 0
+        self._pools: dict[Language, SessionPool] = {}
+        self._pools_lock = asyncio.Lock()
+        self._session_semaphore = asyncio.Semaphore(config.session.max_sessions)
         self._reaper_task: asyncio.Task[None] | None = None
         self._started = False
         self._closed = False
@@ -52,8 +60,9 @@ class Runtime(NamedComponent):
     async def start(self) -> None:
         """
         Perform startup-time work. Opens a local DB connection (if enabled), eagerly
-        open the live session if `SessionMode.EAGER` is configured, and start the
-        idle-session reaper if `idle_timeout` is set.
+        opens a live session for the configured default language if
+        `SessionMode.EAGER` is configured, and starts the idle-session
+        reaper if `idle_timeout` is set.
 
         Safe to call more than once; later calls are no-ops.
         """
@@ -66,6 +75,9 @@ class Runtime(NamedComponent):
             await self._open_db()
 
         if self.config.session.enabled and self.config.session.mode is SessionMode.EAGER:
+            # Only the configured default language is warmed up here.
+            # Any other language a call later asks for still gets its own
+            # pool lazily.
             await self.open_session()
 
         if (
@@ -74,7 +86,7 @@ class Runtime(NamedComponent):
             and self.config.session.idle_timeout is not None
         ):
             self._reaper_task = asyncio.create_task(
-                self._reap_idle_session(), name=f"{self.name}:session-reaper"
+                self._reap_idle_sessions(), name=f"{self.name}:session-reaper"
             )
 
         logger.info("[%s] Runtime started in %.3fs", self.name, time.monotonic() - started_at)
@@ -92,10 +104,11 @@ class Runtime(NamedComponent):
                 await self._reaper_task
             self._reaper_task = None
 
-        async with self._session_lock:
-            if self._session is not None:
-                await close_session(self._session)
-                self._session = None
+        async with self._pools_lock:
+            pools = list(self._pools.values())
+            self._pools.clear()
+        for pool in pools:
+            await pool.close()
 
         async with self._db_lock:
             if self._db is not None:
@@ -114,128 +127,92 @@ class Runtime(NamedComponent):
                 )
             return self._db
 
-    async def _open_session(self) -> Session:
+    def resolve_language(self, language: str | Language | None) -> Language:
         """
-        Open the shared session on first use and return it, refreshing
-        `_session_last_used`.
+        Resolve a per-call language request (or `None`, to use the
+        configured default) to a `Language` member, used to pick which
+        `SessionPool` a call gets routed to.
 
-        Callers must already hold `_session_lock`.
+        :param language: A caller-requested language, e.g. from a tool's
+            `language` argument, or `None` to use `self.config.session.options.language`.
+        :raises MCPError: If `language` is a string that is not a valid `Language` value.
         """
-        if self._session is None:
-            opened_at = time.monotonic()
-            kwargs = self.config.session.options.session_kwargs()
-            # Runtime only ever opens a session because a live call is
-            # imminent (`EAGER`, at startup) or already in flight (`LAZY`/
-            # `PER_CALL`, on first/every use). The decision to go live at
-            # all has already been made by the time we get here, so
-            # there's no reason to defer the topics/size load further.
-            # This overrides whatever `initialize` value `session_kwargs()`
-            # otherwise resolved to (the global lazy-by-default, which
-            # exists for `slb_glossary.query`'s own local-vs-live
-            # choice, not for a runtime that's already committed to a
-            # live session).
-            kwargs["initialize"] = True
-            self._session = await open_session(**kwargs)
-            logger.info(
-                "[%s] Live session opened in %.3fs (mode=%s)",
-                self.name,
-                time.monotonic() - opened_at,
-                self.config.session.mode.value,
-            )
-        self._session_last_used = time.monotonic()
-        return typing.cast(Session, self._session)
+        if language is None:
+            return Language(self.config.session.options.language)
+        if isinstance(language, Language):
+            return language
+        try:
+            return Language(language)
+        except ValueError as exc:
+            choices = ", ".join(member.value for member in Language)
+            raise MCPError(
+                f"[{self.name}] Unknown language {language!r}. Expected one of: {choices}."
+            ) from exc
 
-    async def _acquire_session(self) -> Session:
+    async def get_pool(self, language: Language) -> SessionPool:
         """
-        Open the shared session (if needed) and check it out for one caller.
+        Return the `SessionPool` for `language`, creating it on first request.
 
-        `_session_lock` is held only long enough to open the session and
-        bump `_session_users`, not for the caller's whole use of it.
+        A pool that's since gone idle and unused is closed and dropped
+        by the reaper, so a language that hasn't been asked for in a while does
+        not keep an entry around forever using up memory.
 
-        `Session` is explicitly designed to be driven concurrently (each
-        caller checks out its own page from `session.pages`, bounded by
-        `Session.max_pages`, so holding one exclusive lock across
-        every call would wrongly serialize that.
-
-        Pair with `_release_session`.
+        This just recreates it, empty, the next time it's asked for.
         """
-        async with self._session_lock:
-            session = await self._open_session()
-            self._session_users += 1
-            return session
+        async with self._pools_lock:
+            pool = self._pools.get(language)
+            if pool is None:
+                pool = SessionPool(language, self.config.session.options, self._session_semaphore)
+                self._pools[language] = pool
+            return pool
 
-    async def _release_session(self) -> None:
-        """
-        Release one checkout from `_acquire_session`, refreshing `_session_last_used`.
-        """
-        async with self._session_lock:
-            self._session_users -= 1
-            self._session_last_used = time.monotonic()
-            if self._session_users < 0:
-                # This path should be unreachable as every `_acquire_session` is paired
-                # with exactly one `_release_session` in `acquire`'s
-                # `try`/`finally`. But we guard against it anyway rather than
-                # letting the count go negative and permanently fool the
-                # reaper into thinking the session is still in use one
-                # call fewer than it really is.
-                self._session_users = 0
-                raise RuntimeError(f"[{self.name}] MCP session reference count went negative.")
-
-    async def _reap_idle_session(self) -> None:
-        """
-        Background task.
-
-        Closes the shared session after it's sat idle past `idle_timeout`
-        with no active user.
-        """
+    async def _reap_idle_sessions(self) -> None:
+        """Background task. Closes each language pool's idle sessions after they've sat unused past `idle_timeout`."""
         idle_timeout = self.config.session.idle_timeout
         assert idle_timeout is not None, (
-            f"[{self.name}] `_reap_idle_session` started with `idle_timeout=None`; "
+            f"[{self.name}] `_reap_idle_sessions` started with `idle_timeout=None`; "
             f"`{type(self).__name__}.start()` should never have scheduled this task in that case."
         )
         assert self.config.session.mode is not SessionMode.PER_CALL, (
-            f"[{self.name}] `_reap_idle_session` started under `SessionMode.PER_CALL`, which never "
-            f"maintains a shared session for it to reap; `{type(self).__name__}.start()` should never have "
+            f"[{self.name}] `_reap_idle_sessions` started under `SessionMode.PER_CALL`, which never "
+            f"maintains pooled sessions for it to reap; `{type(self).__name__}.start()` should never have "
             f"scheduled this task in that case."
         )
         try:
             while True:
                 await asyncio.sleep(max(idle_timeout / 4, 5.0))
-                await self.close_idle_session(idle_timeout)
+                await self.close_idle_sessions(idle_timeout)
         except asyncio.CancelledError:
             raise
 
-    async def close_idle_session(self, idle_timeout: float) -> None:
+    async def close_idle_sessions(self, idle_timeout: float) -> None:
         """
-        Run one idle-session check/close cycle.
+        Run one idle-session check/close cycle across every language pool.
 
-        A session may only be closed/reaped when it exists, is unused
-        (`_session_users == 0`), and has sat idle for at least `idle_timeout`.
-
-        All three are checked under `_session_lock`, the same lock
-        `_acquire_session`/`_release_session` use to update
-        `_session_users`/`_session_last_used`, so this can never observe
-        a call's checkout/release half-done.
+        Each pool decides independently which of its own sessions (it
+        may hold several) are unused and idle long enough to close
+        (see `SessionPool.close_idle`); a pool left holding zero sessions afterward
+        is dropped entirely, so a language that's stopped being requested does not
+        keep an empty entry around forever.
         """
-        async with self._session_lock:
-            if self._session is None or self._session_users > 0:
-                return
-            idle_for = time.monotonic() - self._session_last_used
-            if idle_for >= idle_timeout:
-                logger.info(
-                    "[%s] Closing idle live session after %.1fs (idle_timeout=%.1fs)",
-                    self.name,
-                    idle_for,
-                    idle_timeout,
-                )
-                await close_session(self._session)
-                self._session = None
+        async with self._pools_lock:
+            pools = list(self._pools.items())
+
+        for language, pool in pools:
+            await pool.close_idle(idle_timeout)
+            if pool.size == 0:
+                async with self._pools_lock:
+                    # Only drop it if it's still the exact same, still-empty
+                    # pool. A concurrent `get_pool`/`acquire` could have
+                    # reopened (or already replaced) it since the check above.
+                    if self._pools.get(language) is pool and pool.size == 0:
+                        del self._pools[language]
 
     async def open_db(self) -> Database:
         """
         Return the shared local `Database`, opening it on first use.
 
-        Unlike `acquire`, this doesn't route through `Source` resolution.
+        Unlike `acquire`, this does not route through `Source` resolution.
         Meant for callers that always need a writable local database regardless
         of which `Source` a call otherwise resolves to.
 
@@ -245,46 +222,76 @@ class Runtime(NamedComponent):
             raise MCPError(f"[{self.name}] This server has local database access disabled.")
         return await self._open_db()
 
-    async def open_session(self) -> Session:
-        async with self._session_lock:
-            return await self._open_session()
+    async def open_session(self, language: str | Language | None = None) -> Session:
+        """
+        Return `language`'s pooled session (the configured default if
+        omitted), opening it on first use, without checking it out.
+        """
+        pool = await self.get_pool(self.resolve_language(language))
+        return await pool.open()
 
     @contextlib.asynccontextmanager
     async def acquire(
-        self, source: Source
+        self, source: Source, *, language: str | Language | None = None
     ) -> AsyncIterator[tuple[Database | None, Session | None]]:
         """
         Yield the `(db, session)` pair a tool call needs to satisfy `source`.
 
-        Honours `SessionMode`. For `PER_CALL`, a fresh session is opened for
-        the duration of the `async with` block and closed on exit. For
-        `EAGER`/`LAZY`, the shared session is reused (and lazily opened on
-        first use, for `LAZY`) and checked out via `_acquire_session`/`_release_session`
-        for the duration of the caller's `async with` block.
+        Honours `SessionMode`. For `EAGER`/`LAZY`, `language` (the
+        configured default if omitted) selects which language's
+        `SessionPool` this call is routed to (see `get_pool`); a session
+        is checked out from that pool for the duration of the caller's
+        `async with` block (see `SessionPool.acquire`).
 
-        Either way, `SessionAccess.max_concurrent` bounds how many calls
-        are inside this method's `yield` at once, via `_session_semaphore` -
-        separate live sessions queued up for `PER_CALL`, or concurrent
-        checkouts of the one shared session for `EAGER`/`LAZY`.
+        A language's pool is not limited to one session. Concurrent calls
+        for the same language share whichever of that language's open
+        sessions has spare page capacity (each still checks out its own
+        page internally so they do not interfere with each other), and the
+        pool opens an additional browser instance for that language if every
+        existing one looks full, rather than queuing everyone behind a single
+        session. What the checkout does guarantee, regardless of how many sessions a
+        pool holds, is that the idle-session reaper can never close a
+        session while any call still holds a checkout on it.
 
-        For `EAGER`/`LAZY`, that checkout is otherwise not exclusive:
-        concurrent calls all share the one session object, each checking
-        out its own page internally (see `Session.max_pages`), the same
-        way `PER_CALL` calls run concurrently against their own, separate
-        sessions - `max_concurrent` limits *how many* run at once, it
-        doesn't force them to run one at a time.
+        For `PER_CALL`, a fresh session for `language` is opened for the
+        duration of the `async with` block and closed on exit, bypassing
+        the pool entirely. Worth it over `EAGER`/`LAZY` when callers
+        shouldn't share any session state (cookies, browser identity)
+        even when they happen to request the same language, e.g. a
+        server used by multiple untrusted or mutually-distrusting
+        callers, albeit at the cost of a fresh browser session per call instead
+        of reusing one. As of this glossary's current site (no login, no
+        user-specific session data), that isolation usually is not needed
+        day to day, but the mode stays available for a deployment or a
+        future site change that does need it.
 
-        What the checkout does guarantee, independently of the semaphore,
-        is that the idle-session reaper (`_reap_idle_session`/`close_idle_session`)
-        can never close the session while any call still holds a checkout
-        on it. It only reaps when `_session_users == 0`.
+        Either way, `SessionAccess.max_sessions` bounds how many browser
+        instances may be open at once system-wide, via a semaphore.
+        For `PER_CALL`, a slot is held for the whole lifetime of that
+        call's own session. For `EAGER`/`LAZY`, a slot is held for as
+        long as one specific session (of however many a pool holds) is
+        open, and acquired only when a pool actually launches a new browser,
+        released only when that specific session closes.
+
+        Caution should be taken when nesting. Do not call `acquire` again
+        from inside an already open `acquire` block in the same task if
+        doing so might need to open a new browser instance while `max_sessions` is
+        already exhausted by the outer call holding its slot.
+        The session semaphore is not reentrant, so that nested call would
+        deadlock waiting on a slot its own outer call holds. This is a
+        risk for `PER_CALL` (always opens fresh) and for `EAGER`/`LAZY`
+        whenever every session in the target language's pool is full.
 
         :param source: The resolved `Source` this call needs resources for.
+        :param language: Which glossary language's session this call
+            needs, e.g. from a tool's own `language` argument. `None`
+            uses the configured default (`SessionAccess.options.language`).
         :yield: A `(db, session)` tuple, either of which may be `None` if
-            `source` doesn't require it.
-        :raises MCPError: If `source` needs a resource this `Runtime` wasn't
+            `source` does not require it.
+        :raises MCPError: If `source` needs a resource this `Runtime` was not
             configured to provide (`local.enabled=False` for `Source.LOCAL`,
-            `session.enabled=False` for `Source.LIVE`).
+            `session.enabled=False` for `Source.LIVE`), or `language` is not
+            a valid `Language` value.
         """
         needs_db = source in (Source.LOCAL, Source.AUTO)
         needs_session = source in (Source.LIVE, Source.AUTO)
@@ -294,6 +301,7 @@ class Runtime(NamedComponent):
         if source is Source.LIVE and not self.config.session.enabled:
             raise MCPError(f"[{self.name}] This server has live glossary access disabled.")
 
+        resolved_language = self.resolve_language(language)
         db = await self._open_db() if (needs_db and self.config.local.enabled) else None
         if not needs_session or not self.config.session.enabled:
             yield db, None
@@ -303,14 +311,16 @@ class Runtime(NamedComponent):
             async with self._session_semaphore:
                 opened_at = time.monotonic()
                 kwargs = self.config.session.options.session_kwargs()
+                kwargs["language"] = resolved_language
                 # A session opened here is about to be used for this call's
                 # live fetch, so there's no reason to defer initialization further.
                 kwargs["initialize"] = True
                 session = await open_session(**kwargs)
                 logger.debug(
-                    "[%s] Per-call session opened in %.3fs",
+                    "[%s] Per-call session opened in %.3fs (language=%s)",
                     self.name,
                     time.monotonic() - opened_at,
+                    resolved_language.value,
                 )
                 try:
                     yield db, session
@@ -324,9 +334,9 @@ class Runtime(NamedComponent):
                     )
             return
 
-        async with self._session_semaphore:
-            session = await self._acquire_session()
-            try:
-                yield db, session
-            finally:
-                await self._release_session()
+        pool = await self.get_pool(resolved_language)
+        session = await pool.acquire()
+        try:
+            yield db, session
+        finally:
+            await pool.release(session)

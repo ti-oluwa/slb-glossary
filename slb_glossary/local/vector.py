@@ -41,14 +41,14 @@ async def load_extension(db: Database) -> typing.Any:
 
     :param db: The local database to prepare.
     :return: The imported `sqlite_vec` module.
-    :raises DatabaseError: If `sqlite-vec` isn't installed, or the
+    :raises DatabaseError: If `sqlite-vec` is not installed, or the
         installed SQLite build can't load extensions.
     """
     try:
         import sqlite_vec  # type: ignore[import]
     except ImportError as exc:
         raise DatabaseError(
-            "Semantic search needs the `sqlite-vec` package, which isn't "
+            "Semantic search needs the `sqlite-vec` package, which is not "
             "installed. Install it with `pip install slb-glossary[semantic]`."
         ) from exc
 
@@ -79,14 +79,14 @@ async def ensure_table(db: Database) -> None:
 
     Also resolves `embedding_dim()`, which loads the embedding model, so
     only call this where a term or query is actually about to be
-    embedded. `delete_embeddings`/maintenance cleanup don't need the
-    model at all, just the table, so they don't go through this.
+    embedded. `delete_embeddings`/maintenance cleanup do not need the
+    model at all, just the table, so they do not go through this.
 
     :param db: The local database to prepare.
-    :raises DatabaseError: If `sqlite-vec` isn't installed, or its
+    :raises DatabaseError: If `sqlite-vec` is not installed, or its
         extension can't be loaded.
-    :raises EmbeddingError: If `model2vec` isn't installed, or the
-        embedding model's real output size doesn't match `constants.embedding_dim`.
+    :raises EmbeddingError: If `model2vec` is not installed, or the
+        embedding model's real output size does not match `constants.embedding_dim`.
     """
     await load_extension(db)
     dim = embedding_dim()
@@ -109,7 +109,7 @@ async def clear(db: Database) -> None:
     Used by `slb_glossary.local.maintenance.flush`/`reset`, which have
     to work on a database that never had semantic search set up, so this
     is a deliberate no-op rather than an error in that case, including
-    when `sqlite-vec` itself isn't installed.
+    when `sqlite-vec` itself is not installed.
 
     :param db: The local database to clear.
     """
@@ -152,13 +152,13 @@ async def embed_terms(
         definitions embeds all of them, not just one. Combines with
         `topic` (a row must match both, if both are given).
     :param topic: Only (re-)embed rows filed under this topic, or several
-        comma-separated topics. `None` (the default) doesn't filter by
+        comma-separated topics. `None` (the default) does not filter by
         topic. Combines with `urls` (a row must match both, if both are
         given).
     :param fuzzy: If `True`, resolve `topic` against topics actually
         stored locally (tolerating minor misspellings/partial names),
         the same as `slb_glossary.local.search`'s own `fuzzy`. Has no
-        effect if `topic` isn't given.
+        effect if `topic` is not given.
     :param only_missing: If `True` (the default), skip a row that
         already has a stored embedding, so a repeat call after a sync
         only pays for what's newly added. Pass `False` to re-embed
@@ -166,10 +166,10 @@ async def embed_terms(
     :param batch_size: Rows embedded per model call. `None` (the
         default) uses `constants.embed_batch_size`.
     :return: Number of rows newly embedded.
-    :raises DatabaseError: If `sqlite-vec` isn't installed, or its
+    :raises DatabaseError: If `sqlite-vec` is not installed, or its
         extension can't be loaded.
-    :raises EmbeddingError: If `model2vec` isn't installed, or the
-        embedding model's output size doesn't match `constants.embedding_dim`.
+    :raises EmbeddingError: If `model2vec` is not installed, or the
+        embedding model's output size does not match `constants.embedding_dim`.
     """
     await ensure_table(db)
     resolved_batch_size = batch_size if batch_size is not None else constants.embed_batch_size
@@ -217,8 +217,8 @@ async def embed_terms(
         texts = [build_embed_text(row["term"], row["definition"], row["topic"]) for row in batch]
         vectors = embed(texts)
         rowids = [row["rowid"] for row in batch]
-        # `vec0` doesn't support `ON CONFLICT`/`INSERT OR REPLACE` as an
-        # upsert. We need to delete first so a re-embedded row doesn't just
+        # `vec0` does not support `ON CONFLICT`/`INSERT OR REPLACE` as an
+        # upsert. We need to delete first so a re-embedded row does not just
         # fail to insert on top of its old vector.
         placeholders = ", ".join("?" for _ in rowids)
         await db.connection.execute(
@@ -290,7 +290,7 @@ async def vector_search(
     result that shares no words with `query` at all, which lexical
     search (`slb_glossary.local.search`) can never do. It also has no
     equivalent of lexical search's exact/prefix name tier, so a term
-    named exactly what you searched for isn't guaranteed to rank first.
+    named exactly what you searched for is not guaranteed to rank first.
 
     Prefer `slb_glossary.local.hybrid_search` unless you specifically
     want ranking with no lexical signal mixed in.
@@ -307,7 +307,7 @@ async def vector_search(
         comma-separated topics (case-insensitive exact match by default).
     :param start_letter: Restrict results to terms starting with this letter.
     :param language: Restrict results to this glossary language edition
-        (e.g. `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+        (e.g. `"en"`/`"es"`). `None` (the default) does not filter by language.
     :param limit: Maximum number of results. `None` for unlimited (every
         embedded term, ranked).
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
@@ -319,10 +319,10 @@ async def vector_search(
         `similarity` is a cosine similarity, in `[-1.0, 1.0]` in theory
         and close to `[0.0, 1.0]` in practice for real text. This is not
         the `[0.0, 1.0]`-calibrated score `lexical_search`/`hybrid_search` return.
-    :raises DatabaseError: If `sqlite-vec` isn't installed, or its
+    :raises DatabaseError: If `sqlite-vec` is not installed, or its
         extension can't be loaded.
-    :raises EmbeddingError: If `model2vec` isn't installed, or the
-        embedding model's output size doesn't match `constants.embedding_dim`.
+    :raises EmbeddingError: If `model2vec` is not installed, or the
+        embedding model's output size does not match `constants.embedding_dim`.
     """
     await ensure_table(db)
     started_at = time.monotonic()

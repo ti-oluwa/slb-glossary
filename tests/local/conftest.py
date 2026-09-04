@@ -30,7 +30,7 @@ def text_to_unit_vector(text: str) -> typing.Any:
     Deterministically hash `text` into a fixed-size unit vector (the fallback for
     any text not explicitly `.set()` on the `mock_embeddings` fixture).
 
-    Returns a `numpy.ndarray`, typed `Any` here so this module doesn't need
+    Returns a `numpy.ndarray`, typed `Any` here so this module does not need
     a hard `numpy` import at module level for a type-only reference.
     """
     import numpy as np
@@ -80,7 +80,7 @@ def mock_embeddings(monkeypatch: pytest.MonkeyPatch) -> MockEmbeddings:
 def anyio_backend(
     anyio_backend_asyncio_only: tuple[str, dict[str, typing.Any]],
 ) -> tuple[str, dict[str, typing.Any]]:
-    """Every test under `tests/local/` touches real aiosqlite, which isn't trio-safe."""
+    """Every test under `tests/local/` touches real aiosqlite, which is not trio-safe."""
     return anyio_backend_asyncio_only
 
 

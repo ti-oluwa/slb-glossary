@@ -102,7 +102,7 @@ class TestHybridSearch:
     async def test_name_tier_result_is_not_duplicated_in_the_fused_tier(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:
-        """A result already in the name tier doesn't also appear in the fused tier."""
+        """A result already in the name tier does not also appear in the fused tier."""
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
         results = await hybrid_search(db, "porosity")
         assert len(results) == 1

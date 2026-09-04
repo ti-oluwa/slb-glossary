@@ -44,7 +44,7 @@ async def get_known_urls_set(
     Collect every locally stored URL matching the given filters, as a `frozenset`.
 
     Used to build `exclude` sets for the live fetches below, so a sync
-    doesn't pay to re-fetch a term already stored locally under the same
+    does not pay to re-fetch a term already stored locally under the same
     filter. `frozenset` keeps membership checks against it (one per URL
     the live site returns) cheap regardless of how many URLs are excluded.
     """
@@ -201,7 +201,7 @@ async def sync_query(
     :param start_letter: Restrict the fetch to terms starting with this letter.
     :param limit: Maximum number of terms to fetch. `None` for unlimited.
         Counts only terms actually fetched; a term already stored locally
-        and skipped (see `skip_existing`) doesn't use up this budget.
+        and skipped (see `skip_existing`) does not use up this budget.
     :param concurrency: Concurrent term-page fetches. Keep this low; see
         `slb_glossary.live.get_results_from_urls`'s own note on server load.
     :param batch_size: Number of results to buffer before each incremental
@@ -210,7 +210,7 @@ async def sync_query(
         buffered so far if the fetch raises partway through, instead of
         losing it (the resulting `SyncSummary.interrupted` is then `True`,
         and the original exception is still re-raised after saving).
-    :param skip_existing: If `True` (the default), don't re-fetch a term
+    :param skip_existing: If `True` (the default), do not re-fetch a term
         already stored locally under this same `query`/`topic`/`start_letter`
         filter; the live site is only asked for terms not already known.
         Pass `False` to force a full re-fetch, e.g. to refresh
@@ -280,7 +280,7 @@ async def sync_topic(
     :param topic: Topic name, or several comma-separated topic names.
     :param limit: Maximum number of terms to fetch. `None` for unlimited.
         Counts only terms actually fetched; a term already stored locally
-        and skipped (see `skip_existing`) doesn't use up this budget.
+        and skipped (see `skip_existing`) does not use up this budget.
     :param concurrency: Concurrent term-page fetches.
     :param batch_size: Number of results to buffer before each incremental
         write to `db`. See `slb_glossary.local.upsert_results_incrementally`.
@@ -288,7 +288,7 @@ async def sync_topic(
         buffered so far if the fetch raises partway through, instead of
         losing it (the resulting `SyncSummary.interrupted` is then `True`,
         and the original exception is still re-raised after saving).
-    :param skip_existing: If `True` (the default), don't re-fetch a term
+    :param skip_existing: If `True` (the default), do not re-fetch a term
         already stored locally under `topic`; the live site is only asked
         for terms not already known. Pass `False` to force a full
         re-fetch, e.g. to refresh already-stored definitions that may
@@ -356,7 +356,7 @@ async def sync_letter(
         comma-separated topics.
     :param limit: Maximum number of terms to fetch. `None` for unlimited.
         Counts only terms actually fetched; a term already stored locally
-        and skipped (see `skip_existing`) doesn't use up this budget.
+        and skipped (see `skip_existing`) does not use up this budget.
     :param concurrency: Concurrent term-page fetches.
     :param batch_size: Number of results to buffer before each incremental
         write to `db`. See `slb_glossary.local.upsert_results_incrementally`.
@@ -364,7 +364,7 @@ async def sync_letter(
         buffered so far if the fetch raises partway through, instead of
         losing it (the resulting `SyncSummary.interrupted` is then `True`,
         and the original exception is still re-raised after saving).
-    :param skip_existing: If `True` (the default), don't re-fetch a term
+    :param skip_existing: If `True` (the default), do not re-fetch a term
         already stored locally under this `start_letter`/`topic` filter;
         the live site is only asked for terms not already known. Pass
         `False` to force a full re-fetch, e.g. to refresh already-stored
@@ -455,9 +455,9 @@ async def sync_all(
         partway through, instead of losing it (the resulting
         `SyncSummary.interrupted` is then `True`, and the original
         exception is still re-raised after saving).
-    :param skip_existing: If `True` (the default), don't re-fetch a term
+    :param skip_existing: If `True` (the default), do not re-fetch a term
         already stored locally under the topic currently being synced;
-        each topic only asks the live site for terms it doesn't already
+        each topic only asks the live site for terms it does not already
         have. Pass `False` to force a full re-fetch of every topic, e.g.
         to refresh already-stored definitions that may have changed live.
     :return: A summary of the sync.

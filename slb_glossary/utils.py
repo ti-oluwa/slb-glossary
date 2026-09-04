@@ -59,15 +59,15 @@ def env(
     ```
 
     :param name: Environment variable name to read.
-    :param default: Value used when `name` isn't set in the environment.
-        Also determines the expected type when `type` isn't given explicitly.
+    :param default: Value used when `name` is not set in the environment.
+        Also determines the expected type when `type` is not given explicitly.
     :param type: Expected type to cast the raw string value to, or the callable
         to cast the string to the correct type. Defaults to `type(default)`.
         Supports `bool`, `int`, `float`, `str`, and any `enum.Enum` subclass
         (matched by value).
     :param validator: Optional extra check run on the cast value. A
         `False` return is treated the same as a cast failure.
-    :return: The cast, validated value, or `default` if `name` isn't set.
+    :return: The cast, validated value, or `default` if `name` is not set.
     :raises EnvironmentVariableError: If `name` is set but its value can't be cast to
         the expected type, or fails `validator`.
     """
@@ -167,7 +167,7 @@ async def log_timed_yields(
     e.g. for spotting a slow tail end of an otherwise-fast fetch. Nothing
     is logged if the wrapped iterator never yields anything.
 
-    This only instruments timing; it doesn't buffer or otherwise change
+    This only instruments timing; it does not buffer or otherwise change
     what's yielded. `async for item in log_timed_yields(inner, ...)` is
     equivalent to `async for item in inner` except for the added logging.
 

@@ -81,7 +81,7 @@ TERM_IMAGE_CAPTION_SELECTOR = ".bordered-img .desc"
 
 
 INVISIBLE_CHAR_REPLACEMENTS: dict[str, str] = {
-    "\u00a0": " ",  # non-breaking space - renders as a space, but isn't
+    "\u00a0": " ",  # non-breaking space - renders as a space, but is not
     # treated as one by whitespace-based splitting/matching, so it can
     # silently break a word-boundary search or just look like a stray
     # gap in a definition. Common in scraped web text (browsers insert
@@ -103,7 +103,7 @@ def clean_text(text: str) -> str:
     other invisible characters that turn up in scraped web content for
     similar reasons. See `INVISIBLE_CHAR_REPLACEMENTS`.
 
-    Only touches characters invisible in normal rendering and doesn't
+    Only touches characters invisible in normal rendering and does not
     collapse legitimate internal whitespace or change casing.
 
     :param text: Raw text extracted from the page.
@@ -342,7 +342,7 @@ async def get_term_images(page: Page) -> list[TermImage | None]:
 
     :param page: A page currently showing a term detail page.
     :return: One entry per definition section, in document order. A
-        `TermImage` for a section that has one, `None` for a section that doesn't.
+        `TermImage` for a section that has one, `None` for a section that does not.
     """
     try:
         sections = await page.eval_on_selector_all(

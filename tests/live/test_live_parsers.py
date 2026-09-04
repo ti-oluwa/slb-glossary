@@ -69,7 +69,7 @@ class TestCleanText:
         assert clean_text("po\u00adrosity") == "porosity"
 
     def test_leaves_ordinary_internal_whitespace_untouched(self) -> None:
-        """Ordinary internal whitespace isn't collapsed."""
+        """Ordinary internal whitespace is not collapsed."""
         assert clean_text("A  rock  property") == "A  rock  property"
 
     def test_does_not_change_casing(self) -> None:

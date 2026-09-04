@@ -35,7 +35,7 @@ def compute_rrf_scores(
     Score every result appearing in any of `rankings` by weighted reciprocal rank fusion.
 
     :param rankings: One ranked sequence of `get_result_key`s (best first)
-        per ranker. A key missing from a given ranking just doesn't get
+        per ranker. A key missing from a given ranking just does not get
         that ranker's term added to its score, rather than being
         penalized explicitly.
     :param weights: One weight per ranker, same length and order as `rankings`.
@@ -102,7 +102,7 @@ async def hybrid_search(
         comma-separated topics (case-insensitive exact match by default).
     :param start_letter: Restrict results to terms starting with this letter.
     :param language: Restrict results to this glossary language edition
-        (e.g. `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+        (e.g. `"en"`/`"es"`). `None` (the default) does not filter by language.
     :param limit: Maximum number of results to return. `None` for unlimited.
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
@@ -120,10 +120,10 @@ async def hybrid_search(
         own bm25-only score is, since a fused rank already reflects a
         genuine signal from two independent rankers rather than word
         overlap alone.
-    :raises DatabaseError: If `sqlite-vec` isn't installed, or its extension
+    :raises DatabaseError: If `sqlite-vec` is not installed, or its extension
         can't be loaded.
-    :raises EmbeddingError: If `model2vec` isn't installed, or the
-        embedding model's output size doesn't match `constants.embedding_dim`.
+    :raises EmbeddingError: If `model2vec` is not installed, or the
+        embedding model's output size does not match `constants.embedding_dim`.
     """
     started_at = time.monotonic()
     pool = candidate_pool if candidate_pool is not None else constants.hybrid_candidate_pool

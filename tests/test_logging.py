@@ -124,7 +124,7 @@ class TestFileSink:
         assert path.read_text(encoding="utf-8") == "new\n"
 
     def test_file_opened_lazily_not_at_construction(self, tmp_path: pathlib.Path) -> None:
-        """The file isn't created until the first `write()` call."""
+        """The file is not created until the first `write()` call."""
         path = tmp_path / "log.txt"
         FileSink(path)
         assert not path.exists()
@@ -202,7 +202,7 @@ class TestSinkHandler:
         assert sink.closed is True
 
     def test_sink_write_error_is_handled_not_raised(self) -> None:
-        """A sink whose `write` raises doesn't propagate the exception out of `emit`."""
+        """A sink whose `write` raises does not propagate the exception out of `emit`."""
 
         class BrokenSink:
             def write(self, message: str) -> None:
@@ -349,7 +349,7 @@ class TestConfigureLogging:
             logging.getLogger(logger_name).removeHandler(second_handler)
 
     def test_level_none_leaves_existing_level_untouched(self) -> None:
-        """`level=None` (the default) doesn't change the logger's current level."""
+        """`level=None` (the default) does not change the logger's current level."""
         logger_name = "slb_glossary.test.configure3"
         logger = logging.getLogger(logger_name)
         logger.setLevel(logging.WARNING)

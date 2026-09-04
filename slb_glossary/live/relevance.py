@@ -41,7 +41,7 @@ def score_content_overlap(query: str, *texts: str) -> float:
     Measures coverage, that is, how many of `query`'s own tokens turn up
     somewhere in `texts`, not how long `texts` are or how often each
     token repeats. A short exact phrase match and a long one both score
-    about as well, so a longer definition doesn't win purely for
+    about as well, so a longer definition does not win purely for
     containing more words.
 
     :param query: The free-text query.
@@ -96,7 +96,7 @@ def score_result(
         same vector to every call, rather than a fresh one each time.
     :param result: The result to score.
     :param mode: `SearchMode.LEXICAL` (the default) or `SearchMode.SEMANTIC`.
-        `SearchMode.HYBRID` isn't supported: fusing a lexical and a
+        `SearchMode.HYBRID` is not supported: fusing a lexical and a
         semantic ranking needs every result's rank relative to the
         others, which a single result scored on its own can't provide.
     :return: With `mode=SearchMode.LEXICAL`, a score in `[0.0, 1.0]`:
@@ -107,12 +107,12 @@ def score_result(
         not capped.
     :raises ValueError: If `mode` is `SearchMode.HYBRID`.
     :raises EmbeddingError: With `mode=SearchMode.SEMANTIC`, if the
-        `semantic` extra isn't installed, or the embedding model's
-        output size doesn't match `constants.embedding_dim`.
+        `semantic` extra is not installed, or the embedding model's
+        output size does not match `constants.embedding_dim`.
     """
     if mode is SearchMode.HYBRID:
         raise ValueError(
-            "`score_result` doesn't support `mode=SearchMode.HYBRID`. It scores "
+            "`score_result` does not support `mode=SearchMode.HYBRID`. It scores "
             "one result at a time, but a fused ranking needs every result's "
             "rank relative to the others first."
         )

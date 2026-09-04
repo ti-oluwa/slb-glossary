@@ -115,7 +115,7 @@ class TestUpdatable:
         assert original.a == 5
 
     def test_update_on_non_dataclass_raises_type_error(self) -> None:
-        """`.update()` on a class that isn't a `dataclasses.dataclass` raises `TypeError`."""
+        """`.update()` on a class that is not a `dataclasses.dataclass` raises `TypeError`."""
 
         class NotADataclass(Updatable):
             pass

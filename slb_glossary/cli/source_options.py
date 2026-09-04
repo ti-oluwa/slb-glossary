@@ -283,7 +283,7 @@ async def open_configured_db(
     """
     Open the configured local database for the duration of an `async with` block.
 
-    Yields `None` (opens nothing) if local storage isn't enabled for this
+    Yields `None` (opens nothing) if local storage is not enabled for this
     run - see `local_storage_enabled`.
 
     :param config: The loaded `Config`.
@@ -341,7 +341,7 @@ async def resolve_lookup(
     For `Source.AUTO`, `local_call` is tried first (no browser
     launched); a live session is opened via `live_call` only if that came
     back empty (`QueryResult.value` falsy) - and even then, only if
-    `constants.check_internet_before_live` doesn't find a reason not to
+    `constants.check_internet_before_live` does not find a reason not to
     (see `slb_glossary.query.resolve_source`). No internet logs a
     warning and returns local's (empty) result rather than opening a
     browser for a live fetch that would just time out.
@@ -411,7 +411,7 @@ async def resolve_stream(
     For `Source.AUTO`, `local_call` is fully drained first (no
     browser launched); a live session is opened via `live_call` only if
     that came back with nothing at all. Even then, only if
-    `constants.check_internet_before_live` doesn't find a reason not to
+    `constants.check_internet_before_live` does not find a reason not to
     (see `slb_glossary.query.resolve_source`). No internet logs a
     warning and returns local's (empty) results rather than opening a
     browser for a live fetch that would just time out.

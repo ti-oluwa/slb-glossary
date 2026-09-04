@@ -78,7 +78,7 @@ bootstrap_uv() {
 
     # uv's installer places the binary in ~/.local/bin (or ~/.cargo/bin on
     # older installers); add both to PATH for the rest of this run so we
-    # don't have to ask the user to open a new shell just to finish installing.
+    # do not have to ask the user to open a new shell just to finish installing.
     export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
     if ! command_exists uv; then

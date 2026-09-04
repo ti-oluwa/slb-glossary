@@ -34,7 +34,7 @@ class TestCleanQuery:
         assert clean_query("porosity") == "porosity"
 
     def test_leaves_geometric_mean_untouched(self) -> None:
-        """`"geometric mean"` isn't mangled: it doesn't start with any recognized wrapper word."""
+        """`"geometric mean"` is not mangled: it does not start with any recognized wrapper word."""
         assert clean_query("geometric mean") == "geometric mean"
 
     def test_explain_prefixed_query_is_still_stripped_to_its_remainder(self) -> None:

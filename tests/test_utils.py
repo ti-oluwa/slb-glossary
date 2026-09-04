@@ -24,7 +24,7 @@ class Choice(enum.Enum):
 
 class TestEnv:
     def test_returns_default_when_var_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """`env` returns `default` when the variable isn't set."""
+        """`env` returns `default` when the variable is not set."""
         monkeypatch.delenv(ENV_VAR, raising=False)
         assert env(ENV_VAR, "fallback") == "fallback"
 

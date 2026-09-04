@@ -79,7 +79,7 @@ class TestCheckTableExistsAndEnsureTable:
     async def test_ensure_table_is_idempotent(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:
-        """Calling `ensure_table` twice doesn't raise."""
+        """Calling `ensure_table` twice does not raise."""
         await ensure_table(db)
         await ensure_table(db)  # should not raise
 

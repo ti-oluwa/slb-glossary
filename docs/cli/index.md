@@ -1,6 +1,6 @@
 # Using the CLI
 
-For this CLI usage section, no programming knowledge is assumed. We just need to use the `slb` command fin a terminal. If you haven't installed it yet, see [Installation](../getting-started/installation.md).
+For this CLI usage section, no programming knowledge is assumed. We just need to use the `slb` command fin a terminal. If you have not installed it yet, see [Installation](../getting-started/installation.md).
 
 Every command below accepts `--help` for its own full option list, and every command also accepts `--tui`, which opens an interactive form for that command instead of you having to remember its flags:
 
@@ -35,7 +35,7 @@ Every one of these, except `config`, `install`, and the plumbing under `local`, 
 Every lookup command (`search`, `define`, `compare`, `related`, `terms`, `random`) accepts `--source local|live|auto`, or the equivalent shorthand flags `--local`, `--live`, `--auto`:
 
 - **`--local`** only reads the database on your own machine. Instant, no network, but only finds terms you've already cached there.
-- **`--live`** always visits the live glossary through the background browser. Slower, but always current, and doesn't need anything cached first.
+- **`--live`** always visits the live glossary through the background browser. Slower, but always current, and does not need anything cached first.
 - **`--auto`** (the default) tries local first. For `search`, this means the local database's best match is scored, and used alone if it's confident enough (`--relevance-threshold`, default `0.45`); otherwise the live site is queried too, and its results are shown first, with the local ones filling in any remaining slots. For the exact-lookup commands (`define`, `compare`, `related`, `terms`, `random`), auto is simpler. It uses the cached copy if one exists, otherwise fetch live.
 
 ```bash
@@ -54,7 +54,7 @@ Whenever a lookup command actually reaches the live glossary (via `--live`, or `
 
 ```bash
 slb search "gas lift"          # --cache is on by default
-slb search "gas lift" --no-cache   # look it up live, but don't save it locally
+slb search "gas lift" --no-cache   # look it up live, but do not save it locally
 ```
 
 Live results are written incrementally, `--cache-batch-size` at a time (default `20`), rather than all at once at the end. That way, if a large fetch (e.g. `slb terms Drilling --limit 0`) gets interrupted partway through, whatever was already fetched is still saved, instead of the whole run being wasted. `--cache-on-error` (on by default) is what controls whether a failed fetch keeps its partial progress.
@@ -83,7 +83,7 @@ Live results are written incrementally, `--cache-batch-size` at a time (default 
 
     ---
 
-    `--save`, output formats, `config`, and setting defaults so you don't retype flags.
+    `--save`, output formats, `config`, and setting defaults so you do not retype flags.
 
     [Continue](configuration.md){ .md-button }
 

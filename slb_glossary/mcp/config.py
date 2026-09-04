@@ -130,7 +130,7 @@ def resolve_tools(value: Tool | str | Iterable[str] | None) -> Tool:
         (e.g. `"search"`, `"read_only"`), an iterable of such strings, or
         `None` for `Tool.READ_ONLY`.
     :return: The resolved `Tool` combination.
-    :raises MCPConfigError: If any name in `value` isn't a known tool name.
+    :raises MCPConfigError: If any name in `value` is not a known tool name.
     """
     if value is None:
         return Tool.READ_ONLY
@@ -211,16 +211,31 @@ class SessionAccess(Updatable):
     reaper, so a session lives until server shutdown. Ignored for `PER_CALL`.
     """
 
-    max_concurrent: int = 1
+    max_sessions: int = 1
     """
-    Maximum number of calls allowed inside `Runtime.acquire`'s live-session
-    section at once, bounded with a semaphore. For `PER_CALL` mode, that's
-    the number of separate live sessions (browser instances) open at once. 
+    Maximum number of browser instances allowed open at once, bounded
+    with a semaphore. 
     
-    For `EAGER`/`LAZY` mode, there's only ever one shared session,
-    so this instead bounds how many calls may be checked out on it
-    concurrently (each still drives its own page within that shared
-    session; see `slb_glossary.live.types.Session.max_pages`).
+    - For `PER_CALL` mode, a slot is held for the whole
+    open-to-close lifetime of each call's own fresh session, so this is
+    literally how many separate live sessions can be running together.
+
+    - For `EAGER`/`LAZY` mode, each language gets its own elastic pool of
+    sessions (see `slb_glossary.mcp.session_pool.SessionPool`): calls for
+    one language share whichever of that language's sessions has spare
+    page capacity, and the pool opens an additional browser instance
+    for that language once every existing one is full, up to this
+    Runtime-wide total, shared across every language's pool combined. 
+    
+    A slot is held for as long as one specific session is open, acquired
+    only when a pool actually launches a new browser and released only
+    when that session closes, and not per caller checkout, since callers
+    sharing an already-open session do not launch another one. This is
+    separate from `SessionOptions.max_pages`, which bounds concurrent
+    pages within one already-open session, and is generally the
+    cheaper lever to raise first. Growing an existing session's page
+    pool costs nothing extra, where growing this opens a whole new
+    browser.
     """
 
     options: SessionOptions = dataclasses.field(default_factory=SessionOptions)
@@ -277,7 +292,7 @@ class SourcePolicy(Updatable):
     """
 
     default: Source = Source.AUTO
-    """`Source` used when a tool call doesn't specify one."""
+    """`Source` used when a tool call does not specify one."""
 
     expose_choice: bool = True
     """
@@ -373,7 +388,7 @@ class RateLimit(Updatable):
     Backed by FastMCP's own rate-limiting middleware (`fastmcp.server.middleware.rate_limiting`).
 
     This config just selects an algorithm and builds it.
-    For an algorithm FastMCP doesn't offer, add your own
+    For an algorithm FastMCP does not offer, add your own
     `fastmcp.server.middleware.Middleware` directly to a hand-built
     `FastMCP` server instead of going through `MCPConfig`.
     """
@@ -530,7 +545,7 @@ class ServerInfo(Updatable):
     an `http(s)://` URL. `None` (the default): no icon advertised.
 
     A local path is read and inlined as a base64 data URI when the
-    server is built (`MCPApp.server`), so the icon doesn't depend on
+    server is built (`MCPApp.server`), so the icon does not depend on
     that file still being reachable by whatever eventually connects. 
     It's only read once, at server-build time. A URL is passed through
     as-is. See `slb_glossary.mcp.api.resolve_icon`.
@@ -643,9 +658,9 @@ class MCPConfig(Updatable):
                 f"{type(self).__name__}: `auth.required_scopes` is set but `auth.provider` "
                 f"is None - there's no authenticated caller to check scopes against."
             )
-        if self.session.max_concurrent < 1:
+        if self.session.max_sessions < 1:
             raise MCPConfigError(
-                f"{type(self).__name__}: `session.max_concurrent` must be at least 1."
+                f"{type(self).__name__}: `session.max_sessions` must be at least 1."
             )
 
     def resolve_tools(self) -> Tool:
@@ -657,7 +672,7 @@ class MCPConfig(Updatable):
         write-capable tool always requires an explicit, deliberate
         `local.allow_write=True` in addition to requesting the tool itself.
 
-        :return: `self.tools`, with `Tool.SYNC` cleared if write access isn't granted.
+        :return: `self.tools`, with `Tool.SYNC` cleared if write access is not granted.
         """
         tools = self.tools
         if Tool.SYNC in tools and not self.local.allow_write:
@@ -691,7 +706,7 @@ class MCPConfig(Updatable):
             own default (`"en"`).
         :return: A fresh `MCPConfig`, defaults throughout except for
             `session.options.language` if `language` was given.
-        :raises MCPConfigError: If `language` is a string that isn't a
+        :raises MCPConfigError: If `language` is a string that is not a
             valid `Language` value.
         """
         config = cls()

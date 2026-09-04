@@ -25,7 +25,7 @@ A **sink** is anywhere a (formatted) log line can go. `slb_glossary.logging` (al
 
 | Sink | Writes to |
 |---|---|
-| `StderrSink()` | stderr, the default if you don't specify one. |
+| `StderrSink()` | stderr, the default if you do not specify one. |
 | `StdoutSink()` | stdout. |
 | `FileSink(path, mode="a", encoding="utf-8")` | A file, opened lazily on first write. `mode="w"` truncates each run instead of appending. |
 | a `"module:ClassName"` string | Your own class, loaded via `slb.logging.import_sink`, as long as it satisfies the `LogSink` protocol (a `write(message)` method; `flush()`/`close()` optional). |

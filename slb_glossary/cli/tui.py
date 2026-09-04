@@ -12,7 +12,7 @@ __all__ = ["TuiUnavailableError", "launch_tui"]
 
 
 class TuiUnavailableError(RuntimeError):
-    """Raised when `--tui` is used but `trogon` (or `textual`) isn't installed."""
+    """Raised when `--tui` is used but `trogon` (or `textual`) is not installed."""
 
 
 def _prefill_schema(command_schema: typing.Any, ctx: click.Context) -> None:
@@ -25,13 +25,13 @@ def _prefill_schema(command_schema: typing.Any, ctx: click.Context) -> None:
     order - see `trogon.introspect.introspect_click_app`. This replays
     that same split to pair each schema entry back up with the click
     `Parameter` (and so the `ctx.params` value) it came from, which
-    trogon doesn't expose a mapping for itself, then overwrites the
+    trogon does not expose a mapping for itself, then overwrites the
     schema's default with whatever this run was actually called with -
     so the form trogon builds from `command_schema` opens pre-filled
     instead of blank/click's-own-defaults.
 
     A param whose resolved value is `None` (an optional option/argument
-    that wasn't actually given on this run, e.g. `--topic`/`--source`
+    that was not actually given on this run, e.g. `--topic`/`--source`
     left unset) is prefilled with its click-level default (`param.default`)
     instead, if it has one. For a choice-backed field (rendered as a
     `Select` widget) with no click-level default either, this falls back
@@ -85,7 +85,7 @@ def _prefill_schema(command_schema: typing.Any, ctx: click.Context) -> None:
                 # params (or fails) before `launch_tui` is ever reached.
                 # But if it does, there's nothing meaningful to prefill
                 # with; leave it for the user to fill in on the form
-                # rather than forcing a default that isn't there.
+                # rather than forcing a default that is not there.
                 logger.debug(
                     "Required param %r has no resolved value to prefill the TUI with; "
                     "leaving its field for the user to fill in",
@@ -120,7 +120,7 @@ def _find_tree_start_node(tree_root: typing.Any) -> typing.Any:
     """
     Resolve where `command_path` should start being matched from.
 
-    `trogon`'s `CommandTree` doesn't put the CLI's own top-level commands
+    `trogon`'s `CommandTree` does not put the CLI's own top-level commands
     directly under the tree's (invisible) root - it wraps them all under
     one extra node named after the root click command (`"root"` for a
     root group named e.g. `slb-glossary`, since `trogon` looks up the group
@@ -154,7 +154,7 @@ def _prefilling_screen_factory(
     A factory returning a *subclass*, not an instance, since
     `Trogon.get_default_screen` is what actually constructs the screen
     (with its own `cli`/`app_name`/`command_name` arguments); `command_path`
-    and `ctx` are closed over here instead, since `launch_tui` doesn't
+    and `ctx` are closed over here instead, since `launch_tui` does not
     control `Trogon.__init__`'s own signature.
 
     :param command_builder_cls: trogon's own `CommandBuilder` screen class.

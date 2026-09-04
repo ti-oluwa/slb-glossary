@@ -16,7 +16,7 @@ Live search uses a related but simpler technique, since there's no whole result 
 
 **Needs the `semantic` extra installed (`uv add "slb-glossary[semantic]"`), and terms already embedded first.**
 
-Semantic search compares *embeddings*: numeric vectors that capture a phrase's meaning, produced by a small local model ([`minishlab/potion-retrieval-32M`](https://huggingface.co/minishlab/potion-retrieval-32M), via [model2vec](https://github.com/MinishLab/model2vec)), downloaded once and cached, with no network call needed per query afterward. Two phrases with similar meanings end up with similar vectors even if they don't share any words. Searching "rock that holds fluid" surfaces "porous" this way, since the two land close together in vector space (measured by cosine similarity), despite sharing no words at all.
+Semantic search compares *embeddings*: numeric vectors that capture a phrase's meaning, produced by a small local model ([`minishlab/potion-retrieval-32M`](https://huggingface.co/minishlab/potion-retrieval-32M), via [model2vec](https://github.com/MinishLab/model2vec)), downloaded once and cached, with no network call needed per query afterward. Two phrases with similar meanings end up with similar vectors even if they do not share any words. Searching "rock that holds fluid" surfaces "porous" this way, since the two land close together in vector space (measured by cosine similarity), despite sharing no words at all.
 
 This only works on terms you've already run through `embed_terms`:
 

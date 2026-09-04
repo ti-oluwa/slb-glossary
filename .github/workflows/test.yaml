@@ -64,7 +64,7 @@ jobs:
   # Windows and macOS, a narrower Python matrix and without the heavier
   # optional extras (semantic/mcp) for speed - those paths are already
   # covered on Linux above, and tests that need them skip cleanly via
-  # pytest.importorskip when the extra isn't installed.
+  # pytest.importorskip when the extra is not installed.
   test-cross-platform:
     name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -98,7 +98,7 @@ jobs:
   # Build the package and make sure it actually imports and the CLI
   # entrypoint runs once installed, catching packaging mistakes
   # (missing package data, bad entry_points, etc.) that unit tests
-  # run against the source tree wouldn't catch.
+  # run against the source tree would not catch.
   test-install:
     name: Test Package Installation
     runs-on: ubuntu-latest

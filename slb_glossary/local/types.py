@@ -60,7 +60,7 @@ class Metadata:
     @classmethod
     def load(cls, path: pathlib.Path) -> Self:
         """
-        Load metadata from `path`, or return fresh defaults if it doesn't exist.
+        Load metadata from `path`, or return fresh defaults if it does not exist.
 
         :param path: Path to a `metadata.json` file.
         :return: The loaded (or default) `Metadata`.
@@ -76,7 +76,7 @@ class Metadata:
         Write this metadata to `path` as JSON.
 
         :param path: Destination path. Its parent directory is created if
-            it doesn't exist.
+            it does not exist.
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(dataclasses.asdict(self), indent=2) + "\n", encoding="utf-8")

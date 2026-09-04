@@ -148,7 +148,7 @@ async def output_results(
         per-row source/score metadata.
     :param format: File format to use for every path in `save_paths`,
         overriding each path's extension.
-    :param quiet: If `True`, don't print results to the console. Results are
+    :param quiet: If `True`, do not print results to the console. Results are
         still written to `save_paths`.
     :param json_output: If `True` and `quiet` is `False`, print results as
         JSON instead of a table.

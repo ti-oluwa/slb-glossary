@@ -118,7 +118,7 @@ class RetryPolicy:
 
 
 DEFAULT_RETRY_POLICY = RetryPolicy()
-"""The `RetryPolicy` used wherever a retry isn't given one explicitly."""
+"""The `RetryPolicy` used wherever a retry is not given one explicitly."""
 
 
 async def retry(

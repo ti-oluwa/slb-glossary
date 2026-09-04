@@ -75,7 +75,7 @@ def _ensure_browser(browser_type: str, *, auto_install: bool, with_deps: bool) -
 @click.option(
     "--check-only",
     is_flag=True,
-    help="Only check/report the browser installation state; don't touch the local database.",
+    help="Only check/report the browser installation state; do not touch the local database.",
 )
 @sync_filter_options
 @database_option

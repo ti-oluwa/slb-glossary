@@ -18,7 +18,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.anyio]
 def anyio_backend(
     anyio_backend_asyncio_only: tuple[str, dict[str, typing.Any]],
 ) -> tuple[str, dict[str, typing.Any]]:
-    """The built-in readers offload to worker threads via `asyncio.to_thread`, which isn't trio-safe."""
+    """The built-in readers offload to worker threads via `asyncio.to_thread`, which is not trio-safe."""
     return anyio_backend_asyncio_only
 
 
@@ -65,7 +65,7 @@ class TestReadXlsxRows:
     openpyxl = pytest.importorskip("openpyxl")
 
     async def test_reads_rows_using_first_row_as_header(self, tmp_path: pathlib.Path) -> None:
-        """The first row is treated as the header and isn't yielded as data."""
+        """The first row is treated as the header and is not yielded as data."""
         from slb_glossary.readers import read_xlsx_rows
 
         workbook = self.openpyxl.Workbook()

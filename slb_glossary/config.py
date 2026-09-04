@@ -511,7 +511,7 @@ class Config(Updatable):
         Save this config to `path` as JSON, TOML or YAML.
 
         :param path: Destination path. Its parent directory is created if
-            it doesn't exist.
+            it does not exist.
         :param format: File format to write, overriding `path`'s extension.
             One of `"json"`, `"toml"`, `"yaml"`/`"yml"`.
         :raises ConfigError: If the resolved format is unsupported or its
@@ -588,7 +588,7 @@ def _parse_bool(value: str) -> bool:
     :param value: `"true"`/`"1"`/`"yes"`/`"on"` for `True`,
         `"false"`/`"0"`/`"no"`/`"off"` for `False` (case-insensitive,
         surrounding whitespace ignored).
-    :raises ValueError: If `value` doesn't match either set.
+    :raises ValueError: If `value` does not match either set.
     """
     lowered = value.strip().lower()
     if lowered in ("true", "1", "yes", "on"):

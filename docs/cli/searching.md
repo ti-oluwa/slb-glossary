@@ -48,14 +48,14 @@ Prints the same result set as a JSON array instead of a table, useful for piping
 
 ## `define`
 
-For when you already know the exact term name, or have its URL, and don't need `search`'s ranking:
+For when you already know the exact term name, or have its URL, and do not need `search`'s ranking:
 
 ```bash
 slb define "water saturation"
 slb define "https://glossary.slb.com/en/terms/p/porosity"
 ```
 
-`define` reads locally first by default and only reaches the live site if the term isn't cached yet, same as every other lookup command's `--auto`.
+`define` reads locally first by default and only reaches the live site if the term is not cached yet, same as every other lookup command's `--auto`.
 
 ---
 
@@ -96,7 +96,7 @@ Fetches every term filed under one topic, rather than searching for a specific w
 slb terms Geophysics
 ```
 
-`TOPIC` doesn't need to be an exact match. The closest topic(s) the glossary actually has are used, so `slb terms drill fluids` still finds "Drilling Fluids" and any other topic containing that word. Unlike `search`, `terms` returns at most one result per term, the one definition filed under the topic you asked for, not every definition that term happens to have across other topics too.
+`TOPIC` does not need to be an exact match. The closest topic(s) the glossary actually has are used, so `slb terms drill fluids` still finds "Drilling Fluids" and any other topic containing that word. Unlike `search`, `terms` returns at most one result per term, the one definition filed under the topic you asked for, not every definition that term happens to have across other topics too.
 
 ```bash
 slb terms "Well Completions" --limit 20

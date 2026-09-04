@@ -109,7 +109,7 @@ def _apply_log_level(ctx: click.Context, param: click.Parameter, value: str | No
     (`WARNING` unless overridden there), so a per-command `--log-level`
     reliably wins for the duration of this command. Leaves the level
     untouched (falls through to whatever the root option set) when this
-    command's own `--log-level` wasn't given.
+    command's own `--log-level` was not given.
 
     :param value: The parsed `--log-level` choice, or `None` if not given.
     :return: `value`, unchanged - so it's still available as a keyword
@@ -134,7 +134,7 @@ def log_level_option(func: F) -> F:
 
     Stack this directly above a command's `def`, alongside
     `@click.command()`. Included automatically by `session_options`, so
-    most commands that need it don't have to attach it separately.
+    most commands that need it do not have to attach it separately.
 
     :param func: The click command callback to attach the option to.
     :return: `func`, with `--log-level` attached.
@@ -167,7 +167,7 @@ def session_options(func: F) -> F:
     `slb_glossary.browser.open_session`/`session`.
 
     Also attaches `log_level_option` (`--log-level`), so every command
-    using this doesn't need to attach it separately.
+    using this does not need to attach it separately.
 
     :param func: The click command callback to attach options to.
     :return: `func`, with session-configuration options attached.

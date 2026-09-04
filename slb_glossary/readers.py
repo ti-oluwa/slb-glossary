@@ -41,13 +41,13 @@ async def read_yaml_rows(path: pathlib.Path) -> typing.AsyncIterator[dict[str, t
         yield row
 ```
 
-A reader only needs to yield rows from `path`; it doesn't need to catch
+A reader only needs to yield rows from `path`; it does not need to catch
 or wrap I/O errors itself. Error-wrapping is domain-specific (a caller
 importing rows into a database wants a different error than one just
 inspecting a file), so it's left to whoever calls `read_rows`/the reader
 directly.
 
-A reader is async so that reading a large file doesn't block the event
+A reader is async so that reading a large file does not block the event
 loop while `slb_glossary`'s other async work (a live search, a database
 write) is in flight. The built-in readers below offload their actual
 blocking file I/O to a worker thread via `asyncio.to_thread` internally;
@@ -109,13 +109,13 @@ async def read_json_rows(path: pathlib.Path) -> typing.AsyncIterator[dict[str, t
 
     JSON has no line-oriented record boundary the way CSV/XLSX do, so this
     still has to parse the whole file into memory to find the record array;
-    that parse runs in a worker thread so it doesn't block the event loop,
+    that parse runs in a worker thread so it does not block the event loop,
     but nothing is actually streamed record-by-record from disk the way
     `read_csv_rows`/`read_xlsx_rows` can.
 
     :param path: JSON file to read.
     :yield: One record dict at a time, from the array found.
-    :raises ValueError: If `path` doesn't contain a JSON array of records
+    :raises ValueError: If `path` does not contain a JSON array of records
         (or an object with one as one of its values).
     """
 
@@ -175,8 +175,8 @@ async def read_xlsx_rows(path: pathlib.Path) -> typing.AsyncIterator[dict[str, t
 
     :param path: XLSX/XLSM file to read.
     :yield: One `{header: value}` dict per data row (the first row is
-        treated as the header and isn't yielded itself).
-    :raises ImportError: If the optional `openpyxl` dependency isn't installed.
+        treated as the header and is not yielded itself).
+    :raises ImportError: If the optional `openpyxl` dependency is not installed.
     """
     async for row in iter_in_thread(_read_xlsx_rows(path)):
         yield row

@@ -169,7 +169,7 @@ def show(ctx: click.Context, config_path: str | None, output_format: str) -> Non
             return
         except ImportError:
             pass
-    # Fall back to JSON if the requested format's optional parser isn't installed.
+    # Fall back to JSON if the requested format's optional parser is not installed.
     click.echo(json.dumps(data, indent=2))
 
 

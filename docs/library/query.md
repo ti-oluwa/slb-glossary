@@ -1,6 +1,6 @@
 # Combined Search with `slb_glossary.query`
 
-This page covers `slb_glossary.query`, the module that reads from [Local Search and Cache](local-search.md) and [Live Search](live-search.md) intelligently, so you don't have to write the logic yourself.
+This page covers `slb_glossary.query`, the module that reads from [Local Search and Cache](local-search.md) and [Live Search](live-search.md) intelligently, so you do not have to write the logic yourself.
 
 Every function on this page (and the top-level `slb_glossary` package, which re-exports all of them) shares the same core keyword arguments, described once here rather than repeated on every function.
 
@@ -33,9 +33,9 @@ async for lookup in slb.search("water saturation", db=db, session=session, persi
     print(lookup.source, lookup.value.term)
 ```
 
-`persist=True` writes any result that came from a live fetch back into `db`, so the next call for the same term doesn't need the network at all. This is exactly the mechanism [Local Search and Cache](local-search.md#1-cache-live-results-as-you-go)'s `upsert_results_incrementally` implements, wired up automatically. A local-only result (`source=Source.LOCAL`, or an `AUTO` call that never fell through to live) is never re-persisted, since it's already there.
+`persist=True` writes any result that came from a live fetch back into `db`, so the next call for the same term does not need the network at all. This is exactly the mechanism [Local Search and Cache](local-search.md#1-cache-live-results-as-you-go)'s `upsert_results_incrementally` implements, wired up automatically. A local-only result (`source=Source.LOCAL`, or an `AUTO` call that never fell through to live) is never re-persisted, since it's already there.
 
-`persist` defaults to `False` when not passed explicitly, from `constants.persist_by_default`. A write to your local database is a side effect worth opting into deliberately, not one a library call should do silently. Set `SLB_GLOSSARY_PERSIST_BY_DEFAULT=true` (or `constants.persist_by_default = True` directly) to flip that default for every call site in a process that doesn't pass `persist=` itself, rather than adding it to every call individually.
+`persist` defaults to `False` when not passed explicitly, from `constants.persist_by_default`. A write to your local database is a side effect worth opting into deliberately, not one a library call should do silently. Set `SLB_GLOSSARY_PERSIST_BY_DEFAULT=true` (or `constants.persist_by_default = True` directly) to flip that default for every call site in a process that does not pass `persist=` itself, rather than adding it to every call individually.
 
 ---
 
@@ -127,7 +127,7 @@ elif result.similar:
         print(f"  {alt.value.term} (score={alt.score:.2f})")
 ```
 
-This is the "did you mean" building block; `result.exact` is `None` exactly when a plain call would have returned `None` too, and `result.similar` is populated the same way either way, so you don't need a separate lookup to get alternatives only when the exact match fails.
+This is the "did you mean" building block; `result.exact` is `None` exactly when a plain call would have returned `None` too, and `result.similar` is populated the same way either way, so you do not need a separate lookup to get alternatives only when the exact match fails.
 
 ```python
 results = await slb.compare(["porocity", "permeabilty"], db=db, session=session, with_similar=True)

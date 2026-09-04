@@ -11,7 +11,7 @@ This is a single term lookup result, extracted from a glossary term detail page.
 | Field | Type | Notes |
 |---|---|---|
 | `term` | `str` | The glossary term this result defines. |
-| `definition` | `str \| None` | Full definition text, or `None` if it couldn't be parsed. |
+| `definition` | `str \| None` | Full definition text, or `None` if it could not be parsed. |
 | `grammatical_label` | `str \| None` | Part of speech, e.g. `"Noun"`. `None` if unavailable. |
 | `topic` | `str \| None` | The topic/discipline this definition is filed under. |
 | `url` | `str \| None` | The glossary detail-page URL this result came from. |
@@ -89,7 +89,7 @@ This is not a data model for glossary content itself, but the wrapper the `slb_g
 | `value` | `T` | The actual result: a `SearchResult`, `SearchResult \| None`, a tuple of `RelatedTerm`s, etc., depending on which function returned it. |
 | `source` | `Source` | `Source.LOCAL` or `Source.LIVE`, which one actually answered this call. |
 | `persisted` | `bool` | Whether this result was written to the local database as part of this call. |
-| `score` | `float \| None` | A relevance score in `[0.0, 1.0]` for `value` against the query it was found for, where scoring is meaningful (an exact `get_term` match scores `constants.exact_match_score`, `1.0` by default). `None` where it doesn't apply, e.g. a topic listing or a related-terms lookup. |
+| `score` | `float \| None` | A relevance score in `[0.0, 1.0]` for `value` against the query it was found for, where scoring is meaningful (an exact `get_term` match scores `constants.exact_match_score`, `1.0` by default). `None` where it does not apply, e.g. a topic listing or a related-terms lookup. |
 
 Covered in full, with examples, in [Combined Search with `slb_glossary.query`](../library/query.md#queryresult-knowing-where-an-answer-came-from).
 
@@ -97,7 +97,7 @@ Covered in full, with examples, in [Combined Search with `slb_glossary.query`](.
 
 ## `SimilarResult`
 
-The is the data type `get_term`/`compare` return inside a `QueryResult` instead of a bare `SearchResult` when called with `with_similar=True`. It contains an exact match, plus nearby alternatives, for a "did you mean" experience when the exact match is `None` (or just to see what else is nearby even when it isn't).
+The is the data type `get_term`/`compare` return inside a `QueryResult` instead of a bare `SearchResult` when called with `with_similar=True`. It contains an exact match, plus nearby alternatives, for a "did you mean" experience when the exact match is `None` (or just to see what else is nearby even when it is not).
 
 | Field | Type | Notes |
 |---|---|---|

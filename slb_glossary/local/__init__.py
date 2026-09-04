@@ -1,6 +1,6 @@
 """
 Local search database. A SQLite (FTS5 + `sqlite-vec`) cache of glossary
-terms, so repeat lookups don't have to keep re-visiting the live site.
+terms, so repeat lookups do not have to keep re-visiting the live site.
 
 **Disclaimer**: the data stored here is still SLB's. See the
 the package docstring for the full notice. Enabling this

@@ -27,7 +27,7 @@ class Holder:
 
 class TestConstantResolution:
     def test_uses_default_when_env_var_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A `Constant` resolves to its `default` when its `env_var` isn't set."""
+        """A `Constant` resolves to its `default` when its `env_var` is not set."""
         monkeypatch.delenv(ENV_VAR, raising=False)
         holder = Holder()
         assert holder.value == 10

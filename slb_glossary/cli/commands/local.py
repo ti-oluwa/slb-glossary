@@ -48,7 +48,7 @@ def show_path(**params: typing.Any) -> None:
 
     If you move or back these up by hand, also bring along the
     database's `-wal`/`-shm` sidecar files (it runs in WAL mode), or
-    close the database first (e.g. don't have anything else using it) so
+    close the database first (e.g. do not have anything else using it) so
     SQLite folds them back into the main file before you copy it.
 
     \b
@@ -150,7 +150,7 @@ def stats(**params: typing.Any) -> None:
     "-L",
     default=None,
     help="Restrict results to this glossary language edition (e.g. 'en'/'es'). "
-    "Unset by default: doesn't filter by language.",
+    "Unset by default: does not filter by language.",
 )
 @click.option(
     "--fuzzy",
@@ -251,7 +251,7 @@ def local_search(query: str, **params: typing.Any) -> None:
     "-L",
     default=None,
     help="Restrict the lookup to this glossary language edition (e.g. "
-    "'en'/'es'). Unset by default: doesn't filter by language.",
+    "'en'/'es'). Unset by default: does not filter by language.",
 )
 @click.option(
     "--suggest/--no-suggest",
@@ -651,7 +651,7 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
     "-L",
     default=None,
     help="Restrict the export to this glossary language edition (e.g. "
-    "'en'/'es'). Unset by default: doesn't filter by language.",
+    "'en'/'es'). Unset by default: does not filter by language.",
 )
 @click.option(
     "--fuzzy",
@@ -686,7 +686,7 @@ def export(**params: typing.Any) -> None:
 
     Writing to a file works exactly like every other command's --save
     (CSV/JSON/XLSX, chosen by extension or --format) - this command just
-    doesn't need a query or topic to have something to export.
+    does not need a query or topic to have something to export.
 
     \b
     Examples:

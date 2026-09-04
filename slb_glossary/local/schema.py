@@ -9,7 +9,7 @@ __all__ = ["SCHEMA_VERSION", "get_schema_version", "initialize", "set_schema_ver
 SCHEMA_VERSION = 1
 """
 Local database schema version. Bumped alongside any DDL change below
-that isn't purely additive.
+that is not purely additive.
 
 `slb_glossary.local.open_db` compares this against a database's stored
 `slb_glossary.local.types.Metadata.schema_version` and discards/recreates
@@ -52,7 +52,7 @@ async def set_schema_version(connection: aiosqlite.Connection, version: int) -> 
     :param connection: An open `aiosqlite` connection.
     :param version: The schema version to stamp. This should always be
         an internally controlled constant (`SCHEMA_VERSION`), not
-        user input. `PRAGMA` doesn't support bound parameters, so this
+        user input. `PRAGMA` does not support bound parameters, so this
         interpolates `version` directly.
     """
     await connection.execute(f"PRAGMA user_version = {int(version)}")
@@ -84,7 +84,7 @@ together are the real identity of one definition.
 definitions at the same `url` (a page with only one, topic-less section)
 still collide correctly on upsert instead of comparing unequal as SQLite
 (like standard SQL) never considers `NULL = NULL` true, so two `NULL`
-topics in a composite primary key wouldn't conflict with each other at
+topics in a composite primary key would not conflict with each other at
 all and would just accumulate as duplicate rows on every re-sync. The
 empty string is mapped back to `None` at the Python boundary, so 
 `SearchResult.topic` still reads as `None` for a topic-less definition.

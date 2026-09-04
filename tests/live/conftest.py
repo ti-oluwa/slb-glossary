@@ -19,7 +19,7 @@ def anyio_backend(
 ) -> tuple[str, dict[str, typing.Any]]:
     """
     Every test under `tests/live/` drives fakes for `patchright`-backed code,
-    which isn't trio-safe (same reasoning as `tests/local/conftest.py`).
+    which is not trio-safe (same reasoning as `tests/local/conftest.py`).
     """
     return anyio_backend_asyncio_only
 

@@ -110,7 +110,7 @@ def run_driver(
         subprocess each attempt) instead of raising on the first failure.
         `None` (the default) tries exactly once, matching the previous
         behavior of this function.
-    :raises BrowserInstallError: If patchright isn't importable, or every
+    :raises BrowserInstallError: If patchright is not importable, or every
         attempt's driver process exits with a non-zero status.
     """
     try:

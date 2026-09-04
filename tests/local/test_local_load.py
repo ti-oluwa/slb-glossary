@@ -97,7 +97,7 @@ class TestParseRelated:
         assert parse_related("not valid json") is None
 
     def test_non_list_top_level_returns_none(self) -> None:
-        """A JSON value that parses but isn't a list (e.g. a bare object) returns `None`."""
+        """A JSON value that parses but is not a list (e.g. a bare object) returns `None`."""
         assert parse_related('{"term": "x", "url": "y"}') is None
 
     def test_empty_list_returns_none(self) -> None:
@@ -278,7 +278,7 @@ class TestLoadFile:
     async def test_source_tag_defaults_to_user(self, db: Database, tmp_path: pathlib.Path) -> None:
         """
         Imported rows are tagged `source="user"` by default, distinct from
-        live-synced `"glossary"` rows - though `SearchResult` itself doesn't
+        live-synced `"glossary"` rows - though `SearchResult` itself does not
         carry `source`, so this is confirmed indirectly via a successful,
         unexceptional import (the tag is stored internally, not user-visible
         on the returned/read `SearchResult`).

@@ -270,7 +270,7 @@ async def open_session(
     :param browser_type: Playwright browser family to launch: `"chromium"`,
         `"firefox"` or `"webkit"`. Patchright's stealth patches are tuned for
         Chromium; other families run through the same stealth init script but
-        haven't been evaluated against the glossary's bot detection.
+        have not been evaluated against the glossary's bot detection.
     :param headless: Run the browser without a visible window. Set this to
         `False` for debugging.
     :param block: Which request resource types to drop for speed. `True`

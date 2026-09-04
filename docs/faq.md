@@ -6,13 +6,13 @@ No. `slb-glossary` is not affiliated with or endorsed by SLB. All rights to the 
 
 **This package is not for commercial use. It's intended for instructional and research purposes only.**
 
-The optional local cache ([Local Search and Cache](library/local-search.md)) still holds SLB's data once you enable it, `slb-glossary` doesn't change who owns it. If you turn caching on, you're responsible for keeping that copy's retention, refresh, and deletion in compliance with SLB's terms linked above. `slb-glossary`'s own code is BSD-3-Clause licensed; that license covers the software, not the glossary content it fetches.
+The optional local cache ([Local Search and Cache](library/local-search.md)) still holds SLB's data once you enable it, `slb-glossary` does not change who owns it. If you turn caching on, you're responsible for keeping that copy's retention, refresh, and deletion in compliance with SLB's terms linked above. `slb-glossary`'s own code is BSD-3-Clause licensed; that license covers the software, not the glossary content it fetches.
 
 ## Why is the first search slow, or the install step failing?
 
 Two different one-time costs get mistaken for each other:
 
-- **The browser build itself has to be downloaded once**, via `slb install chromium` (see [Installing the browser build](getting-started/installation.md#installing-the-browser-build)). If you skipped this, every command that touches the live site will fail, not just run slowly. `slb sync` (with no other flags) will tell you plainly if the browser isn't installed, rather than failing partway through a search.
+- **The browser build itself has to be downloaded once**, via `slb install chromium` (see [Installing the browser build](getting-started/installation.md#installing-the-browser-build)). If you skipped this, every command that touches the live site will fail, not just run slowly. `slb sync` (with no other flags) will tell you plainly if the browser is not installed, rather than failing partway through a search.
 - **The very first search after that also launches the browser process for the first time**, which takes a few seconds longer than every search after it, since the process is already warm for the rest of that run (or the rest of that `session()` block, in library code).
 
 If a search still hangs or times out after both of those, a slow or restrictive network is the next thing to check, raise `--timeout`/`session()`'s `timeout`, and see [Sessions and the Browser](concepts/sessions.md#retrying-a-flaky-first-load) for the retry settings that govern a flaky initial page load specifically.
@@ -23,7 +23,7 @@ If a search still hangs or times out after both of those, a slow or restrictive 
 Error: Unable to convert an object of <class 'NoneType'> to a TOML item
 ```
 
-This is a real issue in the current version: `config show`'s documented default format is TOML, but it can raise this error when a setting is unset (`None`), since TOML has no native null and the unset fields aren't stripped before serializing. `--format json` and `--format yaml` don't hit this:
+This is a real issue in the current version: `config show`'s documented default format is TOML, but it can raise this error when a setting is unset (`None`), since TOML has no native null and the unset fields aren't stripped before serializing. `--format json` and `--format yaml` do not hit this:
 
 ```bash
 slb config show --format json

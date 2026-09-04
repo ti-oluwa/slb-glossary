@@ -51,7 +51,7 @@ Here's we have a simple search using the CLI. No code or coding knowledge needed
 slb search "water saturation"
 ```
 
-This opens a background browser, searches the live glossary, and prints a table of matching definitions to your terminal. 
+This opens a background browser, searches the live glossary, and prints a table of matching definitions to your terminal.
 
 Here's the same lookup from Python code, using the library directly. You can use this in a script, a notebook, or any other Python environment.:
 
@@ -79,9 +79,9 @@ Both do the same underlying work. The CLI is just a wrapper over what the librar
 
 `slb-glossary` has three major APIs, layered so each one is optional on its own:
 
-- **`slb_glossary.live`** talks to the actual glossary website, through a Playwright-driven browser. This is the only way to reach terms `slb-glossary` doesn't already know about, and it's the slowest of the three, since it's a real network round trip through a real page load.
+- **`slb_glossary.live`** talks to the actual glossary website, through a Playwright-driven browser. This is the only way to reach terms `slb-glossary` does not already know about, and it's the slowest of the three, since it's a real network round trip through a real page load.
 - **`slb_glossary.local`** keeps a SQLite database on your own disk. Once a term has been looked up once and saved there, reading it back is instant and needs no network or browser at all. It also supports [semantic search](concepts/search-modes.md) over whatever you've stored, matching a paraphrase instead of an exact word.
-- **`slb_glossary.query`** inteligently utilizes both the live and local APIs. Its `search` function reads from the local database first, and only reaches for a live fetch if the local result isn't confident enough, optionally saving that live result back to the database as it goes (`persist=True`) so the next call for the same term doesn't need the network either.
+- **`slb_glossary.query`** inteligently utilizes both the live and local APIs. Its `search` function reads from the local database first, and only reaches for a live fetch if the local result is not confident enough, optionally saving that live result back to the database as it goes (`persist=True`) so the next call for the same term does not need the network either.
 
 You can use any one of these on its own, or all three in combination. The [library tutorial](library/index.md) walks you through them in that order.
 

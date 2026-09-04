@@ -45,7 +45,7 @@ RELATED_KEYWORDS = ("related term", "see related", "synonyms", "alternate form")
 
 async def ensure_initialized(session: Session, auto_initialize: bool = True) -> None:
     """
-    Initialize `session` if it isn't already, or raise if it can't be.
+    Initialize `session` if it is not already, or raise if it can't be.
 
     Every function here that actually touches the live site (as opposed
     to just reading something already loaded, like `session.language`)
@@ -54,14 +54,14 @@ async def ensure_initialized(session: Session, auto_initialize: bool = True) -> 
     needs them, not up front.
 
     :param session: The session to ensure is initialized.
-    :param auto_initialize: If `True` (the default) and `session` isn't
+    :param auto_initialize: If `True` (the default) and `session` is not
         initialized yet, initialize it now (`session.initialize()`)
         before returning. If `False`, an uninitialized `session` raises
         instead of being initialized automatically. Use this where
         silently opening a page and fetching topics on the caller's
         behalf would be surprising, and you'd rather the caller call
         `session.initialize()` explicitly first.
-    :raises SessionNotInitializedError: If `session` isn't initialized
+    :raises SessionNotInitializedError: If `session` is not initialized
         and `auto_initialize` is `False`.
     :raises NetworkError: If `auto_initialize` is `True` and the glossary
         site could not be reached while initializing.
@@ -144,7 +144,7 @@ async def _wait_for_settle(
         navigation. This is a second, independent signal that the panel actually
         updated, so a coincidental match on `previous_links` alone (e.g.
         the same top result happens to rank first for two different
-        queries) doesn't return before the panel has really changed.
+        queries) does not return before the panel has really changed.
     :return: The `(links, header_text)` pair read once the panel changed,
         or the last values read if `session.settle_timeout` elapsed first
         without any observed change.
@@ -204,10 +204,10 @@ async def get_terms_urls(
         used. See `slb_glossary.utils.get_topic_match`.
     :param start_letter: Restrict results to terms starting with this letter.
     :param limit: Maximum number of URLs to yield. Yields every matching
-        URL if `None`. An excluded URL (see `exclude`) doesn't count
+        URL if `None`. An excluded URL (see `exclude`) does not count
         against this: `limit` is a count of what's actually yielded.
     :param exclude: URLs and/or term names to skip over instead of
-        yielding, e.g. ones already stored locally, so a sync doesn't pay
+        yielding, e.g. ones already stored locally, so a sync does not pay
         to re-fetch them. An entry is treated as a URL if it starts with
         `"http://"`/`"https://"`, and as a term name otherwise - see
         `slb_glossary.utils.split_exclude`. Note that a term name in
@@ -222,10 +222,10 @@ async def get_terms_urls(
         excludes nothing.
     :yield: Term detail page URLs, in the order the glossary site returns
         them, `exclude`d ones skipped.
-    :param auto_initialize: If `session` isn't initialized yet, initialize
+    :param auto_initialize: If `session` is not initialized yet, initialize
         it automatically (the default) or raise. See `ensure_initialized`.
     :raises ValueError: If `limit` is given and is less than 1.
-    :raises SessionNotInitializedError: If `session` isn't initialized and
+    :raises SessionNotInitializedError: If `session` is not initialized and
         `auto_initialize` is `False`.
     """
     await ensure_initialized(session, auto_initialize)
@@ -259,7 +259,7 @@ async def get_terms_urls(
     if base_page_free:
         # Reuse the session's base page when it's free: it's already
         # warmed up (see `Session.base_page`'s docstring for why that
-        # matters), and staying warmed up isn't a one-time thing, so
+        # matters), and staying warmed up is not a one-time thing, so
         # there's no reason to throw it away after a single use.
         page = session.base_page
         owns_page = False
@@ -403,7 +403,7 @@ async def get_results_from_url(
     :param exclude: URLs and/or term names to skip. If `url` itself
         matches an excluded URL, this returns immediately without
         navigating anywhere at all, e.g. a term already stored locally
-        that a sync doesn't need to re-fetch. A term-name exclusion can
+        that a sync does not need to re-fetch. A term-name exclusion can
         only be checked once the page's term name is actually known,
         so it's checked right after that, before any `SearchResult` is
         yielded. The page load itself still happens in that case, since
@@ -420,9 +420,9 @@ async def get_results_from_url(
         section on the page, and is `None` only when that particular
         section has no illustrative image, even if a sibling section
         does. `related` is empty when that section has no related-term links.
-    :param auto_initialize: If `session` isn't initialized yet, initialize
+    :param auto_initialize: If `session` is not initialized yet, initialize
         it automatically (the default) or raise. See `ensure_initialized`.
-    :raises SessionNotInitializedError: If `session` isn't initialized and
+    :raises SessionNotInitializedError: If `session` is not initialized and
         `auto_initialize` is `False`.
     :raises ParsingError: If the page loaded but its structure didn't
         match what this parser expects, e.g. no term name heading, or no
@@ -561,10 +561,10 @@ async def get_results_from_urls(
         how an entry is told apart as a URL vs. a term name. `None` (the
         default) excludes nothing.
     :yield: `SearchResult`s as they're fetched, `exclude`d URLs/terms skipped.
-    :param auto_initialize: If `session` isn't initialized yet, initialize
+    :param auto_initialize: If `session` is not initialized yet, initialize
         it automatically (the default) or raise. See `ensure_initialized`.
     :raises ValueError: If `concurrency` is less than 1.
-    :raises SessionNotInitializedError: If `session` isn't initialized and
+    :raises SessionNotInitializedError: If `session` is not initialized and
         `auto_initialize` is `False`.
     :raises ParsingError: With `concurrency=1`, if a page's structure
         didn't match what the parser expects (see
@@ -741,12 +741,12 @@ async def search(
     :param exclude: Term URLs and/or term names to skip over, e.g. ones
         already stored locally. See `get_terms_urls`/`get_results_from_urls`.
         `None` (the default) excludes nothing.
-    :param auto_initialize: If `session` isn't initialized yet, initialize
+    :param auto_initialize: If `session` is not initialized yet, initialize
         it automatically (the default) or raise. See `ensure_initialized`.
     :yield: `SearchResult`s for the matched terms. In sequential order
         (`concurrency=1`) these are most-relevant-first; with higher
         concurrency, results may arrive out of relevance order.
-    :raises SessionNotInitializedError: If `session` isn't initialized and
+    :raises SessionNotInitializedError: If `session` is not initialized and
         `auto_initialize` is `False`.
     """
     await ensure_initialized(session, auto_initialize)
@@ -815,10 +815,10 @@ async def get_terms_on(
     :param exclude: Term URLs and/or term names to skip over, e.g. ones
         already stored locally. See `get_terms_urls`/`get_results_from_urls`.
         `None` (the default) excludes nothing.
-    :param auto_initialize: If `session` isn't initialized yet, initialize
+    :param auto_initialize: If `session` is not initialized yet, initialize
         it automatically (the default) or raise. See `ensure_initialized`.
     :yield: One `SearchResult` per term filed under `topic`.
-    :raises SessionNotInitializedError: If `session` isn't initialized and
+    :raises SessionNotInitializedError: If `session` is not initialized and
         `auto_initialize` is `False`.
     """
     await ensure_initialized(session, auto_initialize)

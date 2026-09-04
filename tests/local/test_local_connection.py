@@ -269,7 +269,7 @@ class TestResetIncompatibleSchema:
         assert not metadata_path.exists()
 
     def test_missing_sidecar_files_do_not_raise(self, tmp_path: pathlib.Path) -> None:
-        """Only the main db file existing (no `-wal`/`-shm`) doesn't raise."""
+        """Only the main db file existing (no `-wal`/`-shm`) does not raise."""
         db_path = tmp_path / "t.db"
         metadata_path = tmp_path / "t.metadata.json"
         db_path.write_text("x", encoding="utf-8")

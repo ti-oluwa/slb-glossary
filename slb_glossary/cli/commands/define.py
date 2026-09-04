@@ -105,7 +105,7 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
     Reads from the local database, the live glossary, or both, depending on
     --local/--live/--auto (--auto is the default): with a
     local database available, the local copy is used first and the live
-    site is only visited if TERM isn't cached yet.
+    site is only visited if TERM is not cached yet.
 
     \b
     Examples:

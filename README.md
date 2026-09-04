@@ -2,7 +2,7 @@
 
 A Python library and CLI for searching the [SLB Energy Glossary](https://glossary.slb.com/), in English and Spanish. It can search the live site directly, keep a local SQLite cache of terms you've already looked up, or do both and intelligently uses whichever (local cache or live site) to return results.
 
-This began as a hobby project to help with SPE PetroBowl prep (see [Credits](#credits)), so don't expect production polish. It does what it needs to do and tries to do that reliably.
+This began as a hobby project to help with SPE PetroBowl prep (see [Credits](#credits)), so do not expect production polish. It does what it needs to do and tries to do that reliably.
 
 > [!IMPORTANT]
 > This package is intended for research or instructional use only. See [Attribution and disclaimer](#attribution-and-disclaimer).
@@ -229,7 +229,7 @@ async with slb.live.session(headless=True) as session:
 | `launch_kwargs`      | `None`                 | Extra keyword arguments merged into Playwright's `browser.launch()` call.                            |
 | `context_kwargs`     | `None`                 | Extra keyword arguments merged into Playwright's `browser.new_context()` call.                       |
 | `use_stealth`        | `None`                 | Whether to apply Playwright stealth patches to the browser context. `None` applies them when `headless` is `True` and skips them otherwise, since they've been observed to make the glossary harder to scrape reliably in headed mode, not easier. |
-| `initialize`         | `None`                 | Whether to load the topic list and glossary size before returning the session. `None` resolves this from `SLB_GLOSSARY_SESSION_AUTO_INITIALIZE` (off unless set). While uninitialized, most `live` search functions raise `SessionNotInitializedError` until you call `session.initialize()` yourself; `local.sync_all`/`sync_topics` initialize a session automatically if it isn't already. |
+| `initialize`         | `None`                 | Whether to load the topic list and glossary size before returning the session. `None` resolves this from `SLB_GLOSSARY_SESSION_AUTO_INITIALIZE` (off unless set). While uninitialized, most `live` search functions raise `SessionNotInitializedError` until you call `session.initialize()` yourself; `local.sync_all`/`sync_topics` initialize a session automatically if it is not already. |
 | `log_sink`           | `None`                 | Where to route `slb_glossary`'s own logging for this process: a file path, `"stderr"`/`"stdout"`, or a `"module:ClassName"` import path. `None` leaves whatever logging setup is already in place untouched. See [Logging](#logging). |
 
 `session.topics` is a `dict` of topic name to term count, and `session.size` is the glossary's total term count, both fetched once the session is initialized. Call `slb.refresh_topics(session)` to reload them later.
@@ -300,7 +300,7 @@ async for result in slb.live.get_results_from_url(session, url):
 
 `limit` bounds the number of *terms* looked up, not the number of results yielded. A term can carry more than one definition, one per topic it's filed under, so `search(..., limit=3)` can yield more than three `SearchResult`s. Pass `limit=None` to fetch every match.
 
-Topic names don't need to be exact. `get_topic_match` resolves whatever you pass to the closest topic in `session.topics` (case-insensitive, typo-tolerant), and every `live` function that takes a `topic` uses it internally. Call it yourself to see what a topic will resolve to before searching:
+Topic names do not need to be exact. `get_topic_match` resolves whatever you pass to the closest topic in `session.topics` (case-insensitive, typo-tolerant), and every `live` function that takes a `topic` uses it internally. Call it yourself to see what a topic will resolve to before searching:
 
 ```python
 slb.get_topic_match(session.topics, "drill")
@@ -311,7 +311,7 @@ slb.get_topic_match(session.topics, "drill")
 
 ## The local database: `slb_glossary.local`
 
-`slb_glossary.local` is a SQLite (FTS5) cache of glossary terms, plus an optional custom embedding vector store, so repeat lookups don't have to keep re-visiting the live site.
+`slb_glossary.local` is a SQLite (FTS5) cache of glossary terms, plus an optional custom embedding vector store, so repeat lookups do not have to keep re-visiting the live site.
 
 > [!NOTE]
 > The data stored locally is still SLB's, see [Attribution and disclaimer](#attribution-and-disclaimer). Enabling this module means keeping a local copy of glossary content on your own machine. You're solely responsible for that copy's lifecycle (how long you keep it, how often you refresh it, and deleting it when you're done) in compliance with SLB's terms of use.
@@ -367,7 +367,7 @@ for result, score in await slb.local.search(db, "porosity", limit=10, scored=Tru
 
 ### Fuzzy topic matching
 
-Topic filters (`search`, `get_terms_on`, `get_random_term`, `get_terms_urls`) match locally stored topic names exactly, case-insensitively, by default. The local database doesn't have access to the live site's full topic list to fuzzy-match against automatically. Pass `fuzzy=True` to tolerate minor misspellings or partial names instead, resolved against whatever topics are actually present locally:
+Topic filters (`search`, `get_terms_on`, `get_random_term`, `get_terms_urls`) match locally stored topic names exactly, case-insensitively, by default. The local database does not have access to the live site's full topic list to fuzzy-match against automatically. Pass `fuzzy=True` to tolerate minor misspellings or partial names instead, resolved against whatever topics are actually present locally:
 
 ```python
 async for result in slb.local.get_terms_on(db, "Petrophysic", fuzzy=True):
@@ -430,7 +430,7 @@ On the CLI, this is `--mode lexical`/`semantic`/`hybrid` on `slb-glossary search
 
 ## Source-aware queries: `slb_glossary.query`
 
-`slb_glossary.local` only ever reads the local database, and `slb_glossary.live` only ever talks to the live site. `slb_glossary.query` is the layer that picks between (or combines) the two, so you don't have to hand-roll the "check local, fall back live, maybe cache what came back" logic yourself:
+`slb_glossary.local` only ever reads the local database, and `slb_glossary.live` only ever talks to the live site. `slb_glossary.query` is the layer that picks between (or combines) the two, so you do not have to hand-roll the "check local, fall back live, maybe cache what came back" logic yourself:
 
 ```python
 async with slb.local.database() as db, slb.live.session() as session:
@@ -446,7 +446,7 @@ At least one of `db` or `session` must be given to every function here, since th
 | `LIVE`           | The live glossary only. Never touches the local database. Requires `session`.                   |
 | `AUTO`    | (Default when both `db` and `session` are given.) Try `db` first. `get_term`, `get_terms_on`, `get_terms_urls`, `get_topics`, `related_terms`, `get_random_term`, and `compare` fall back to `session` if `db` came back with nothing at all. `search` is scored instead of just checked for emptiness, see below. Pass `persist=True` to cache whatever came back live. |
 
-`search`'s `AUTO` behavior goes a step further than the rest. Each local result is scored against the query (`local.search(..., scored=True)`), and if even the best of them isn't a confident match, `session` is queried too, ahead of the unconfident local results, on the theory that a live result is generally more trustworthy than a local match that wasn't confident enough to stand alone. Local results aren't thrown away though; they still fill out any remaining `limit`, just listed after the live ones. `relevance_threshold` (`0.0` to `1.0`, default `0.55`) sets how confident is confident enough. This is what lets a search stay accurate without silently trusting a weak local match just because it happened to return something.
+`search`'s `AUTO` behavior goes a step further than the rest. Each local result is scored against the query (`local.search(..., scored=True)`), and if even the best of them is not a confident match, `session` is queried too, ahead of the unconfident local results, on the theory that a live result is generally more trustworthy than a local match that was not confident enough to stand alone. Local results aren't thrown away though; they still fill out any remaining `limit`, just listed after the live ones. `relevance_threshold` (`0.0` to `1.0`, default `0.55`) sets how confident is confident enough. This is what lets a search stay accurate without silently trusting a weak local match just because it happened to return something.
 
 `search` also takes a `mode` (`"lexical"`, `"semantic"`, or `"hybrid"`, see [Semantic and hybrid search](#semantic-and-hybrid-search)), which scores both a local read and a live one, with one restriction: a live read can't be scored `"hybrid"`, since that needs a whole result set's ranks up front and live results stream in one at a time, so use `"lexical"` or `"semantic"` when a live fetch might happen. Every yielded result carries its `score` on the returned `QueryResult`.
 
@@ -556,7 +556,7 @@ config = MCPConfig(
 | `server`          | Name/version/instructions advertised to MCP clients.                                          |
 | `session`          | Whether/how the live `Session` is used: `SessionMode.EAGER`/`LAZY`/`PER_CALL`, idle timeout, concurrency, and every `open_session` option (via `options`). |
 | `local`            | Whether the local database is reachable, and whether **writes** are allowed (`allow_write`, off by default). |
-| `source_policy`    | Which `Source` values (`LOCAL`/`LIVE`/`AUTO`) a tool call may resolve to, and the default when a caller doesn't specify one. |
+| `source_policy`    | Which `Source` values (`LOCAL`/`LIVE`/`AUTO`) a tool call may resolve to, and the default when a caller does not specify one. |
 | `tools`            | Which tools to build, a `Tool` flag combination, e.g. `Tool.SEARCH | Tool.GET_TERM`, or`Tool.READ_ONLY`/`Tool.ALL`. |
 | `timeouts`         | A global per-call timeout, plus per-tool overrides.                                            |
 | `auth`             | A FastMCP `AuthProvider`/`TokenVerifier` for transport-level auth, plus required OAuth scopes. See [Auth, rate limiting, and hooks](#auth-rate-limiting-and-hooks). |
@@ -575,7 +575,7 @@ config = MCPConfig(local=LocalAccess(allow_write=True), tools=Tool.ALL)
 
 | Tool                     | `Tool` flag       | What it does                                                              |
 | -------------------------- | ------------------- | -------------------------------------------------------------------------- |
-| `glossary_search`          | `SEARCH`             | Free-text search, the default choice when a term name isn't known exactly. |
+| `glossary_search`          | `SEARCH`             | Free-text search, the default choice when a term name is not known exactly. |
 | `glossary_get_term`        | `GET_TERM`           | Exact-name or URL single-term lookup, cheaper than search when you already know the name. |
 | `glossary_get_terms_on`    | `GET_TERMS_ON`       | Every term filed under one or more topics.                               |
 | `glossary_get_terms_urls`  | `GET_TERMS_URLS`     | URL-only listing, no full definitions.                                   |
@@ -642,7 +642,7 @@ Run `slb mcp serve --help` for the full set of flags, including `--source`/`--no
 
 ### Serving a prebuilt app
 
-For anything `slb mcp serve`'s flags don't cover, such as custom hooks, an `AuthProvider` with its own constructor arguments, or extra tools bolted onto a plain `fastmcp.FastMCP`, build the app yourself in Python and point the CLI at it, uvicorn-style:
+For anything `slb mcp serve`'s flags do not cover, such as custom hooks, an `AuthProvider` with its own constructor arguments, or extra tools bolted onto a plain `fastmcp.FastMCP`, build the app yourself in Python and point the CLI at it, uvicorn-style:
 
 ```python
 # app/main.py
@@ -697,7 +697,7 @@ Run `slb --help`, or `--help` after any subcommand, for the full set of options.
 | `install`            | n/a                                | Install/list/remove/update the browser engines patchright launches.                              |
 | `mcp serve`          | n/a                                | Run an MCP server for LLM agents (see [MCP server](#mcp-server-slb_glossarymcp)). Requires the `mcp` extra. |
 
-Every command in the "Local, live, or auto" rows is built on `slb_glossary.query`, so they all take the same `--local`/`--live`/`--auto` trio described below. `urls fetch` is a holdout that stays live-only by design, since fetching one specific URL doesn't have a meaningful local equivalent. `local search`/`local get`/`local import`/`local export` read or write the local copy exclusively, with no live fallback at all. Reach for those when you want a hard guarantee that nothing will touch the network. Reloading the topic list directly from the site (`slb.refresh_topics(session)`) is Python-only for now; there's no CLI subcommand for it yet.
+Every command in the "Local, live, or auto" rows is built on `slb_glossary.query`, so they all take the same `--local`/`--live`/`--auto` trio described below. `urls fetch` is a holdout that stays live-only by design, since fetching one specific URL does not have a meaningful local equivalent. `local search`/`local get`/`local import`/`local export` read or write the local copy exclusively, with no live fallback at all. Reach for those when you want a hard guarantee that nothing will touch the network. Reloading the topic list directly from the site (`slb.refresh_topics(session)`) is Python-only for now; there's no CLI subcommand for it yet.
 
 ### Choosing a source: `--local` / `--live` / `--auto`
 
@@ -744,7 +744,7 @@ from slb_glossary.logging import FileSink, configure_logging
 configure_logging(sinks=FileSink("slb-glossary.log"), level="DEBUG")
 ```
 
-A bare string is treated as a file path; `StderrSink()`/`StdoutSink()` are the other two built-in sinks, and a `"module:ClassName"` import path loads your own (any class with a `write(message)` method). Calling `configure_logging` again later tears down its previous handler first, so repeated calls don't pile up duplicate output.
+A bare string is treated as a file path; `StderrSink()`/`StdoutSink()` are the other two built-in sinks, and a `"module:ClassName"` import path loads your own (any class with a `write(message)` method). Calling `configure_logging` again later tears down its previous handler first, so repeated calls do not pile up duplicate output.
 
 Sinks can also be routed selectively, so different parts of the library log to different places in one call:
 
@@ -767,21 +767,21 @@ Each key is an `fnmatch`-style pattern matched against the record's logger name,
 
 A few things `slb_glossary` does on its own to keep things fast. Image, font, and media requests are blocked at the network layer by default (`block=True`). The glossary is a JavaScript app, so scripts and stylesheets still load, but nothing else needs to. Page data (topic lists, result links, definition text) is read with single `evaluate`-style JavaScript calls instead of one round-trip per DOM element. Search functions are lazy async generators, so `async for result in live.search(session, "x"): break` only does the work needed to produce that first result. And a local-database read never launches a browser.
 
-The rest is on you, and it's mostly about not paying for a browser more than once. Open one `Session` and reuse it for every live search you need instead of opening a new one per query. Most of a session's cost is the one-time browser launch and topic fetch. A session drives a single browser page, though, so it isn't safe to share across concurrent coroutines. For parallel searches, either open one session per task, or use a function's `concurrency` argument to open extra pages on the same session (keep this modest, it's still one site being asked for more at once).
+The rest is on you, and it's mostly about not paying for a browser more than once. Open one `Session` and reuse it for every live search you need instead of opening a new one per query. Most of a session's cost is the one-time browser launch and topic fetch. A session drives a single browser page, though, so it is not safe to share across concurrent coroutines. For parallel searches, either open one session per task, or use a function's `concurrency` argument to open extra pages on the same session (keep this modest, it's still one site being asked for more at once).
 
-Past that, lean on the local database. `slb_glossary.query`'s `Source.AUTO` (the CLI's `--auto`, the default) tries the local database first, so a search you've already cached costs nothing beyond an SQLite read on a repeat run and only touches the network the first time. `search` specifically only trusts that local read alone if its best match is actually a good one (see `relevance_threshold` in [Source-aware queries](#source-aware-queries-slb_glossaryquery)). If it isn't, it augments with a live search instead of pretending the network step isn't needed, but the results still favor whatever's already local. If you know you'll need a topic or query a lot, `slb-glossary sync` (or `slb_glossary.local.sync`) lets you build up the cache ahead of time in one batch, so day-to-day lookups afterward stay entirely local.
+Past that, lean on the local database. `slb_glossary.query`'s `Source.AUTO` (the CLI's `--auto`, the default) tries the local database first, so a search you've already cached costs nothing beyond an SQLite read on a repeat run and only touches the network the first time. `search` specifically only trusts that local read alone if its best match is actually a good one (see `relevance_threshold` in [Source-aware queries](#source-aware-queries-slb_glossaryquery)). If it is not, it augments with a live search instead of pretending the network step is not needed, but the results still favor whatever's already local. If you know you'll need a topic or query a lot, `slb-glossary sync` (or `slb_glossary.local.sync`) lets you build up the cache ahead of time in one batch, so day-to-day lookups afterward stay entirely local.
 
 ## Exceptions
 
 - `slb_glossary.NetworkError`: the glossary site could not be reached.
 - `slb_glossary.BrowserError`: the browser failed to launch or crashed outside of a network issue, including an unsupported `browser_type`.
-- `slb_glossary.SessionNotInitializedError`: a live search function was called on a `Session` whose topics/size haven't been loaded yet. Call `session.initialize()` first, or open it with `initialize=True`.
-- `slb_glossary.ParsingError`: reserved for glossary pages that don't match the markup the parser expects.
+- `slb_glossary.SessionNotInitializedError`: a live search function was called on a `Session` whose topics/size have not been loaded yet. Call `session.initialize()` first, or open it with `initialize=True`.
+- `slb_glossary.ParsingError`: reserved for glossary pages that do not match the markup the parser expects.
 - `slb_glossary.ConfigError`: a config file or dotted key (`Config.get`/`Config.set`) was invalid.
-- `slb_glossary.DatabaseError`: the local database failed to open, query, or import from a file, or (for `mode="semantic"`/`"hybrid"`) `sqlite-vec` isn't installed or its extension couldn't be loaded.
-- `slb_glossary.EmbeddingError`: `slb_glossary.local` couldn't compute a text embedding for semantic search, e.g. the `semantic` extra isn't installed.
+- `slb_glossary.DatabaseError`: the local database failed to open, query, or import from a file, or (for `mode="semantic"`/`"hybrid"`) `sqlite-vec` is not installed or its extension could not be loaded.
+- `slb_glossary.EmbeddingError`: `slb_glossary.local` could not compute a text embedding for semantic search, e.g. the `semantic` extra is not installed.
 - `slb_glossary.QueryError`: `slb_glossary.query` can't satisfy a lookup with the source(s) it was given (e.g. `Source.LOCAL` with no `db`).
-- `slb_glossary.LoggingError`: a custom `log_sink` (see [Logging](#logging)) couldn't be set up.
+- `slb_glossary.LoggingError`: a custom `log_sink` (see [Logging](#logging)) could not be set up.
 - `slb_glossary.UnsupportedFormatError`: `save` was asked for a format with no registered writer.
 - `slb_glossary.WriterError`: the registered writer raised while writing, e.g. a permissions error or a full disk. The original exception is chained as `__cause__`.
 - `slb_glossary.mcp.MCPError`: base for every `slb_glossary.mcp`-specific error (requires the `mcp` extra).

@@ -73,7 +73,7 @@ async def read_tsv_rows(path: pathlib.Path) -> typing.AsyncIterator[dict[str, ty
         yield row
 ```
 
-This follows the same pattern as the built-in readers: a sync generator `_read_tsv_rows` does the actual file I/O, and the async wrapper uses `iter_in_thread` to run each row fetch in a worker thread so the event loop never blocks. For a quick, small file you don't need the threading overhead, you can skip it and just be an `async def` generator directly, but this approach scales well to large files. Once registered, `.tsv` files work everywhere `read_rows` is used underneath, including `local.load_file`, with no changes needed on that side:
+This follows the same pattern as the built-in readers: a sync generator `_read_tsv_rows` does the actual file I/O, and the async wrapper uses `iter_in_thread` to run each row fetch in a worker thread so the event loop never blocks. For a quick, small file you do not need the threading overhead, you can skip it and just be an `async def` generator directly, but this approach scales well to large files. Once registered, `.tsv` files work everywhere `read_rows` is used underneath, including `local.load_file`, with no changes needed on that side:
 
 ```python
 await slb.local.load_file(db, "terms.tsv")
@@ -104,7 +104,7 @@ print(config.output.show_related)  # False
 
 ```python
 config = Config.load()  # the default config path if it exists, else built-in defaults
-config = Config.from_file("my-config.toml")  # a specific file; raises if it doesn't exist
+config = Config.from_file("my-config.toml")  # a specific file; raises if it does not exist
 
 config.session.headless = False
 config.to_file("my-config.toml")  # format inferred from the extension

@@ -43,7 +43,7 @@ async def enable_wal(connection: aiosqlite.Connection) -> str:
         any other statement.
     :return: The journal mode SQLite reports after the request, e.g.
         `"wal"`. May not always return what was asked for as some
-        filesystems (network shares in particular) don't support WAL
+        filesystems (network shares in particular) do not support WAL
         and SQLite silently falls back to another mode instead of erroring.
     """
     cursor = await connection.execute("PRAGMA journal_mode=WAL")
@@ -53,7 +53,7 @@ async def enable_wal(connection: aiosqlite.Connection) -> str:
     if mode.lower() != "wal":
         logger.warning(
             "Requested WAL journal mode but SQLite applied %r instead "
-            "(common on filesystems, e.g. some network shares, that don't "
+            "(common on filesystems, e.g. some network shares, that do not "
             "support WAL). Continuing with that mode.",
             mode,
         )
@@ -66,7 +66,7 @@ def get_metadata_schema_version(metadata_path: pathlib.Path) -> int | None:
 
     :param metadata_path: Path to a `metadata.json` file.
     :return: The reported schema version, or `None` if `metadata_path`
-        doesn't exist (no existing database to check at all).
+        does not exist (no existing database to check at all).
     """
     if not metadata_path.exists():
         return None
@@ -75,7 +75,7 @@ def get_metadata_schema_version(metadata_path: pathlib.Path) -> int | None:
 
 def reset_incompatible_schema(db_path: pathlib.Path, metadata_path: pathlib.Path) -> None:
     """
-    Delete an existing database/metadata pair whose schema version doesn't
+    Delete an existing database/metadata pair whose schema version does not
     match the current one.
 
     There's currently no migration path between schema versions (see
@@ -99,7 +99,7 @@ def reset_incompatible_schema(db_path: pathlib.Path, metadata_path: pathlib.Path
 
 def check_schema_version(db_path: pathlib.Path, metadata_path: pathlib.Path) -> None:
     """
-    Reset `db_path`/`metadata_path` if their recorded schema version isn't
+    Reset `db_path`/`metadata_path` if their recorded schema version is not
     the one this code understands.
 
     A no-op if there's no existing `metadata_path` to check (a brand new

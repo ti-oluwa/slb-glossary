@@ -25,7 +25,7 @@ FTS5's default is `1.0` for every column, which lets a
 result whose definition happens to repeat the query outrank one whose
 term name actually matches it.
 
-Weighting `term` well above the others still doesn't fully fix this,
+Weighting `term` well above the others still does not fully fix this,
 since bm25 also rewards a column for how often the query appears in it,
 so a term whose definition just says the query word a lot can still
 out-score the term actually named that. `lexical_search` sidesteps this
@@ -78,7 +78,7 @@ async def lexical_search(
     2. Everything else is ordered by `bm25()`, weighted toward the `term`
        column (see `FTS_COLUMN_WEIGHTS`), and scored by normalizing that
        result set's own bm25 spread into `(0.0, constants.content_match_score_cap]`,
-       worst match to best. bm25 isn't comparable across different
+       worst match to best. bm25 is not comparable across different
        queries, only within one, which is exactly what this needs it for.
 
     Tier 1 is always ordered ahead of tier 2, so a term named after the
@@ -117,7 +117,7 @@ async def lexical_search(
     :param start_letter: Restrict results to terms starting with this letter.
     :param language: Restrict results to this glossary language edition
         (e.g. `"en"`/`"es"`), matched exactly against each stored result's
-        `.language`. `None` (the default) doesn't filter by language.
+        `.language`. `None` (the default) does not filter by language.
     :param limit: Maximum number of results to return. `None` for unlimited.
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
@@ -127,7 +127,7 @@ async def lexical_search(
         entry is treated as a URL if it starts with `"http://"`/`"https://"`,
         and as a term name (matched case/whitespace-insensitively)
         otherwise. Filtered in SQL before `limit` is applied, so an excluded match
-        doesn't use up part of `limit`'s budget the way a plain post-filter would.
+        does not use up part of `limit`'s budget the way a plain post-filter would.
         Note that a very large `exclude` (thousands of entries) does cost one
         SQL parameter each, so keep it to a reasonable, bounded size.
         `None` (the default) excludes nothing.

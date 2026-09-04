@@ -14,8 +14,8 @@ The browser engine underneath is [patchright](https://github.com/Kaliiiiiiiiii-V
 
 A few specifics worth knowing:
 
-- **Stealth patches apply automatically when `headless=True`, and are skipped by default when `headless=False`.** They've been observed to make the glossary *harder* to scrape reliably in headed mode, not easier, so the library doesn't apply them there unless you explicitly ask (`use_stealth=True`).
-- **The patches are tuned for Chromium specifically.** Firefox and WebKit sessions run through the same stealth initialization, but haven't been evaluated against the glossary's own bot detection the way Chromium has. Chromium is the default `browser_type` for this reason, and this documentation's examples assume it throughout.
+- **Stealth patches apply automatically when `headless=True`, and are skipped by default when `headless=False`.** They've been observed to make the glossary *harder* to scrape reliably in headed mode, not easier, so the library does not apply them there unless you explicitly ask (`use_stealth=True`).
+- **The patches are tuned for Chromium specifically.** Firefox and WebKit sessions run through the same stealth initialization, but have not been evaluated against the glossary's own bot detection the way Chromium has. Chromium is the default `browser_type` for this reason, and this documentation's examples assume it throughout.
 - **`install`'s download machinery reuses Playwright's own environment variables** (`PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT`, `PLAYWRIGHT_DOWNLOAD_HOST`), since patchright is a drop-in fork rather than an independent reimplementation. See [`install`](../cli/sync.md#install).
 
 ## What opening a session actually does
@@ -24,7 +24,7 @@ A few specifics worth knowing:
 
 ## The page pool: how concurrency actually works
 
-A `Session` doesn't just hold one browser tab; it holds a small pool of them, bounded by `max_pages` (default `6`). Any operation that needs to actually load a URL (the search results page, each term's detail page) checks out a page from this pool for the duration of that one operation, then returns it. This is what makes a session safe to drive concurrently: `compare`'s `concurrency`, or `slb.live.search`'s `concurrency`, work by having several lookups in flight at once, each with its own checked-out page, rather than serializing everything through a single shared tab.
+A `Session` does not just hold one browser tab; it holds a small pool of them, bounded by `max_pages` (default `6`). Any operation that needs to actually load a URL (the search results page, each term's detail page) checks out a page from this pool for the duration of that one operation, then returns it. This is what makes a session safe to drive concurrently: `compare`'s `concurrency`, or `slb.live.search`'s `concurrency`, work by having several lookups in flight at once, each with its own checked-out page, rather than serializing everything through a single shared tab.
 
 ```python
 async with slb.live.session(max_pages=10) as session:
@@ -52,7 +52,7 @@ async with slb.live.session(
 
 ## `RetryPolicy` elsewhere in the library
 
-`RetryPolicy` isn't specific to session startup; it's a general-purpose retry configuration used in a few other places too, and available for your own code as well:
+`RetryPolicy` is not specific to session startup; it's a general-purpose retry configuration used in a few other places too, and available for your own code as well:
 
 - **`refresh_topics`** (the same facet-panel load that populates `session.topics`/`session.size`) reuses `session.retry` directly rather than taking a retry policy of its own, call it again later if the glossary's topic list may have changed mid-run, and it retries exactly like the initial load did.
 - **`slb install`**'s browser download (`slb_glossary.cli.browsers`) retries a failed download per its own `RetryPolicy`, exposed as the CLI's `--retries`/`--timeout` flags rather than a policy object directly. See [`install`](../cli/sync.md#install).

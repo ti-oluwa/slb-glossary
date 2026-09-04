@@ -27,7 +27,7 @@ slb sync --start-letter p
 ```
 
 ```bash
-slb sync --check-only   # only report the browser state, don't touch the database at all
+slb sync --check-only   # only report the browser state, do not touch the database at all
 ```
 
 !!! warning "`--all` updates the entire glossary"
@@ -52,7 +52,7 @@ Metadata: /home/you/.local/share/slb-glossary/glossary.metadata.json
 ```
 
 !!! note "Back it up carefully"
-    The database runs in WAL mode, meaning a write can leave `-wal`/`-shm` sidecar files next to the main `.db` file that haven't been folded in yet. If you copy or back up the file by hand, bring those sidecars along too, or close everything using the database first so SQLite folds them back into the main file before you copy it.
+    The database runs in WAL mode, meaning a write can leave `-wal`/`-shm` sidecar files next to the main `.db` file that have not been folded in yet. If you copy or back up the file by hand, bring those sidecars along too, or close everything using the database first so SQLite folds them back into the main file before you copy it.
 
 ### Checking what's there
 
@@ -84,7 +84,7 @@ slb local get porosity --topic Petrophysics
 slb local embed
 ```
 
-By default this embeds every locally stored row that doesn't have an embedding yet, so running it again after a `sync`/`local import` only pays for what's actually new:
+By default this embeds every locally stored row that does not have an embedding yet, so running it again after a `sync`/`local import` only pays for what's actually new:
 
 ```bash
 slb sync --topic "Drilling Fluids"

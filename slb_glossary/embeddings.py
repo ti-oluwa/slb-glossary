@@ -34,7 +34,7 @@ def load_model() -> typing.Any:
         from model2vec import StaticModel  # type: ignore[import]
     except ImportError as exc:
         raise EmbeddingError(
-            "Semantic search needs the `model2vec` package, which isn't "
+            "Semantic search needs the `model2vec` package, which is not "
             "installed. Install it with `pip install slb-glossary[semantic]`."
         ) from exc
 
@@ -82,8 +82,8 @@ def embedding_dim() -> int:
     size matches `constants.embedding_dim` (the local vector table is
     created with that fixed size, see `slb_glossary.local.vectors`).
 
-    :raises EmbeddingError: If the `semantic` extra isn't installed, or
-        the model's real output size doesn't match `constants.embedding_dim`.
+    :raises EmbeddingError: If the `semantic` extra is not installed, or
+        the model's real output size does not match `constants.embedding_dim`.
     """
     load_model()
     return constants.embedding_dim
@@ -97,8 +97,8 @@ def embed(texts: typing.Sequence[str]) -> "np.ndarray":
         text for a term (name, definition, and topic); a search query is
         just embedded as-is.
     :return: A `(len(texts), constants.embedding_dim)` array of `float32` vectors.
-    :raises EmbeddingError: If the `semantic` extra isn't installed, or
-        the model's real output size doesn't match `constants.embedding_dim`.
+    :raises EmbeddingError: If the `semantic` extra is not installed, or
+        the model's real output size does not match `constants.embedding_dim`.
     """
     model = load_model()
     return model.encode(list(texts))

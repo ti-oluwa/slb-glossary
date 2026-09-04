@@ -42,7 +42,7 @@ pytestmark = pytest.mark.unit
 def anyio_backend(
     anyio_backend_asyncio_only: tuple[str, dict[str, typing.Any]],
 ) -> tuple[str, dict[str, typing.Any]]:
-    """Every test here touches a real aiosqlite database, which isn't trio-safe."""
+    """Every test here touches a real aiosqlite database, which is not trio-safe."""
     return anyio_backend_asyncio_only
 
 
@@ -275,7 +275,7 @@ class TestDrainAndUpsert:
 @pytest.mark.anyio
 class TestSyncTopics:
     async def test_initializes_session_if_not_already(self, db: Database) -> None:
-        """Calls `session.initialize()` when it isn't initialized yet."""
+        """Calls `session.initialize()` when it is not initialized yet."""
         session = MockSession()
         await sync_topics(db, session)
         assert session.initialized is True
@@ -416,7 +416,7 @@ class TestSyncAll:
     async def test_initializes_session_if_not_already(
         self, db: Database, mock_site: MockSite
     ) -> None:
-        """Calls `session.initialize()` when it isn't initialized yet."""
+        """Calls `session.initialize()` when it is not initialized yet."""
         session = MockSession()
         await sync_all(db, session)
         assert session.initialized is True
@@ -555,7 +555,7 @@ class TestSyncAll:
             await sync_all(db, session)
 
         metadata = Metadata.load(db.metadata_path)
-        # `record_sync` doesn't store `interrupted` itself on `Metadata` -
+        # `record_sync` does not store `interrupted` itself on `Metadata` -
         # confirm instead that a sync was still recorded despite the error
         # (i.e. the `finally` block ran).
         assert metadata.last_synced_at is not None

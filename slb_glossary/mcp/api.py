@@ -64,13 +64,13 @@ def resolve_icon(logo: str | None) -> list[mcp.types.Icon] | None:
 
     An `http(s)://` URL is passed straight through as the icon's `src`.
     Anything else is treated as a local file path and inlined as a
-    base64 data URI, so the icon doesn't depend on that file still being
+    base64 data URI, so the icon does not depend on that file still being
     reachable by whatever eventually connects, only on it existing
     right now, at server-build time.
 
     :param logo: `ServerInfo.logo`.
     :return: A single-item icon list, or `None` if `logo` is `None`.
-    :raises MCPConfigError: If `logo` looks like a local path but doesn't
+    :raises MCPConfigError: If `logo` looks like a local path but does not
         exist or can't be read.
     """
     if logo is None:
@@ -342,10 +342,10 @@ def load_app(dotted_path: str) -> MCPApp | FastMCP:
         it's called with no arguments and its return value is used instead
         (a factory function, e.g. `def create_app() -> MCPApp: ...`).
     :return: The resolved `MCPApp` or `FastMCP` instance.
-    :raises ValueError: If `dotted_path` doesn't contain a `:` separator.
+    :raises ValueError: If `dotted_path` does not contain a `:` separator.
     :raises ImportError: If the module can't be imported, or has no such attribute.
     :raises TypeError: If, after resolving/calling it, the result still
-        isn't an `MCPApp` or `FastMCP`.
+        is not an `MCPApp` or `FastMCP`.
     """
     module_path, sep, attr = dotted_path.partition(":")
     if not sep or not module_path or not attr:

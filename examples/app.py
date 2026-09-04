@@ -12,14 +12,18 @@ import slb_glossary.mcp as slb_mcp
 config = slb_mcp.MCPConfig(
     # Shown to a connecting client as this server's identity.
     server=slb_mcp.ServerInfo(name="example-mcp", version="0.0.1"),
-    # A shared browser session, opened lazily on first use rather than at
-    # startup, and capped at 3 pages in flight at once so a burst of
-    # concurrent tool calls can't spin up unbounded browser tabs.
+    # A pooled browser session per language, opened lazily on first use
+    # rather than at startup. `max_pages` caps concurrent operations
+    # (page tabs) within one session; `max_sessions` caps how many
+    # browser instances may be open at once, across every language
+    # combined - the pool opens an extra one for a language only once its
+    # existing session(s) are already full.
     session=slb_mcp.SessionAccess(
         enabled=True,
-        max_concurrent=3,
+        max_sessions=2,
         mode=slb_mcp.SessionMode.LAZY,
         options=slb.config.SessionOptions(
+            max_pages=3,
             use_stealth=False,
             log_sink=slb.log.FileSink("./example.mcp.browser.log"),
         ),

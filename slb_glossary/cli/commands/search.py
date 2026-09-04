@@ -77,7 +77,7 @@ async def auto_searchstream(
 ) -> typing.AsyncIterator[QueryResult[SearchResult]]:
     """
     Stream `Source.AUTO` results for the `search` command, opening a live
-    session only if the local database doesn't have a confident match.
+    session only if the local database does not have a confident match.
 
     A `search`-specific alternative to `resolve_stream`'s generic
     `Source.AUTO` handling (shared with `terms`/`urls`, which have no

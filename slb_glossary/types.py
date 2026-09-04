@@ -24,7 +24,7 @@ class SearchMode(str, enum.Enum):
     `SEMANTIC`/`HYBRID` need the `semantic` extra installed.
 
     `HYBRID` also needs a local database with terms already embedded via
-    `slb_glossary.local.embed_terms`, and isn't available for live
+    `slb_glossary.local.embed_terms`, and is not available for live
     results at all (see `slb_glossary.live.score_result`).
     """
 
@@ -151,12 +151,12 @@ class Updatable:
     (`config.update(a=1).update(b=2)`).
 
     For a **non-frozen** one, `update` mutates `self` in place, field by field,
-    and returns `self` so a caller that doesn't know (or care) whether a particular config is
+    and returns `self` so a caller that does not know (or care) whether a particular config is
     frozen can still call `.update(...)` and either use the return value or not, uniformly.
 
     `changes` are applied via `dataclasses.replace`/`setattr`.
 
-    Declare this *before* other bases so it doesn't shadow a dataclass
+    Declare this *before* other bases so it does not shadow a dataclass
     field actually named `update`, e.g. `class Foo(Updatable): ...` not
     `class Foo(SomethingElse, Updatable): ...` if `SomethingElse` has an
     `update` field/method of its own.
@@ -172,8 +172,8 @@ class Updatable:
             actual field of this dataclass.
         :return: A new instance with `changes` applied, if this dataclass
             is frozen; `self`, mutated in place, otherwise.
-        :raises TypeError: If this class isn't a `dataclasses.dataclass`,
-            or `changes` includes a name that isn't one of its fields.
+        :raises TypeError: If this class is not a `dataclasses.dataclass`,
+            or `changes` includes a name that is not one of its fields.
         """
         if not dataclasses.is_dataclass(self):
             raise TypeError(

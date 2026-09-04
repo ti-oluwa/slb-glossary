@@ -31,7 +31,7 @@ def patch_parsers(
     `get_term_detail_blocks` themselves raising `ParsingError` on a
     structural parse failure, which is where that raise actually lives
     (see `slb_glossary.live.parsers`); `get_results_from_url` itself just
-    calls them and doesn't inspect what they return.
+    calls them and does not inspect what they return.
     """
 
     async def mock_get_term_name(page: object) -> str:
@@ -55,10 +55,10 @@ def patch_parsers(
 
 class TestGetResultsFromUrlParseFailures:
     """
-    `get_results_from_url` doesn't itself decide what counts as a parse
+    `get_results_from_url` does not itself decide what counts as a parse
     failure anymore - `get_term_name`/`get_term_detail_blocks` raise
     `ParsingError` themselves (see `tests/live/test_live_parsers.py`).
-    What matters here is that `get_results_from_url` doesn't catch and
+    What matters here is that `get_results_from_url` does not catch and
     swallow that (or any other) exception from them.
     """
 
@@ -78,7 +78,7 @@ class TestGetResultsFromUrlParseFailures:
     async def test_parsing_error_from_get_term_name_propagates(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A `ParsingError` from `get_term_name` isn't caught into an empty result."""
+        """A `ParsingError` from `get_term_name` is not caught into an empty result."""
         patch_parsers(
             monkeypatch,
             term_name=ParsingError("could not parse a term name"),
@@ -93,7 +93,7 @@ class TestGetResultsFromUrlParseFailures:
     async def test_parsing_error_from_get_term_detail_blocks_propagates(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A `ParsingError` from `get_term_detail_blocks` isn't caught into an empty result."""
+        """A `ParsingError` from `get_term_detail_blocks` is not caught into an empty result."""
         patch_parsers(
             monkeypatch,
             term_name="Porosity",
@@ -108,7 +108,7 @@ class TestGetResultsFromUrlParseFailures:
     async def test_unexpected_parser_exception_propagates_unchanged(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A genuine bug in the parser layer isn't converted into an empty result either."""
+        """A genuine bug in the parser layer is not converted into an empty result either."""
         patch_parsers(monkeypatch, term_name=ValueError("boom"), detail_sections=[DETAIL_SECTION])
         with pytest.raises(ValueError, match="boom"):
             async for _ in api_module.get_results_from_url(

@@ -135,7 +135,7 @@ class FileSink:
     ) -> None:
         """
         :param path: File to write log lines to. Its parent directory is
-            created on first write if it doesn't exist.
+            created on first write if it does not exist.
         :param mode: File open mode. `"a"` (the default) appends across
             runs, so a single `--log-to` file can double as a running log
             for bug reports; pass `"w"` to truncate on each run instead.
@@ -276,7 +276,7 @@ def import_sink(dotted_path: str) -> typing.Any:
         `":"`) or `"package.module.attr"` (splitting on the last `"."`).
     :return: Whatever `attr` resolves to. Typically a `LogSink` subclass
         or an already-constructed `LogSink` instance.
-    :raises ValueError: If `dotted_path` doesn't look like a valid import path.
+    :raises ValueError: If `dotted_path` does not look like a valid import path.
     :raises ImportError: If the module can't be imported, or has no such attribute.
     """
     module_path, _, attr = dotted_path.partition(":")
@@ -324,7 +324,7 @@ def resolve_sink(
     :param default: Fallback sink used when `spec` is `None`.
     :return: A ready-to-use `LogSink`.
     :raises ImportError: If `spec` looks like an import path but the
-        module/attribute couldn't be found.
+        module/attribute could not be found.
     """
     if spec is None:
         return default if default is not None else StderrSink()

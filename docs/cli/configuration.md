@@ -44,7 +44,7 @@ slb search porosity --json | jq '.[0].definition'
 
 ## The `config` command
 
-Rather than retyping flags like `--browser-type`, `--db-path`, or `--headed` on every command, you can set them once in a config file. Every lookup command's `--config` flag (`default`/`none`/a path) controls whether, and where, that file is read from; `default` (the global config file) is what every command assumes if you don't say otherwise.
+Rather than retyping flags like `--browser-type`, `--db-path`, or `--headed` on every command, you can set them once in a config file. Every lookup command's `--config` flag (`default`/`none`/a path) controls whether, and where, that file is read from; `default` (the global config file) is what every command assumes if you do not say otherwise.
 
 ### Where it lives
 
@@ -82,7 +82,7 @@ slb config show --format yaml
 ```
 
 !!! warning "`config show`'s TOML output can error on unset fields"
-    `config show`'s documented default format is TOML, but as of this writing it can raise `Unable to convert an object of <class 'NoneType'> to a TOML item` when a setting is unset (`None`), since TOML has no native null value and the unset fields aren't stripped before serializing. `--format json` and `--format yaml` don't hit this, so prefer one of those explicitly until it's fixed.
+    `config show`'s documented default format is TOML, but as of this writing it can raise `Unable to convert an object of <class 'NoneType'> to a TOML item` when a setting is unset (`None`), since TOML has no native null value and the unset fields aren't stripped before serializing. `--format json` and `--format yaml` do not hit this, so prefer one of those explicitly until it's fixed.
 
 !!! tip "Any flag you pass on the command line still wins"
     A config file only supplies *defaults*. Any option you give explicitly on a given command overrides the config file's value for that one run, so `slb search porosity --headed` runs headed even if `session.headless` is `true` in your config.
@@ -93,7 +93,7 @@ slb config show --format yaml
 slb config edit
 ```
 
-Opens the file in `$EDITOR` (or `$VISUAL`), creating it with defaults first if it doesn't exist yet. TOML and YAML config files need the `config` extra installed (`uv add "slb-glossary[config]"`); JSON works with no extra at all.
+Opens the file in `$EDITOR` (or `$VISUAL`), creating it with defaults first if it does not exist yet. TOML and YAML config files need the `config` extra installed (`uv add "slb-glossary[config]"`); JSON works with no extra at all.
 
 ### Using a project-specific config instead of the global one
 
@@ -126,7 +126,7 @@ Every command accepts `--log-level`, `--log-to`, and `--log-sink`, for seeing (o
 slb search porosity --log-level debug --log-to run.log
 ```
 
-`--log-to` accepts a file path, or the literal `stderr`/`stdout`. `--log-sink module:ClassName` points at your own sink class instead (see [Logging](../library/logging.md#sinks) for what a sink needs to implement), and takes priority over `--log-to` if both are given. These three flags are a wrapper over `slb_glossary.logging.configure_logging`; see [Logging](../library/logging.md) for the full library-side API, including routing different parts of the library to different sinks at once, which the CLI's flags don't expose.
+`--log-to` accepts a file path, or the literal `stderr`/`stdout`. `--log-sink module:ClassName` points at your own sink class instead (see [Logging](../library/logging.md#sinks) for what a sink needs to implement), and takes priority over `--log-to` if both are given. These three flags are a wrapper over `slb_glossary.logging.configure_logging`; see [Logging](../library/logging.md) for the full library-side API, including routing different parts of the library to different sinks at once, which the CLI's flags do not expose.
 
 ---
 

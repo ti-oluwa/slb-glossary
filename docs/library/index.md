@@ -1,6 +1,6 @@
 # Using the Library
 
-This section assumes basic comfort with `async`/`await`. If you haven't written `async def`/`await` code before, [Real Python's asyncio walkthrough](https://realpython.com/async-io-python/) is worth reading first. If you haven't installed the library yet, see [Installation](../getting-started/installation.md).
+This section assumes basic comfort with `async`/`await`. If you have not written `async def`/`await` code before, [Real Python's asyncio walkthrough](https://realpython.com/async-io-python/) is worth reading first. If you have not installed the library yet, see [Installation](../getting-started/installation.md).
 
 `slb-glossary` is fully typed (it ships a `py.typed` marker), so everything below works with autocomplete and standard type checking out of the box.
 

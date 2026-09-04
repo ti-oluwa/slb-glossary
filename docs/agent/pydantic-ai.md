@@ -99,4 +99,4 @@ async with agent:
 
 ## Where to go from here
 
-For every flag `slb mcp serve` accepts, and what each tool actually does underneath, see [Running an MCP Server](mcp-server.md). For anything not covered here (resources, sampling, per-user authentication for a multi-tenant agent), see [Pydantic AI's own MCP client documentation](https://ai.pydantic.dev/mcp/client/), which this page doesn't explain in full.
+For every flag `slb mcp serve` accepts, and what each tool actually does underneath, see [Running an MCP Server](mcp-server.md). For anything not covered here (resources, sampling, per-user authentication for a multi-tenant agent), see [Pydantic AI's own MCP client documentation](https://ai.pydantic.dev/mcp/client/), which this page does not explain in full.

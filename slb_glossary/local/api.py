@@ -118,7 +118,7 @@ async def upsert_results(
     :param source: Provenance tag stored alongside each row: `"glossary"`
         for results fetched live from the site (the default), or a
         caller-chosen value such as `"user"` for imported data.
-    :return: Number of rows written (results with no `url` don't count).
+    :return: Number of rows written (results with no `url` do not count).
     """
     started_at = time.monotonic()
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -227,7 +227,7 @@ async def upsert_results_incrementally(
         rows written) and `"batches"` (number of upsert calls made) once
         this generator is exhausted (normally or via error), since an
         async generator can't hand back a return value the way a plain
-        function can. Callers that only want the final count and don't
+        function can. Callers that only want the final count and do not
         need each result passed through (e.g. `slb_glossary.local.sync`)
         can drain this with `async for _ in ...: pass` and then read `stats`.
     :yield: Every item from `results`, unchanged.
@@ -486,7 +486,7 @@ async def search(
         comma-separated topics (case-insensitive exact match by default).
     :param start_letter: Restrict results to terms starting with this letter.
     :param language: Restrict results to this glossary language edition
-        (e.g. `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+        (e.g. `"en"`/`"es"`). `None` (the default) does not filter by language.
     :param limit: Maximum number of results. `None` for unlimited.
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
@@ -503,10 +503,10 @@ async def search(
     :return: Matching `SearchResult`s, or `(SearchResult, float)` pairs if
         `scored=True`, best match first either way.
     :raises DatabaseError: With `mode="semantic"`/`"hybrid"`, if
-        `sqlite-vec` isn't installed, or its extension can't be loaded.
+        `sqlite-vec` is not installed, or its extension can't be loaded.
     :raises EmbeddingError: With `mode="semantic"`/`"hybrid"`, if
-        `model2vec` isn't installed, or the embedding model's output size
-        doesn't match `constants.embedding_dim`.
+        `model2vec` is not installed, or the embedding model's output size
+        does not match `constants.embedding_dim`.
     """
     search_mode = SearchMode(mode if mode is not None else constants.default_search_mode)
     if search_mode is SearchMode.LEXICAL:
@@ -567,12 +567,12 @@ async def get_terms_on(
     :param db: The local database to read from.
     :param topic: Topic name, or several comma-separated topic names.
         Topic names themselves are language-specific (the glossary's
-        Spanish edition doesn't use the same topic names as its English
+        Spanish edition does not use the same topic names as its English
         one), so this should already be in whatever language you mean;
         see `language` to also restrict which stored terms match.
     :param start_letter: Restrict results to terms starting with this letter.
     :param language: Restrict results to this glossary language edition
-        (e.g. `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+        (e.g. `"en"`/`"es"`). `None` (the default) does not filter by language.
     :param limit: Maximum number of results. `None` for unlimited.
     :param fuzzy: If `True`, resolve `topic` against locally stored topic
         names first, instead of requiring an exact (case-insensitive) match.
@@ -649,7 +649,7 @@ async def iter_terms(
 
     Results come back ordered by term name, read from the database in
     batches (see `batch_size`) rather than all at once, so exporting
-    a large local database doesn't require holding the whole thing in
+    a large local database does not require holding the whole thing in
     memory before the first result is even available.
 
     `slb_glossary.writers.save` does still collect the full stream into
@@ -660,10 +660,10 @@ async def iter_terms(
     :param db: The local database to read from.
     :param topic: Restrict results to this topic, or several
         comma-separated topics (case-insensitive exact match by default).
-        `None` (the default) doesn't filter by topic.
+        `None` (the default) does not filter by topic.
     :param start_letter: Restrict results to terms starting with this letter.
     :param language: Restrict results to this glossary language edition
-        (e.g. `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+        (e.g. `"en"`/`"es"`). `None` (the default) does not filter by language.
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
         Has no effect if `topic` is falsy.
@@ -772,10 +772,10 @@ async def get_term(
         (case-insensitive) term name.
     :param language: Restrict the lookup (and, with `with_similar=True`,
         the alternatives search) to this glossary language edition (e.g.
-        `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+        `"en"`/`"es"`). `None` (the default) does not filter by language.
     :param topic: Restrict the lookup to this exact (case-insensitive)
         topic, disambiguating a term/URL with several stored definitions.
-        `None` (the default) doesn't filter by topic; see above for what
+        `None` (the default) does not filter by topic; see above for what
         that means when more than one definition is stored.
     :param with_similar: If `True`, also search for up to `max_similar_terms`
         other locally stored results, via `lexical_search` on `term_or_url`
@@ -848,7 +848,7 @@ async def get_term_definitions(
     :param term_or_url: A glossary term detail-page URL, or an exact
         (case-insensitive) term name.
     :param language: Restrict to this glossary language edition (e.g.
-        `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+        `"en"`/`"es"`). `None` (the default) does not filter by language.
     :return: Every stored definition for `term_or_url`, ordered by topic.
         Empty if nothing locally stored matches.
     """
@@ -882,7 +882,7 @@ async def get_random_term(
     :param topic: Restrict the pick to this topic, or several
         comma-separated topics. `None` picks from every locally stored term.
     :param language: Restrict the pick to this glossary language edition
-        (e.g. `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+        (e.g. `"en"`/`"es"`). `None` (the default) does not filter by language.
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
         Has no effect if `topic` is falsy.
@@ -959,7 +959,7 @@ async def get_terms_urls(
     :param topic: Restrict to this topic, or several comma-separated topics.
     :param start_letter: Restrict to terms starting with this letter.
     :param language: Restrict to this glossary language edition (e.g.
-        `"en"`/`"es"`). `None` (the default) doesn't filter by language.
+        `"en"`/`"es"`). `None` (the default) does not filter by language.
     :param limit: Maximum number of URLs. `None` for unlimited.
     :param fuzzy: If `True`, tolerate minor misspellings/partial names in
         `topic` by resolving it against locally stored topic names first.
@@ -1052,7 +1052,7 @@ async def get_topics(db: Database, *, language: str | None = None) -> dict[str, 
         Spanish edition uses different topic names than its English one),
         so counting across both without filtering can double-count the
         same topic under its two different names. `None` (the default)
-        doesn't filter, and counts every stored term regardless of language.
+        does not filter, and counts every stored term regardless of language.
     :return: Topic name to term count, for topics that have at least one
         locally stored term (matching `language`, if given).
     """
