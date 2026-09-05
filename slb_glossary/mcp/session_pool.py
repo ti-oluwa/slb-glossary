@@ -181,7 +181,7 @@ class SessionPool:
             # no reason to defer the topics/size load further.
             kwargs["initialize"] = True
             session = await open_session(**kwargs)
-        except Exception:
+        except BaseException:
             # The launch itself failed and this pool never got a browser
             # instance, so it shouldn't hold onto the slot.
             self._semaphore.release()

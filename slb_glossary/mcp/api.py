@@ -140,7 +140,7 @@ class MCPApp(NamedComponent):
     """
     A configured, buildable MCP server for the SLB Energy Glossary.
 
-    Construction (`MCPApp(config)`) is cheap and does no I/O; the
+    Construction (`MCPApp(config)`) is cheap and does no I/O. The
     underlying `FastMCP` server and its tools are assembled lazily on first
     `server()`/`run()`/`run_async()` call.
 
@@ -271,7 +271,7 @@ class MCPApp(NamedComponent):
         Perform startup-time resource work (open the local DB, eagerly open a
         live session if configured) and run `Hooks.on_startup` hooks.
 
-        Idempotent: safe to call before `run_async`, which also calls this.
+        Idempotent. Safe to call before `run_async`, which also calls this.
         """
         started_at = time.monotonic()
         self.configure_logging()
@@ -325,7 +325,7 @@ class MCPApp(NamedComponent):
         """
         Synchronous convenience wrapper around `MCPApp.run_async`, for simple entry points.
 
-        :param transport_kwargs: Forwarded to `fastmcp.FastMCP.run_async` - see `run_async`.
+        :param transport_kwargs: Forwarded to `fastmcp.FastMCP.run_async`.
         """
         asyncio.run(self.run_async(**transport_kwargs))
 
