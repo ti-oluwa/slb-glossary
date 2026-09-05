@@ -1,20 +1,8 @@
 """
-`local.sync`: `get_known_urls_set`, `record_sync`, `drain_and_upsert`'s
-error handling, and every `sync_*` function - including the guarantee that
-`sync_all` never re-fetches a term's page a second time just because it's
-filed under more than one topic.
-
-Mocks the live-layer functions `sync.py` imports by name
-(`live.api.search`/`get_terms_on`/`get_terms_urls`/`get_results_from_urls`)
-with a small in-memory fake site, rather than a real `Session` (which
-needs real Playwright objects to construct). The fake models exactly the
-one behavior this module's design leans on: a URL excluded from a topic
-listing is never "fetched" (no page ever visited for it), and fetching a
-URL yields every topic-tagged definition found on that single page, not
-just the one for the topic whose listing led there.
+Tests for `local.sync`: `get_known_urls_set`, `record_sync`, `drain_and_upsert`,
+and every `sync_*` function, including the cross-topic dedup guarantee.
 """
 
-import dataclasses
 import typing
 
 import pytest
@@ -32,8 +20,9 @@ from slb_glossary.local.sync import (
     sync_topics,
 )
 from slb_glossary.local.types import Database, Metadata
-from slb_glossary.types import Language, SearchResult
+from slb_glossary.types import SearchResult
 from tests.factories import make_search_result
+from tests.mocks import MockSession, MockSite
 
 pytestmark = pytest.mark.unit
 
@@ -42,136 +31,18 @@ pytestmark = pytest.mark.unit
 def anyio_backend(
     anyio_backend_asyncio_only: tuple[str, dict[str, typing.Any]],
 ) -> tuple[str, dict[str, typing.Any]]:
-    """Every test here touches a real aiosqlite database, which is not trio-safe."""
+    """Every test here touches a real aiosqlite database, which isn't trio-safe."""
     return anyio_backend_asyncio_only
 
 
-@dataclasses.dataclass
-class MockSession:
-    """
-    Enough of `live.browser.Session`'s shape for `sync.py`, without the real
-    Playwright objects `Session` itself requires to construct.
-    """
-
-    language: Language = Language.ENGLISH
-    topics: dict[str, int] = dataclasses.field(default_factory=dict)
-    initialized: bool = False
-
-    async def initialize(self) -> None:
-        self.initialized = True
-
-
-class MockSite:
-    """
-    A tiny in-memory stand-in for the live glossary, used to monkeypatch
-    `sync.py`'s live-layer imports.
-
-    `pages_by_url` models "what a single page fetch for this URL yields" -
-    every topic-tagged definition found on it, same as the real
-    `get_results_from_url`. `urls_by_topic`/`urls_by_query`/`urls_by_letter`
-    model which URLs a topic/query/letter listing would surface. `visited`
-    records every URL an actual page fetch happened for, so a test can
-    assert a URL already known (excluded) was never fetched again.
-    """
-
-    def __init__(self) -> None:
-        self.pages_by_url: dict[str, list[SearchResult]] = {}
-        self.urls_by_topic: dict[str, list[str]] = {}
-        self.urls_by_query: dict[str, list[str]] = {}
-        self.visited: list[str] = []
-
-    def add_term(self, url: str, topics: list[SearchResult], under_topics: list[str]) -> None:
-        """
-        Register a term's page (`topics`, one `SearchResult` per topic-tagged
-        definition on it) and which topic listings surface its URL.
-        """
-        self.pages_by_url[url] = topics
-        for topic_name in under_topics:
-            self.urls_by_topic.setdefault(topic_name, []).append(url)
-
-    async def mock_get_terms_on(
-        self,
-        session: MockSession,
-        topic: str,
-        *,
-        limit: int | None = None,
-        concurrency: int = 1,
-        exclude: frozenset[str] | None = None,
-    ) -> typing.AsyncIterator[SearchResult]:
-        exclude = exclude or frozenset()
-        for url in self.urls_by_topic.get(topic, []):
-            if url in exclude:
-                continue
-            self.visited.append(url)
-            for result in self.pages_by_url[url]:
-                yield result
-
-    async def mock_get_terms_urls(
-        self,
-        session: MockSession,
-        *,
-        topic: str | None = None,
-        start_letter: str | None = None,
-        limit: int | None = None,
-        exclude: frozenset[str] | None = None,
-    ) -> typing.AsyncIterator[str]:
-        exclude = exclude or frozenset()
-        urls = self.urls_by_topic.get(topic, []) if topic else list(self.pages_by_url)
-        for url in urls:
-            if url in exclude:
-                continue
-            yield url
-
-    async def mock_get_results_from_urls(
-        self,
-        session: MockSession,
-        urls: typing.AsyncIterator[str],
-        *,
-        topic: str | None = None,
-        concurrency: int = 1,
-        first_only: bool = True,
-        exclude: frozenset[str] | None = None,
-    ) -> typing.AsyncIterator[SearchResult]:
-        exclude = exclude or frozenset()
-        async for url in urls:
-            if url in exclude:
-                continue
-            self.visited.append(url)
-            results = self.pages_by_url[url]
-            yield results[0]
-            if not first_only:
-                for result in results[1:]:
-                    yield result
-
-    async def mock_live_search(
-        self,
-        session: MockSession,
-        query: str,
-        *,
-        topic: str | None = None,
-        start_letter: str | None = None,
-        limit: int | None = None,
-        concurrency: int = 1,
-        exclude: frozenset[str] | None = None,
-    ) -> typing.AsyncIterator[SearchResult]:
-        exclude = exclude or frozenset()
-        for url in self.urls_by_query.get(query, []):
-            if url in exclude:
-                continue
-            self.visited.append(url)
-            for result in self.pages_by_url[url]:
-                yield result
-
-
 @pytest.fixture
-def mock_site(monkeypatch: pytest.MonkeyPatch) -> MockSite:
-    """Install a `MockSite` in place of `sync.py`'s live-layer imports."""
-    site = MockSite()
-    monkeypatch.setattr(sync_module, "get_terms_on", site.mock_get_terms_on)
-    monkeypatch.setattr(sync_module, "get_terms_urls", site.mock_get_terms_urls)
-    monkeypatch.setattr(sync_module, "get_results_from_urls", site.mock_get_results_from_urls)
-    monkeypatch.setattr(sync_module, "live_search", site.mock_live_search)
-    return site
+def mock_site(mock_site: MockSite, monkeypatch: pytest.MonkeyPatch) -> MockSite:
+    """Wires the shared `MockSite` onto `sync.py`'s live-layer imports."""
+    monkeypatch.setattr(sync_module, "get_terms_on", mock_site.mock_get_terms_on)
+    monkeypatch.setattr(sync_module, "get_terms_urls", mock_site.mock_get_terms_urls)
+    monkeypatch.setattr(sync_module, "get_results_from_urls", mock_site.mock_get_results_from_urls)
+    monkeypatch.setattr(sync_module, "live_search", mock_site.mock_live_search)
+    return mock_site
 
 
 class TestGetKnownUrlsSet:
@@ -275,7 +146,7 @@ class TestDrainAndUpsert:
 @pytest.mark.anyio
 class TestSyncTopics:
     async def test_initializes_session_if_not_already(self, db: Database) -> None:
-        """Calls `session.initialize()` when it is not initialized yet."""
+        """Calls `session.initialize()` when it isn't initialized yet."""
         session = MockSession()
         await sync_topics(db, session)
         assert session.initialized is True
@@ -416,7 +287,7 @@ class TestSyncAll:
     async def test_initializes_session_if_not_already(
         self, db: Database, mock_site: MockSite
     ) -> None:
-        """Calls `session.initialize()` when it is not initialized yet."""
+        """Calls `session.initialize()` when it isn't initialized yet."""
         session = MockSession()
         await sync_all(db, session)
         assert session.initialized is True
@@ -555,7 +426,7 @@ class TestSyncAll:
             await sync_all(db, session)
 
         metadata = Metadata.load(db.metadata_path)
-        # `record_sync` does not store `interrupted` itself on `Metadata` -
+        # `record_sync` doesn't store `interrupted` itself on `Metadata` -
         # confirm instead that a sync was still recorded despite the error
         # (i.e. the `finally` block ran).
         assert metadata.last_synced_at is not None

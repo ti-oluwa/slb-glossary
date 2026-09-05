@@ -1,9 +1,4 @@
-"""
-`has_internet_connection`'s probing, caching, and all-targets-failed behavior.
-
-Uses `anyio_backend_asyncio_only`: `probe()` uses raw
-`asyncio.open_connection`/`asyncio.wait_for`.
-"""
+"""Tests for `has_internet_connection`'s probing and caching."""
 
 import asyncio
 import time

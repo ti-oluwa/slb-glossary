@@ -1,7 +1,4 @@
-"""
-`live.relevance`: `score_name_match`'s exact/prefix tiers, `score_content_overlap`'s
-token-coverage scoring, and `score_result`'s lexical/semantic dispatch.
-"""
+"""Tests for `live.relevance`: `score_name_match`, `score_content_overlap`, `score_result`."""
 
 import pytest
 
@@ -80,7 +77,7 @@ class TestScoreResult:
         assert score == constants.exact_match_score
 
     def test_lexical_mode_falls_back_to_content_overlap(self) -> None:
-        """LEXICAL mode falls back to `score_content_overlap` when the term does not match."""
+        """LEXICAL mode falls back to `score_content_overlap` when the term doesn't match."""
         result = make_search_result(
             term="Unrelated Name", definition="about rock storage", topic=None
         )

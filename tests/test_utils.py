@@ -1,10 +1,4 @@
-"""
-`env()` casting/validation, `parse_int`, and `split_exclude`.
-
-`Lookup` (`slb_glossary.utils.Lookup`) is a bare `typing.Protocol` alias
-with no runtime behavior of its own beyond what `typing.Protocol`
-already provides, so it has nothing meaningful to unit test here.
-"""
+"""Tests for `env()`, `parse_int`, and `split_exclude`."""
 
 import enum
 
@@ -24,7 +18,7 @@ class Choice(enum.Enum):
 
 class TestEnv:
     def test_returns_default_when_var_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """`env` returns `default` when the variable is not set."""
+        """`env` returns `default` when the variable isn't set."""
         monkeypatch.delenv(ENV_VAR, raising=False)
         assert env(ENV_VAR, "fallback") == "fallback"
 

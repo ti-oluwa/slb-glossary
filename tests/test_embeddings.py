@@ -1,8 +1,4 @@
-"""
-`embeddings.load_model`'s cache-friendly (non-`force_download`) model loading
-and third-party logger/progress-bar quieting, plus the pure `build_embed_text`
-and `cosine_similarity` helpers.
-"""
+"""Tests for `embeddings.load_model`, `build_embed_text`, and `cosine_similarity`."""
 
 import logging
 import types
@@ -12,28 +8,9 @@ import pytest
 
 from slb_glossary.embeddings import build_embed_text, cosine_similarity, load_model
 from slb_glossary.errors import EmbeddingError
+from tests.mocks import MockStaticModel
 
 pytestmark = pytest.mark.unit
-
-
-class FakeStaticModel:
-    """
-    Stand-in for `model2vec.StaticModel`, letting tests inspect exactly how
-    `from_pretrained` was called and control the returned model's `.dim`.
-    """
-
-    last_call_kwargs: typing.ClassVar[dict[str, typing.Any]] = {}
-
-    def __init__(self, dim: int) -> None:
-        self.dim = dim
-
-    def encode(self, texts: list[str]) -> typing.NoReturn:
-        raise NotImplementedError("not needed by these tests")
-
-    @classmethod
-    def from_pretrained(cls, model_name: str, **kwargs: typing.Any) -> "FakeStaticModel":
-        cls.last_call_kwargs = {"model_name": model_name, **kwargs}
-        return cls(dim=kwargs.get("dim", 4))
 
 
 @pytest.fixture(autouse=True)
@@ -42,20 +19,6 @@ def clear_load_model_cache() -> typing.Iterator[None]:
     load_model.cache_clear()
     yield
     load_model.cache_clear()
-
-
-@pytest.fixture
-def fake_model2vec(monkeypatch: pytest.MonkeyPatch) -> type[FakeStaticModel]:
-    """
-    Replace the `model2vec` module `load_model` imports with a fake exposing
-    only `StaticModel.from_pretrained`, tracking how it was called.
-    """
-    import sys
-
-    fake_module = types.ModuleType("model2vec")
-    fake_module.StaticModel = FakeStaticModel  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "model2vec", fake_module)
-    return FakeStaticModel
 
 
 class TestLoadModel:
@@ -79,7 +42,7 @@ class TestLoadModel:
             load_model()
 
     def test_passes_force_download_false(
-        self, fake_model2vec: type[FakeStaticModel], monkeypatch: pytest.MonkeyPatch
+        self, mock_model2vec: type[MockStaticModel], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """
         `from_pretrained` is called with `force_download=False`, not left at its
@@ -87,10 +50,10 @@ class TestLoadModel:
         """
         monkeypatch.setattr("slb_glossary.constants.constants.embedding_dim", 4)
         load_model()
-        assert fake_model2vec.last_call_kwargs["force_download"] is False
+        assert mock_model2vec.last_call_kwargs["force_download"] is False
 
     def test_raises_embedding_error_on_dimension_mismatch(
-        self, fake_model2vec: type[FakeStaticModel], monkeypatch: pytest.MonkeyPatch
+        self, mock_model2vec: type[MockStaticModel], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A loaded model whose real `.dim` disagrees with `constants.embedding_dim` raises."""
         monkeypatch.setattr("slb_glossary.constants.constants.embedding_dim", 999)
@@ -98,7 +61,7 @@ class TestLoadModel:
             load_model()
 
     def test_caches_across_calls_within_a_process(
-        self, fake_model2vec: type[FakeStaticModel], monkeypatch: pytest.MonkeyPatch
+        self, mock_model2vec: type[MockStaticModel], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A second call within the same process reuses the cached model, not a fresh load."""
         monkeypatch.setattr("slb_glossary.constants.constants.embedding_dim", 4)
@@ -107,10 +70,10 @@ class TestLoadModel:
         assert first is second
 
     def test_quiets_third_party_loggers(
-        self, fake_model2vec: type[FakeStaticModel], monkeypatch: pytest.MonkeyPatch
+        self, mock_model2vec: type[MockStaticModel], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """`httpx`/`httpcore`/`huggingface_hub`/`filelock` loggers are raised to WARNING,
-        so their own INFO-level request/progress chatter does not bleed into our
+        so their own INFO-level request/progress chatter doesn't bleed into our
         configured log sinks."""
         monkeypatch.setattr("slb_glossary.constants.constants.embedding_dim", 4)
         for noisy_logger_name in ("httpx", "httpcore", "huggingface_hub", "filelock"):

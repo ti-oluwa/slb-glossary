@@ -1,11 +1,4 @@
-"""
-`local.vector`: vector-table lifecycle (`check_table_exists`/`ensure_table`/`clear`),
-`embed_terms`, `delete_embeddings`, and `vector_search`'s cosine-similarity ranking.
-
-Uses the `mock_embeddings` fixture (see `tests/local/conftest.py`) to avoid a
-real, network-dependent `model2vec` model load - real `sqlite-vec`/`vec0`
-k-NN search still runs for real against the faked vectors.
-"""
+"""Tests for `local.vector`: table lifecycle, `embed_terms`, `delete_embeddings`, `vector_search`."""
 
 import builtins
 import types
@@ -27,7 +20,7 @@ from slb_glossary.local.vector import (
     vector_search,
 )
 from tests.factories import make_search_result
-from tests.local.conftest import MockEmbeddings
+from tests.mocks import MockEmbeddings
 
 pytestmark = pytest.mark.unit
 
@@ -79,7 +72,7 @@ class TestCheckTableExistsAndEnsureTable:
     async def test_ensure_table_is_idempotent(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:
-        """Calling `ensure_table` twice does not raise."""
+        """Calling `ensure_table` twice doesn't raise."""
         await ensure_table(db)
         await ensure_table(db)  # should not raise
 
@@ -105,7 +98,7 @@ class TestClear:
     async def test_leaves_table_as_is_if_sqlite_vec_cannot_load(
         self, db: Database, mock_embeddings: MockEmbeddings, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """If the table exists but `sqlite-vec` can not be loaded, logs and returns quietly."""
+        """If the table exists but `sqlite-vec` can't be loaded, logs and returns quietly."""
         await ensure_table(db)
 
         async def bad_load_extension(db: Database) -> typing.NoReturn:

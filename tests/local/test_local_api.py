@@ -1,9 +1,4 @@
-"""
-`local.api`: upsert (batch + incremental), `search`'s mode dispatch, term/topic
-lookups (`get_term`, `get_terms_on`, `iter_terms`, `get_random_term`,
-`get_terms_urls`, `get_topics`, `count`), and the `_apply_exclude`/
-`fuzzy_match_topics`/`resolve_topic` helpers.
-"""
+"""Tests for `local.api`: upsert, `search` dispatch, and term/topic lookups."""
 
 import typing
 
@@ -133,7 +128,7 @@ class TestUpsertResults:
         assert await count(db) == 3
 
     async def test_skips_results_with_no_url(self, db: Database) -> None:
-        """A result with no `url` is skipped and does not count toward the return value."""
+        """A result with no `url` is skipped and doesn't count toward the return value."""
         results = [make_search_result(url=None), make_search_result(url="https://x.com/a")]
         written = await upsert_results(db, results)
         assert written == 1
@@ -552,7 +547,7 @@ class TestGetRandomTerm:
         assert await get_random_term(db) is None
 
     async def test_returns_a_stored_term(self, db: Database) -> None:
-        """Returns some stored term when the database is not empty."""
+        """Returns some stored term when the database isn't empty."""
         await upsert_results(db, make_search_results(3))
         result = await get_random_term(db)
         assert result is not None

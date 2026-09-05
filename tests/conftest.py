@@ -10,6 +10,11 @@ import typing
 import pytest
 
 from slb_glossary.constants import Constant, Constants
+from tests.mocks import (  # noqa: F401 - re-exported as fixtures for every test
+    mock_embeddings,
+    mock_model2vec,
+    mock_site,
+)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -74,7 +79,7 @@ def anyio_backend_asyncio_only(request: pytest.FixtureRequest) -> tuple[str, dic
     `local.connection.database()` under a trio `anyio_backend` will fail
     before any test logic runs, because aiosqlite's connection thread
     hands work back via a raw `asyncio.Future` that trio's run loop
-    can not recognize).
+    can't recognize).
     """
     return request.param
 

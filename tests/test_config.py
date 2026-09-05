@@ -1,7 +1,4 @@
-"""
-`Config` and its nested options: retry-policy conversion, session kwargs,
-file round-trips (JSON/TOML/YAML), dotted `get`/`set`, and value coercion.
-"""
+"""Tests for `Config` and its nested options."""
 
 import dataclasses
 import json

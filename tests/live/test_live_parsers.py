@@ -1,17 +1,6 @@
 """
-`live.parsers`: `clean_text`'s invisible-character cleanup, every DOM
-extractor (`get_element_text`, `get_facet_topics`, `get_glossary_size`,
-`get_results_header_text`, `get_total_term_count`, `get_result_links`,
-`get_term_name`, `get_term_detail_blocks`, `get_term_images`), and
-`resolve_grammatical_label`'s abbreviation lookup.
-
-Uses a minimal fake `Page`/`Locator` rather than a real Playwright page:
-`eval_on_selector_all` normally runs the given JS string against the
-real DOM, but every caller in this module only cares about its *return
-value* (a plain Python-JSON-shaped structure) - so faking that return
-value directly, without ever executing the JS or needing a real browser,
-exercises exactly the same Python-side parsing logic these functions are
-actually responsible for.
+Tests for `live.parsers`: `clean_text`, every DOM extractor, and
+`resolve_grammatical_label`.
 """
 
 import re
@@ -42,7 +31,7 @@ from slb_glossary.live.parsers import (
     resolve_grammatical_label,
 )
 from slb_glossary.types import Language, RelatedTerm
-from tests.live.conftest import MockLocator, MockPage
+from tests.mocks import MockLocator, MockPage
 
 pytestmark = pytest.mark.unit
 
@@ -69,7 +58,7 @@ class TestCleanText:
         assert clean_text("po\u00adrosity") == "porosity"
 
     def test_leaves_ordinary_internal_whitespace_untouched(self) -> None:
-        """Ordinary internal whitespace is not collapsed."""
+        """Ordinary internal whitespace isn't collapsed."""
         assert clean_text("A  rock  property") == "A  rock  property"
 
     def test_does_not_change_casing(self) -> None:
@@ -120,7 +109,7 @@ class TestGetFacetTopics:
         assert await get_facet_topics(page) == {"Geology Basics": 120}
 
     async def test_skips_unparsable_counts(self) -> None:
-        """A topic whose count can not be parsed is skipped, not an error."""
+        """A topic whose count can't be parsed is skipped, not an error."""
         page = MockPage()
         page.eval_results[TOPIC_VALUE_SELECTOR] = [
             ["Geology", "120"],

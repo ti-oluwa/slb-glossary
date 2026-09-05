@@ -1,14 +1,4 @@
-"""
-`slb-glossary local embed`: wiring to `local.embed_terms` (`--urls`,
-`--reembed`/`--only-missing`, `--batch-size`).
-
-Monkeypatches `slb_glossary.local.vector.embed`/`embedding_dim` the same
-way `tests/local/conftest.py`'s `mock_embeddings` fixture does, to avoid
-a real, network-dependent `model2vec` model load. Seeding uses a plain
-`asyncio.run` rather than parametrizing over anyio backends: the CLI
-itself always drives its own asyncio event loop internally (via
-`run_async`), so there's nothing backend-specific being tested here.
-"""
+"""Tests for `slb-glossary local embed`."""
 
 import asyncio
 import pathlib

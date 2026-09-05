@@ -1,7 +1,4 @@
-"""
-`constants.persist_by_default`/`cli_cache_by_default`, and
-`cli.source_options.persist_kwargs`'s resolution of an unset `--cache` into one of them.
-"""
+"""Tests for `persist_by_default`/`cli_cache_by_default` and `persist_kwargs`."""
 
 import pytest
 
@@ -34,7 +31,7 @@ class TestCliCacheByDefaultConstant:
         assert constants.cli_cache_by_default is False
 
     def test_is_a_separate_constant_from_persist_by_default(self) -> None:
-        """Setting one does not affect the other - they're intentionally independent
+        """Setting one doesn't affect the other - they're intentionally independent
         (see the constants' own docstrings for why they aren't unified)."""
         constants.cli_cache_by_default = False
         assert constants.persist_by_default is False  # still its own unrelated default
@@ -76,11 +73,7 @@ class TestPersistKwargs:
     def test_includes_batch_size_and_on_error(self) -> None:
         """The returned dict also carries `persist_batch_size`/`persist_on_error`."""
         kwargs = persist_kwargs(
-            {
-                "cache_results": True,
-                "cache_batch_size": 5,
-                "cache_on_error": False,
-            }
+            {"cache_results": True, "cache_batch_size": 5, "cache_on_error": False}
         )
         assert kwargs["persist_batch_size"] == 5
         assert kwargs["persist_on_error"] is False

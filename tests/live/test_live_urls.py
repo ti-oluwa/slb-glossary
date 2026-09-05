@@ -1,7 +1,4 @@
-"""
-`live.urls`: `get_glossary_base_url`, `build_pager_query`'s pagination fragment,
-and `build_search_url`'s filter-to-URL assembly.
-"""
+"""Tests for `live.urls`: `get_glossary_base_url`, `build_pager_query`, `build_search_url`."""
 
 import pytest
 
