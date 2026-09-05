@@ -120,7 +120,7 @@ class TestGetFacetTopics:
         assert await get_facet_topics(page) == {"Geology Basics": 120}
 
     async def test_skips_unparsable_counts(self) -> None:
-        """A topic whose count can't be parsed is skipped, not an error."""
+        """A topic whose count can not be parsed is skipped, not an error."""
         page = MockPage()
         page.eval_results[TOPIC_VALUE_SELECTOR] = [
             ["Geology", "120"],

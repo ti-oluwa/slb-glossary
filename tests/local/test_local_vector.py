@@ -105,7 +105,7 @@ class TestClear:
     async def test_leaves_table_as_is_if_sqlite_vec_cannot_load(
         self, db: Database, mock_embeddings: MockEmbeddings, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """If the table exists but `sqlite-vec` can't be loaded, logs and returns quietly."""
+        """If the table exists but `sqlite-vec` can not be loaded, logs and returns quietly."""
         await ensure_table(db)
 
         async def bad_load_extension(db: Database) -> typing.NoReturn:

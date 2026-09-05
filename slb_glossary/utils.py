@@ -68,7 +68,7 @@ def env(
     :param validator: Optional extra check run on the cast value. A
         `False` return is treated the same as a cast failure.
     :return: The cast, validated value, or `default` if `name` is not set.
-    :raises EnvironmentVariableError: If `name` is set but its value can't be cast to
+    :raises EnvironmentVariableError: If `name` is set but its value can not be cast to
         the expected type, or fails `validator`.
     """
     raw = os.environ.get(name)

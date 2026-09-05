@@ -314,7 +314,7 @@ slb.get_topic_match(session.topics, "drill")
 `slb_glossary.local` is a SQLite (FTS5) cache of glossary terms, plus an optional custom embedding vector store, so repeat lookups do not have to keep re-visiting the live site.
 
 > [!NOTE]
-> The data stored locally is still SLB's, see [Attribution and disclaimer](#attribution-and-disclaimer). Enabling this module means keeping a local copy of glossary content on your own machine. You're solely responsible for that copy's lifecycle (how long you keep it, how often you refresh it, and deleting it when you're done) in compliance with SLB's terms of use.
+> The data stored locally is still SLB's, see [Attribution and disclaimer](#attribution-and-disclaimer). Enabling this module means keeping a local copy of glossary content on your own machine. You are solely responsible for that copy's lifecycle (how long you keep it, how often you refresh it, and deleting it when you are done) in compliance with SLB's terms of use.
 
 Open a database with `database` (an `async with` context manager) or `open_db`/`close_db` directly:
 
@@ -448,7 +448,7 @@ At least one of `db` or `session` must be given to every function here, since th
 
 `search`'s `AUTO` behavior goes a step further than the rest. Each local result is scored against the query (`local.search(..., scored=True)`), and if even the best of them is not a confident match, `session` is queried too, ahead of the unconfident local results, on the theory that a live result is generally more trustworthy than a local match that was not confident enough to stand alone. Local results aren't thrown away though; they still fill out any remaining `limit`, just listed after the live ones. `relevance_threshold` (`0.0` to `1.0`, default `0.55`) sets how confident is confident enough. This is what lets a search stay accurate without silently trusting a weak local match just because it happened to return something.
 
-`search` also takes a `mode` (`"lexical"`, `"semantic"`, or `"hybrid"`, see [Semantic and hybrid search](#semantic-and-hybrid-search)), which scores both a local read and a live one, with one restriction: a live read can't be scored `"hybrid"`, since that needs a whole result set's ranks up front and live results stream in one at a time, so use `"lexical"` or `"semantic"` when a live fetch might happen. Every yielded result carries its `score` on the returned `QueryResult`.
+`search` also takes a `mode` (`"lexical"`, `"semantic"`, or `"hybrid"`, see [Semantic and hybrid search](#semantic-and-hybrid-search)), which scores both a local read and a live one, with one restriction: a live read can not be scored `"hybrid"`, since that needs a whole result set's ranks up front and live results stream in one at a time, so use `"lexical"` or `"semantic"` when a live fetch might happen. Every yielded result carries its `score` on the returned `QueryResult`.
 
 When only one of `db`/`session` is given, `AUTO` simply behaves like whichever of `LOCAL`/`LIVE` that one supports. The available functions mirror `slb_glossary.live`/`slb_glossary.local`'s own shapes. `search`, `get_terms_on`, `get_terms_urls`, and `get_topics` stream/return several results; `get_term`, `related_terms`, and `get_random_term` return one; `compare` looks up several terms at once. Each accepts a `fuzzy=True` flag that, for any local read, tolerates minor misspellings/partial names in `topic` (see [Fuzzy topic matching](#fuzzy-topic-matching); live reads already fuzzy-match topics unconditionally).
 
@@ -780,7 +780,7 @@ Past that, lean on the local database. `slb_glossary.query`'s `Source.AUTO` (the
 - `slb_glossary.ConfigError`: a config file or dotted key (`Config.get`/`Config.set`) was invalid.
 - `slb_glossary.DatabaseError`: the local database failed to open, query, or import from a file, or (for `mode="semantic"`/`"hybrid"`) `sqlite-vec` is not installed or its extension could not be loaded.
 - `slb_glossary.EmbeddingError`: `slb_glossary.local` could not compute a text embedding for semantic search, e.g. the `semantic` extra is not installed.
-- `slb_glossary.QueryError`: `slb_glossary.query` can't satisfy a lookup with the source(s) it was given (e.g. `Source.LOCAL` with no `db`).
+- `slb_glossary.QueryError`: `slb_glossary.query` can not satisfy a lookup with the source(s) it was given (e.g. `Source.LOCAL` with no `db`).
 - `slb_glossary.LoggingError`: a custom `log_sink` (see [Logging](#logging)) could not be set up.
 - `slb_glossary.UnsupportedFormatError`: `save` was asked for a format with no registered writer.
 - `slb_glossary.WriterError`: the registered writer raised while writing, e.g. a permissions error or a full disk. The original exception is chained as `__cause__`.
@@ -837,7 +837,7 @@ All rights to the data and content on the SLB Energy Glossary website are owned 
 
 **Not for commercial use. This package is intended for educational, instructional, and research purposes only.**
 
-Anything cached locally by `slb_glossary.local` (or the default config file's local-database settings) is still SLB's content. Enabling local storage means keeping a copy on your own machine, and you're solely responsible for that copy's retention, refresh, and deletion in compliance with SLB's terms of use.
+Anything cached locally by `slb_glossary.local` (or the default config file's local-database settings) is still SLB's content. Enabling local storage means keeping a copy on your own machine, and you are solely responsible for that copy's retention, refresh, and deletion in compliance with SLB's terms of use.
 
 Consult the original site and its terms of use for any reuse or redistribution of glossary content: <https://www.slb.com/en/terms-of-service>. See the `NOTICE` file for the full attribution notice, and `LICENSE` for this project's own code license.
 

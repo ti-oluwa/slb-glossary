@@ -9,7 +9,7 @@ This pag contains a dense, structural reference across `slb_glossary`'s modules.
 | Name | Kind | Notes |
 |---|---|---|
 | `session(**options)` | async context manager | Opens a `Session`. See [Sessions and the Browser](../concepts/sessions.md) for every keyword option (`language`, `browser_type`, `headless`, `timeout`, `retry`, `proxy`, `viewport`, `max_pages`, `use_stealth`, `initialize`, ...). |
-| `open_session(**options)` / `close_session(session)` | async functions | The non-context-manager pair `session()` wraps. Use when you need to hold a session open across a scope `async with` can't express cleanly. |
+| `open_session(**options)` / `close_session(session)` | async functions | The non-context-manager pair `session()` wraps. Use when you need to hold a session open across a scope `async with` can not express cleanly. |
 | `session_from_config(config, **overrides)` | async context manager | Same as `session()`, but sourced from a `Config` (or a path to one). Keyword overrides win over the config's own values for that one call. |
 | `search(session, query, *, limit=3, topic=None, start_letter=None, concurrency=1, ...)` | async generator | Ranked live search. `limit=None` for unlimited. `concurrency>1` trades relevance-order guarantees for speed. |
 | `get_results_from_url(session, url, *, topic=None, page=None, exclude=None)` | async generator | Every definition found on one term detail-page URL (a term can carry more than one). What `query.get_term` calls into for a live lookup. |
@@ -59,7 +59,7 @@ Every function takes `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`, de
 | `get_terms_urls(...)` | async generator | `QueryResult[str]` |
 | `get_topics(...)` | coroutine | `QueryResult[dict[str, int]]` |
 | `get_random_term(...)` | coroutine | `QueryResult[SearchResult \| None]` |
-| `resolve_source(db, session, source)` | coroutine -> `Source` | Validates a requested `Source` against what `db`/`session` are actually available, raising if it can't be honored. |
+| `resolve_source(db, session, source)` | coroutine -> `Source` | Validates a requested `Source` against what `db`/`session` are actually available, raising if it can not be honored. |
 | `Source` | `Enum` | `LOCAL` \| `LIVE` \| `AUTO`. |
 | `QueryResult` | `dataclass` | `.value`, `.source`, `.persisted`, `.score` (`float \| None`). See [The Data Model](../concepts/data-model.md#queryresult). |
 | `SimilarResult` | `dataclass` | `.exact` (`QueryResult[SearchResult] \| None`), `.similar` (`tuple[QueryResult[SearchResult], ...]`). What `get_term`/`compare` return (wrapped in a `QueryResult`) when called with `with_similar=True`. See [The Data Model](../concepts/data-model.md#similarresult). |

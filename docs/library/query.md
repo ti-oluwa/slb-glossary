@@ -61,7 +61,7 @@ async for lookup in slb.search("water saturation", db=db, session=session, persi
     print(lookup.source, ":", lookup.value.term, "-", lookup.value.definition)
 ```
 
-Everything from [`local.search`](local-search.md#search-modes-lexical-semantic-hybrid)'s `mode` parameter applies here too, with one restriction: a live fallback can't be scored with `mode="hybrid"`, since hybrid scoring needs a whole result set's ranks computed up front, and live results stream in one page at a time. Use `"lexical"` or `"semantic"` if a call might fall through to live.
+Everything from [`local.search`](local-search.md#search-modes-lexical-semantic-hybrid)'s `mode` parameter applies here too, with one restriction: a live fallback can not be scored with `mode="hybrid"`, since hybrid scoring needs a whole result set's ranks computed up front, and live results stream in one page at a time. Use `"lexical"` or `"semantic"` if a call might fall through to live.
 
 ```python
 async for lookup in slb.search(

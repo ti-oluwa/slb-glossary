@@ -142,7 +142,7 @@ class SessionPool:
             session = await open_session(**kwargs)
         except Exception:
             # The launch itself failed and this pool never got a browser
-            # instance, so it shouldn't hold onto the slot.
+            # instance, so it should not hold onto the slot.
             self._semaphore.release()
             raise
         logger.info(
@@ -241,7 +241,7 @@ class SessionPool:
         """
         # Detach the sessions to close (under `_lock`) before actually
         # closing them (outside `_lock`), so slow `close_session` calls
-        # can't block a concurrent `acquire`/`release`/`open` on this pool.
+        # can not block a concurrent `acquire`/`release`/`open` on this pool.
         now = time.monotonic()
         async with self._lock:
             keep: list[_PooledSession] = []

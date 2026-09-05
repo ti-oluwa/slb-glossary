@@ -256,7 +256,7 @@ class Runtime(NamedComponent):
         For `PER_CALL`, a fresh session for `language` is opened for the
         duration of the `async with` block and closed on exit, bypassing
         the pool entirely. Worth it over `EAGER`/`LAZY` when callers
-        shouldn't share any session state (cookies, browser identity)
+        should not share any session state (cookies, browser identity)
         even when they happen to request the same language, e.g. a
         server used by multiple untrusted or mutually-distrusting
         callers, albeit at the cost of a fresh browser session per call instead

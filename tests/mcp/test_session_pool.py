@@ -192,7 +192,7 @@ class TestElasticGrowth:
 
         grow_task = asyncio.create_task(pool.acquire())
         await asyncio.sleep(0.05)
-        assert not grow_task.done(), "growth shouldn't succeed with no free semaphore slots"
+        assert not grow_task.done(), "growth should not succeed with no free semaphore slots"
 
         await pool.release(first)
         await pool.close_idle(idle_timeout=0.0)  # frees the slot by actually closing session 1

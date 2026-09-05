@@ -39,7 +39,7 @@ async with slb.live.session(
     ...
 ```
 
-A few more that matter once you're running this somewhere other than your own laptop:
+A few more that matter once you are running this somewhere other than your own laptop:
 
 ```python
 async with slb.live.session(

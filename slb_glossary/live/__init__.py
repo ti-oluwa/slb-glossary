@@ -7,7 +7,7 @@ docstring for the full notice.
 
 Use this responsibly: rate-limit your own calls, avoid tight loops or
 bulk scraping, and prefer `slb_glossary.local` (synced once, then queried
-offline) wherever repeat lookups are possible, so you're not hitting the
+offline) wherever repeat lookups are possible, so you are not hitting the
 live site on every request. See SLB's terms of use
 <https://www.slb.com/en/terms-of-service> for what's actually permitted.
 """

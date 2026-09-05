@@ -1,6 +1,6 @@
 # Running an MCP Server
 
-Connecting an AI agent to this glossary, whether or not you're writing Python, needs the `mcp` extra: `uv add "slb-glossary[mcp]"` for library use, or the CLI. You already have it if you installed with the `[all]` option.
+Connecting an AI agent to this glossary, whether or not you are writing Python, needs the `mcp` extra: `uv add "slb-glossary[mcp]"` for library use, or the CLI. You already have it if you installed with the `[all]` option.
 
 [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) is the open standard this server speaks. An agent connects to it, sees a list of tools, and calls them the same way it would call any other tool. What we use here is a wrapper over the [`slb_glossary.query`](../library/query.md) functions already covered in this documentation, the server does not reimplement any lookup logic of its own.
 
@@ -52,7 +52,7 @@ slb mcp serve --tools all                       # read_only, plus glossary_sync
 Every tool corresponds directly to a `slb_glossary.query` function, prefixed with `glossary_`. They include: `glossary_search`, `glossary_get_term`, `glossary_get_terms_on`, `glossary_get_terms_urls`, `glossary_get_topics`, `glossary_related_terms`, `glossary_random_term`, `glossary_compare`, and `glossary_sync`. `read_only` is every one of these except `glossary_sync`, which is the only tool that ever writes to the local database.
 
 !!! warning "`glossary_sync` needs `--allow-write` too, even under `--tools all`"
-    `--allow-write` is a separate switch from `--tools`, off by default. With it off, `glossary_sync` is never registered regardless of `--tools`, and every read tool's `persist` argument is silently ignored rather than actually caching anything. This is a deliberate two-key lock: an agent that can only read the glossary can't accidentally (or be prompted to) write to your local database, even if it's given the full tool list.
+    `--allow-write` is a separate switch from `--tools`, off by default. With it off, `glossary_sync` is never registered regardless of `--tools`, and every read tool's `persist` argument is silently ignored rather than actually caching anything. This is a deliberate two-key lock: an agent that can only read the glossary can not accidentally (or be prompted to) write to your local database, even if it's given the full tool list.
 
     ```bash
     slb mcp serve --tools all --allow-write
@@ -91,7 +91,7 @@ slb mcp serve --transport http --auth-token "token123:my-client-id"
 slb mcp serve --rate-limit 30 --rate-limit-window 60
 ```
 
-`--auth-token` accepts a bare token, or a `token:client_id` pair, checked by FastMCP's own auth layer; give it more than once for multiple valid callers. `--rate-limit` caps requests per client per tool per window, with `--rate-limit-algorithm` choosing between `sliding_window` (no burst allowed above the limit) and `token_bucket` (short bursts tolerated). Both matter far more once you're serving over `http`/`sse` to something other than a single trusted local agent than they do over `stdio`.
+`--auth-token` accepts a bare token, or a `token:client_id` pair, checked by FastMCP's own auth layer; give it more than once for multiple valid callers. `--rate-limit` caps requests per client per tool per window, with `--rate-limit-algorithm` choosing between `sliding_window` (no burst allowed above the limit) and `token_bucket` (short bursts tolerated). Both matter far more once you are serving over `http`/`sse` to something other than a single trusted local agent than they do over `stdio`.
 
 ---
 
@@ -161,7 +161,7 @@ config = slb_mcp.MCPConfig(
 slb mcp serve app.main:app
 ```
 
-`app.main:app` is a uvicorn-style import path. `app/main.py` containing a module-level `app = MCPApp(...)` (or a zero-argument factory function returning one). When `APP_PATH` is given this way, every flag except `--transport`/`--host`/`--port`/`--log-level` is ignored, since the app is already fully configured in code; passing one of the ignored flags alongside `APP_PATH` is an error, specifically so you can't accidentally think a flag did something it didn't.
+`app.main:app` is a uvicorn-style import path. `app/main.py` containing a module-level `app = MCPApp(...)` (or a zero-argument factory function returning one). When `APP_PATH` is given this way, every flag except `--transport`/`--host`/`--port`/`--log-level` is ignored, since the app is already fully configured in code; passing one of the ignored flags alongside `APP_PATH` is an error, specifically so you can not accidentally think a flag did something it didn't.
 
 ## Logging
 

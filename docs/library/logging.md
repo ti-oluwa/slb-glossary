@@ -36,7 +36,7 @@ slb.logging.configure_logging(sinks=slb.log.FileSink("./logs/glossary.log", mode
 
 ## Routing different parts of the library to different sinks
 
-`sinks` also accepts a `{filter: sink(s)}` mapping, so you're not limited to sending everything to the same place:
+`sinks` also accepts a `{filter: sink(s)}` mapping, so you are not limited to sending everything to the same place:
 
 ```python
 slb.logging.configure_logging(

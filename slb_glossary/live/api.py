@@ -45,7 +45,7 @@ RELATED_KEYWORDS = ("related term", "see related", "synonyms", "alternate form")
 
 async def ensure_initialized(session: Session, auto_initialize: bool = True) -> None:
     """
-    Initialize `session` if it is not already, or raise if it can't be.
+    Initialize `session` if it is not already, or raise if it can not be.
 
     Every function here that actually touches the live site (as opposed
     to just reading something already loaded, like `session.language`)

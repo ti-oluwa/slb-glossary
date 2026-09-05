@@ -39,11 +39,11 @@ class DatabaseError(SLBGlossaryError):
 
 
 class EmbeddingError(SLBGlossaryError):
-    """Raised when `slb_glossary.local` can't compute a text embedding for semantic search."""
+    """Raised when `slb_glossary.local` can not compute a text embedding for semantic search."""
 
 
 class QueryError(SLBGlossaryError):
-    """Raised when `slb_glossary.query` can't satisfy a lookup with the source(s) it was given."""
+    """Raised when `slb_glossary.query` can not satisfy a lookup with the source(s) it was given."""
 
 
 class LoggingError(SLBGlossaryError):
@@ -64,4 +64,4 @@ class WriterError(OSError, SLBGlossaryError):
 
 
 class EnvironmentVariableError(ValueError):
-    """Raised when an environment variable is set but can't be cast/validated to its expected type."""
+    """Raised when an environment variable is set but can not be cast/validated to its expected type."""

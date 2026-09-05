@@ -6,7 +6,7 @@ terms, so repeat lookups do not have to keep re-visiting the live site.
 the package docstring for the full notice. Enabling this
 module means keeping a local copy of glossary content on your own
 machine; you are solely responsible for that copy's lifecycle (how long
-you keep it, how often you refresh it, and deleting it when you're done)
+you keep it, how often you refresh it, and deleting it when you are done)
 in compliance with SLB's terms of use <https://www.slb.com/en/terms-of-service>.
 
 Prefer `sync_query`/`sync_topic` over `sync_all` where you can.

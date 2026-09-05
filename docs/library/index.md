@@ -20,7 +20,7 @@ You can reach for any one of these on its own. The next three pages cover them i
 
 ## Every function returns the same two shapes
 
-Regardless of which module you're calling, you'll only ever get one of two things back:
+Regardless of which module you are calling, you'll only ever get one of two things back:
 
 - **A `SearchResult`** (or `None`, if nothing was found), for a single-term lookup. `SearchResult` is a plain `NamedTuple` with fields for `term`, `definition`, `grammatical_label`, `topic`, `url`, `image`, `image_caption`, `related`, and `language`. See [The Data Model](../concepts/data-model.md#searchresult) for the full field list.
 - **A stream of `SearchResult`s**, for anything that can reasonably return more than one: a search, every term under a topic, several terms compared at once.

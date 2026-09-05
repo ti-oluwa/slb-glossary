@@ -6,7 +6,7 @@ No. `slb-glossary` is not affiliated with or endorsed by SLB. All rights to the 
 
 **This package is not for commercial use. It's intended for instructional and research purposes only.**
 
-The optional local cache ([Local Search and Cache](library/local-search.md)) still holds SLB's data once you enable it, `slb-glossary` does not change who owns it. If you turn caching on, you're responsible for keeping that copy's retention, refresh, and deletion in compliance with SLB's terms linked above. `slb-glossary`'s own code is BSD-3-Clause licensed; that license covers the software, not the glossary content it fetches.
+The optional local cache ([Local Search and Cache](library/local-search.md)) still holds SLB's data once you enable it, `slb-glossary` does not change who owns it. If you turn caching on, you are responsible for keeping that copy's retention, refresh, and deletion in compliance with SLB's terms linked above. `slb-glossary`'s own code is BSD-3-Clause licensed; that license covers the software, not the glossary content it fetches.
 
 ## Why is the first search slow, or the install step failing?
 

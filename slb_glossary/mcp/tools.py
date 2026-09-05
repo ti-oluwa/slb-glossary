@@ -257,7 +257,7 @@ class GetTermArgs(_TermLookupArgs):
     """
     If `True`, also gather other results found for `term_or_url` along
     the way (a local `search` pass or a live one), best match first, in
-    addition to the exact match. Useful when you're not sure the exact
+    addition to the exact match. Useful when you are not sure the exact
     name is right and want alternatives back in the same call.
     """
 
@@ -282,7 +282,7 @@ class TermsOnArgs:
     topic: str
     """
     Topic name, or several comma-separated topic names. Call
-    `glossary_get_topics` first if you're unsure of the exact name.
+    `glossary_get_topics` first if you are unsure of the exact name.
     """
 
     source: Source = Source.AUTO
@@ -778,7 +778,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         name="glossary_search",
         description=(
             "Authoritative free-text search across the SLB Energy Glossary. Use this for "
-            "keyword/partial-name queries, to check whether a term exists, or when you're not "
+            "keyword/partial-name queries, to check whether a term exists, or when you are not "
             "sure of a term's exact name. Returns the glossary's own published definitions "
             "(never generated), best match first. If you already know the exact term name, "
             "use glossary_get_term instead. It's cheaper and more precise."
@@ -808,7 +808,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         description=(
             "List every authoritative glossary term filed under one or more subject-area "
             "topics, e.g. 'Drilling' or 'Geology,Geophysics'. Use this to enumerate a whole "
-            "category of terminology at once. Call glossary_get_topics first if you're not "
+            "category of terminology at once. Call glossary_get_topics first if you are not "
             "sure of the exact topic name."
         ),
         args_type=TermsOnArgs,

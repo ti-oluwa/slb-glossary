@@ -408,7 +408,7 @@ def write_config_file(data: dict[str, typing.Any], path: pathlib.Path, format: s
                 "Writing a .toml config requires the 'tomlkit' package. "
                 "Install it with `pip install slb-glossary[config]`."
             ) from exc
-        # tomlkit has no null type and can't serialize None - see _strip_none.
+        # tomlkit has no null type and can not serialize None - see _strip_none.
         path.write_text(tomlkit.dumps(_strip_none(data)), encoding="utf-8")
         return
 

@@ -90,7 +90,7 @@ def record_to_result(
         # url is half of the local database's primary key (url, topic);
         # synthesize a stable one from the term itself so rows without a
         # URL column still round-trip through upsert_results/get_term.
-        # Such rows just can't be matched against a live glossary URL later.
+        # Such rows just can not be matched against a live glossary URL later.
         slug = "-".join(str(term).strip().lower().split())
         url = f"local://imported/{slug}"
 

@@ -323,7 +323,7 @@ async def open_session(
         a miss. Pass `True`/`False` explicitly to always initialize
         eagerly/lazily regardless of that default. While uninitialized,
         search functions raise `SessionNotInitializedError`; call
-        `session.initialize()` yourself when you're ready for it.
+        `session.initialize()` yourself when you are ready for it.
     :param log_sink: Where to route `slb_glossary`'s logging for the
         lifetime of this process. A `slb_glossary.logging.LogSink`
         instance/class, a file path, `"stderr"`/`"stdout"`, or a

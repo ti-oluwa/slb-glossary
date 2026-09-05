@@ -12,7 +12,7 @@ uv add "pydantic-ai-slim[mcp]"
 
 (Or the full `pydantic-ai` package, which already includes this.) You'll also need `slb-glossary`'s `mcp` extra installed and on the same machine, since Pydantic AI will launch `slb mcp serve` itself as a subprocess: `uv add "slb-glossary[mcp]"`, or a CLI install with the `mcp` extra.
 
-If you're working from a clone of the `slb-glossary` repository itself rather than installing it as a dependency, `uv sync --group examples --inexact` installs this same dependency for you, and [`examples/agent.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/agent.py) is a complete, runnable version of everything on this page (`python -m examples.agent`), both the subprocess and in-process wiring below, plus a real system prompt and a multi-question run.
+If you are working from a clone of the `slb-glossary` repository itself rather than installing it as a dependency, `uv sync --group examples --inexact` installs this same dependency for you, and [`examples/agent.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/agent.py) is a complete, runnable version of everything on this page (`python -m examples.agent`), both the subprocess and in-process wiring below, plus a real system prompt and a multi-question run.
 
 ## Connecting the agent to `slb mcp serve`
 
@@ -63,7 +63,7 @@ glossary = MCPToolset(StdioTransport(command="slb", args=["mcp", "serve"])).pref
 agent = Agent("anthropic:claude-sonnet-4-5", toolsets=[glossary, other_toolset])
 ```
 
-Every tool this server exposes is already prefixed with `glossary_` on its own (`glossary_search`, `glossary_get_term`, ...; see [Running an MCP Server](mcp-server.md#choosing-which-tools-are-exposed)), so an additional `.prefixed(...)` is mainly useful if you're running more than one instance of this same server side by side, distinguished some other way (different `--config`, different `--language`).
+Every tool this server exposes is already prefixed with `glossary_` on its own (`glossary_search`, `glossary_get_term`, ...; see [Running an MCP Server](mcp-server.md#choosing-which-tools-are-exposed)), so an additional `.prefixed(...)` is mainly useful if you are running more than one instance of this same server side by side, distinguished some other way (different `--config`, different `--language`).
 
 ## Running in-process, without a subprocess
 
@@ -81,7 +81,7 @@ toolset = MCPToolset(app.server())  # in-process: same interpreter, no subproces
 agent = Agent("anthropic:claude-sonnet-4-5", toolsets=[toolset])
 ```
 
-`app.server()` builds and returns the underlying `FastMCP` instance the CLI's `slb mcp serve` would otherwise run as a standalone process. This is the better choice for tests, a single-process deployment, or anywhere you're already importing `slb_glossary` directly rather than shelling out to the `slb` command, you get the exact same tool set and config surface covered in [Running an MCP Server](mcp-server.md#embedding-the-server-in-your-own-python-app), just without paying for a second process.
+`app.server()` builds and returns the underlying `FastMCP` instance the CLI's `slb mcp serve` would otherwise run as a standalone process. This is the better choice for tests, a single-process deployment, or anywhere you are already importing `slb_glossary` directly rather than shelling out to the `slb` command, you get the exact same tool set and config surface covered in [Running an MCP Server](mcp-server.md#embedding-the-server-in-your-own-python-app), just without paying for a second process.
 
 ## Managing the connection's lifecycle explicitly
 

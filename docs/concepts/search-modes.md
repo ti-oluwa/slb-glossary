@@ -29,7 +29,7 @@ From the CLI, the equivalent is `slb local embed` - see [Local Cache and Sync](.
 `embed_terms` is a one-time (or periodic) cost, separate from ordinary syncing. Syncing fetches and stores terms, `embed_terms` computes and stores their vectors. Run it again after a `sync` that added new terms, with `only_missing=True` (the default) so it only pays for what's actually new.
 
 !!! warning "Semantic scores aren't on the same scale as lexical scores"
-    Lexical (and hybrid) scores are calibrated to roughly `[0.0, 1.0]`. Semantic search's cosine-similarity scores aren't calibrated the same way, which matters if you're pairing `mode="semantic"` with `source=Source.AUTO`'s `relevance_threshold` as that threshold will be compared against an uncalibrated number in that combination. `mode="hybrid"` is better paired with `Source.AUTO` for exactly this reason.
+    Lexical (and hybrid) scores are calibrated to roughly `[0.0, 1.0]`. Semantic search's cosine-similarity scores aren't calibrated the same way, which matters if you are pairing `mode="semantic"` with `source=Source.AUTO`'s `relevance_threshold` as that threshold will be compared against an uncalibrated number in that combination. `mode="hybrid"` is better paired with `Source.AUTO` for exactly this reason.
 
 Live search has no semantic mode at all. There's no local embedding table to compare against for a page that was just fetched, so semantic (and hybrid) ranking is local-only.
 
@@ -64,5 +64,5 @@ slb search porosity --local --mode hybrid
 ## Where this shows up
 
 - [`slb_glossary.local.search`](../library/local-search.md#search-modes-lexical-semantic-hybrid), and the standalone `lexical_search`/`vector_search`/`hybrid_search` functions it dispatches to.
-- [`slb_glossary.query.search`](../library/query.md#search-the-one-youll-reach-for-most)'s `mode` parameter, with the live-fallback restriction that a live fetch can't be scored `"hybrid"`.
+- [`slb_glossary.query.search`](../library/query.md#search-the-one-youll-reach-for-most)'s `mode` parameter, with the live-fallback restriction that a live fetch can not be scored `"hybrid"`.
 - The CLI's `search --mode`/`local search --mode`, and `slb local export --query ... --mode`.

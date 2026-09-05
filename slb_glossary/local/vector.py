@@ -42,7 +42,7 @@ async def load_extension(db: Database) -> typing.Any:
     :param db: The local database to prepare.
     :return: The imported `sqlite_vec` module.
     :raises DatabaseError: If `sqlite-vec` is not installed, or the
-        installed SQLite build can't load extensions.
+        installed SQLite build can not load extensions.
     """
     try:
         import sqlite_vec  # type: ignore[import]
@@ -84,7 +84,7 @@ async def ensure_table(db: Database) -> None:
 
     :param db: The local database to prepare.
     :raises DatabaseError: If `sqlite-vec` is not installed, or its
-        extension can't be loaded.
+        extension can not be loaded.
     :raises EmbeddingError: If `model2vec` is not installed, or the
         embedding model's real output size does not match `constants.embedding_dim`.
     """
@@ -92,7 +92,7 @@ async def ensure_table(db: Database) -> None:
     dim = embedding_dim()
     # Keyed by `rowid`, matching `terms.rowid`, not by `url`. A page with
     # several definitions (one per topic) shares one `url` across several
-    # `terms` rows, so `url` alone can't identify which row's embedding
+    # `terms` rows, so `url` alone can not identify which row's embedding
     # this is. `vec0` (like every SQLite table) already has an implicit
     # `rowid`, no separate PK column needed to use it as the join key.
     await db.connection.execute(
@@ -167,7 +167,7 @@ async def embed_terms(
         default) uses `constants.embed_batch_size`.
     :return: Number of rows newly embedded.
     :raises DatabaseError: If `sqlite-vec` is not installed, or its
-        extension can't be loaded.
+        extension can not be loaded.
     :raises EmbeddingError: If `model2vec` is not installed, or the
         embedding model's output size does not match `constants.embedding_dim`.
     """
@@ -320,7 +320,7 @@ async def vector_search(
         and close to `[0.0, 1.0]` in practice for real text. This is not
         the `[0.0, 1.0]`-calibrated score `lexical_search`/`hybrid_search` return.
     :raises DatabaseError: If `sqlite-vec` is not installed, or its
-        extension can't be loaded.
+        extension can not be loaded.
     :raises EmbeddingError: If `model2vec` is not installed, or the
         embedding model's output size does not match `constants.embedding_dim`.
     """

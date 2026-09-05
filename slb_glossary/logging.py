@@ -277,7 +277,7 @@ def import_sink(dotted_path: str) -> typing.Any:
     :return: Whatever `attr` resolves to. Typically a `LogSink` subclass
         or an already-constructed `LogSink` instance.
     :raises ValueError: If `dotted_path` does not look like a valid import path.
-    :raises ImportError: If the module can't be imported, or has no such attribute.
+    :raises ImportError: If the module can not be imported, or has no such attribute.
     """
     module_path, _, attr = dotted_path.partition(":")
     if not attr:

@@ -53,7 +53,7 @@ def _prefill_schema(command_schema: typing.Any, ctx: click.Context) -> None:
     trogon's own construction. If a future trogon version changes that,
     this just stops pairing correctly rather than raising - the caller
     wraps this in its own broad `except` regardless, since reaching into
-    another package's internals like this can't be made fully future-proof.
+    another package's internals like this can not be made fully future-proof.
 
     :param command_schema: A `trogon.introspect.CommandSchema` for the
         command `ctx` was resolved against.

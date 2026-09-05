@@ -1,6 +1,6 @@
 # Installation
 
-Every path through this documentation passes through this page once. If you only want the terminal tool, skip straight to [Installing the CLI](#installing-the-cli). If you're writing Python code, skip to [Installing the library](#installing-the-library). Either way, finish with [Installing the browser build](#installing-the-browser-build), since both need it.
+Every path through this documentation passes through this page once. If you only want the terminal tool, skip straight to [Installing the CLI](#installing-the-cli). If you are writing Python code, skip to [Installing the library](#installing-the-library). Either way, finish with [Installing the browser build](#installing-the-browser-build), since both need it.
 
 ---
 
@@ -61,13 +61,13 @@ Any of the methods below give you two identical commands: `slb-glossary` and the
     powershell -c "irm https://astral.sh/uv/install.ps1 | iex; uv tool install slb-glossary"
     ```
 
-Once installed, jump to [Installing the browser build](#installing-the-browser-build). You may decide to skip [Installing the library](#installing-the-library) if you're not writing Python code against it.
+Once installed, jump to [Installing the browser build](#installing-the-browser-build). You may decide to skip [Installing the library](#installing-the-library) if you are not writing Python code against it.
 
 ---
 
 ## Installing the library
 
-If you're writing Python code rather than using a terminal command, add `slb-glossary` as a dependency of your own project.
+If you are writing Python code rather than using a terminal command, add `slb-glossary` as a dependency of your own project.
 
 === "uv"
 

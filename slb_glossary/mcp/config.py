@@ -169,7 +169,7 @@ class SessionMode(enum.Enum):
     """
     Open a fresh session for every tool call that needs one, and close it
     immediately after. Slowest and heaviest, but gives every call full
-    isolation. Handy under multi-tenant auth where sessions shouldn't be
+    isolation. Handy under multi-tenant auth where sessions should not be
     shared across callers.
     """
 
@@ -613,7 +613,7 @@ class MCPConfig(Updatable):
         if not self.session.enabled and not self.local.enabled:
             raise MCPConfigError(
                 f"{type(self).__name__}: at least one of `session.enabled`/`local.enabled` "
-                f"must be True. A server with neither can't read anything."
+                f"must be True. A server with neither can not read anything."
             )
 
         allowed = self.source_policy.allowed
@@ -629,7 +629,7 @@ class MCPConfig(Updatable):
                 dataclasses.replace(self.source_policy, allowed=frozenset(computed)),
             )
             allowed = self.source_policy.allowed
-            assert allowed is not None  # mypy can't see that object.__setattr__ changed it
+            assert allowed is not None  # mypy can not see that object.__setattr__ changed it
         else:
             if not allowed:
                 raise MCPConfigError(

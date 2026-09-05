@@ -226,7 +226,7 @@ async def upsert_results_incrementally(
     :param stats: If given, populated in place with `"written"` (total
         rows written) and `"batches"` (number of upsert calls made) once
         this generator is exhausted (normally or via error), since an
-        async generator can't hand back a return value the way a plain
+        async generator can not hand back a return value the way a plain
         function can. Callers that only want the final count and do not
         need each result passed through (e.g. `slb_glossary.local.sync`)
         can drain this with `async for _ in ...: pass` and then read `stats`.
@@ -503,7 +503,7 @@ async def search(
     :return: Matching `SearchResult`s, or `(SearchResult, float)` pairs if
         `scored=True`, best match first either way.
     :raises DatabaseError: With `mode="semantic"`/`"hybrid"`, if
-        `sqlite-vec` is not installed, or its extension can't be loaded.
+        `sqlite-vec` is not installed, or its extension can not be loaded.
     :raises EmbeddingError: With `mode="semantic"`/`"hybrid"`, if
         `model2vec` is not installed, or the embedding model's output size
         does not match `constants.embedding_dim`.

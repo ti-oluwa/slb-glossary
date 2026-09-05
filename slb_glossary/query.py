@@ -219,7 +219,7 @@ def validate_language(session: Session | None, language: str | None) -> None:
     Validate that `language`, if given, matches `session`'s own language.
 
     A `Session` is bound to one glossary language edition for its whole
-    lifetime, set when it was opened. So a live fetch can't honor a
+    lifetime, set when it was opened. So a live fetch can not honor a
     row["url"] for different `language` on a per-call basis the way a
     local read can.
 
@@ -264,9 +264,9 @@ def _build_live_scorer(query: str, mode: SearchMode) -> typing.Callable[[SearchR
     """
     if mode is SearchMode.HYBRID:
         raise QueryError(
-            "Live results can't be scored with `mode='hybrid'` because combining a "
+            "Live results can not be scored with `mode='hybrid'` because combining a "
             "lexical and a semantic ranking needs every result's rank "
-            "relative to the others up front, which live search can't "
+            "relative to the others up front, which live search can not "
             "provide without collecting its entire result set first. Use "
             "`mode='lexical'` or `mode='semantic'` for live results instead."
         )
@@ -422,7 +422,7 @@ async def search(
         `slb_glossary.types.SearchMode` member. `None` (the
         default) uses `constants.default_search_mode`. Affects both a
         local read and a live one, with one restriction: a live read
-        (`Source.LIVE`, or `Source.AUTO`'s live fallback) can't be scored
+        (`Source.LIVE`, or `Source.AUTO`'s live fallback) can not be scored
         with `"hybrid"`, since that needs a whole result set's ranks up
         front and live results stream in one at a time. Use `"lexical"`
         or `"semantic"` for those. Note that `"semantic"`'s score is not

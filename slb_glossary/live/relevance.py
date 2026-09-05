@@ -98,7 +98,7 @@ def score_result(
     :param mode: `SearchMode.LEXICAL` (the default) or `SearchMode.SEMANTIC`.
         `SearchMode.HYBRID` is not supported: fusing a lexical and a
         semantic ranking needs every result's rank relative to the
-        others, which a single result scored on its own can't provide.
+        others, which a single result scored on its own can not provide.
     :return: With `mode=SearchMode.LEXICAL`, a score in `[0.0, 1.0]`:
         `constants.exact_match_score`/`prefix_match_score` for a name
         match, otherwise capped at `constants.content_match_score_cap`.

@@ -71,7 +71,7 @@ def resolve_icon(logo: str | None) -> list[mcp.types.Icon] | None:
     :param logo: `ServerInfo.logo`.
     :return: A single-item icon list, or `None` if `logo` is `None`.
     :raises MCPConfigError: If `logo` looks like a local path but does not
-        exist or can't be read.
+        exist or can not be read.
     """
     if logo is None:
         return None
@@ -343,7 +343,7 @@ def load_app(dotted_path: str) -> MCPApp | FastMCP:
         (a factory function, e.g. `def create_app() -> MCPApp: ...`).
     :return: The resolved `MCPApp` or `FastMCP` instance.
     :raises ValueError: If `dotted_path` does not contain a `:` separator.
-    :raises ImportError: If the module can't be imported, or has no such attribute.
+    :raises ImportError: If the module can not be imported, or has no such attribute.
     :raises TypeError: If, after resolving/calling it, the result still
         is not an `MCPApp` or `FastMCP`.
     """

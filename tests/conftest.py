@@ -74,7 +74,7 @@ def anyio_backend_asyncio_only(request: pytest.FixtureRequest) -> tuple[str, dic
     `local.connection.database()` under a trio `anyio_backend` will fail
     before any test logic runs, because aiosqlite's connection thread
     hands work back via a raw `asyncio.Future` that trio's run loop
-    can't recognize).
+    can not recognize).
     """
     return request.param
 

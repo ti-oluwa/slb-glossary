@@ -40,7 +40,7 @@ def build_fts_query(query: str) -> str:
     Quoted, prefix-matched tokens "ANDed" together.
 
     Quoting each token sidesteps FTS5's own query syntax (so punctuation
-    in `query` can't be misread as an FTS operator), and the trailing `*`
+    in `query` can not be misread as an FTS operator), and the trailing `*`
     makes each token a prefix match, so `"poros"` finds `"porosity"`.
 
     :param query: Free-text search input.

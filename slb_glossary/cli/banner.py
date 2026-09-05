@@ -78,7 +78,7 @@ def get_banner(*, width: int | None = None) -> str:
 
     :param width: Terminal width to lay the banner out for. Defaults to
         `shutil.get_terminal_size()` (which itself falls back to 80 if
-        the size can't be determined, e.g. output is piped/redirected).
+        the size can not be determined, e.g. output is piped/redirected).
         Exposed mainly for testing every width tier without needing to
         actually resize a terminal.
     :return: The banner, already ANSI-styled if `supports_color()` and

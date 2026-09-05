@@ -88,7 +88,7 @@ def validate_sync_filters(params: typing.Mapping[str, typing.Any]) -> None:
     if params["sync_everything"] and (
         params["topic"] or params["query"] or params["start_letter"]
     ):
-        raise click.UsageError("--all can't be combined with --topic/--query/--start-letter.")
+        raise click.UsageError("--all can not be combined with --topic/--query/--start-letter.")
 
     if params["sync_everything"] and not params["assume_yes"]:
         click.confirm(

@@ -117,7 +117,7 @@ def import_provider(dotted_path: str) -> AuthProvider:
     :param dotted_path: `"module:ClassName"` or `"package.module.ClassName"`.
     :return: An instance of the imported class.
     :raises ValueError: If `dotted_path` does not look like a valid import path.
-    :raises ImportError: If the module can't be imported, or has no such attribute.
+    :raises ImportError: If the module can not be imported, or has no such attribute.
     :raises TypeError: If the resolved attribute is not a no-argument-constructible `AuthProvider`.
     """
     module_path, _, attr = dotted_path.partition(":")

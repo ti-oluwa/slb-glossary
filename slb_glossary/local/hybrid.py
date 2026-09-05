@@ -121,7 +121,7 @@ async def hybrid_search(
         genuine signal from two independent rankers rather than word
         overlap alone.
     :raises DatabaseError: If `sqlite-vec` is not installed, or its extension
-        can't be loaded.
+        can not be loaded.
     :raises EmbeddingError: If `model2vec` is not installed, or the
         embedding model's output size does not match `constants.embedding_dim`.
     """

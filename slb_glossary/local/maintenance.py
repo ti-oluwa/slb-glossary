@@ -21,7 +21,7 @@ async def flush(db: Database) -> None:
     Also checkpoints and truncates the database's `-wal` file (see
     `slb_glossary.local.open_db`'s docstring on why it has one) as part of
     the `VACUUM`, so a freshly flushed database is left with little or
-    nothing outstanding in `-wal`/`-shm`. Handy if you're about to copy
+    nothing outstanding in `-wal`/`-shm`. Handy if you are about to copy
     or back up `db.db_path` right after.
 
     :param db: The local database to clear.

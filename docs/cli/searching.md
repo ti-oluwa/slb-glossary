@@ -68,7 +68,7 @@ slb compare "water flooding" "gas flooding"
 slb compare porosity permeability --local
 ```
 
-A term `compare` can't find under the resolved source is skipped, with a note printed to stderr rather than the whole command failing. Raise `--concurrency` if you're comparing a long list and want them fetched in parallel:
+A term `compare` can not find under the resolved source is skipped, with a note printed to stderr rather than the whole command failing. Raise `--concurrency` if you are comparing a long list and want them fetched in parallel:
 
 ```bash
 slb compare shale sandstone limestone dolomite --concurrency 4

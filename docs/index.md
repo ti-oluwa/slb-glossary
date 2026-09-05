@@ -19,7 +19,7 @@ It is not affiliated with or endorsed by SLB. The glossary content it searches b
 
 ## Three ways in
 
-You need take look at [Installation](getting-started/installation.md) first. After that, pick whichever of these matches what you're actually trying to do:
+You need take look at [Installation](getting-started/installation.md) first. After that, pick whichever of these matches what you are actually trying to do:
 
 <div class="grid cards" markdown>
 
@@ -39,7 +39,7 @@ You need take look at [Installation](getting-started/installation.md) first. Aft
 
     ---
 
-    You want an agent you're building, to be able to look terms up itself. Covered in [Connecting an AI agent](agent/mcp-server.md).
+    You want an agent you are building, to be able to look terms up itself. Covered in [Connecting an AI agent](agent/mcp-server.md).
 
 </div>
 

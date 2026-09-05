@@ -1,6 +1,6 @@
 # Saving, Output and Config Files
 
-This page covers what happens to a result after it's found. Printing it, saving it, and setting defaults so you're not retyping the same flags on every command.
+This page covers what happens to a result after it's found. Printing it, saving it, and setting defaults so you are not retyping the same flags on every command.
 
 ---
 

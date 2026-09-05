@@ -127,7 +127,7 @@ def install(
 
     Browser builds are large downloads from a single CDN, so a slow or
     congested connection can time out partway through - if that's what
-    you're hitting, --timeout raises how long a download gets before
+    you are hitting, --timeout raises how long a download gets before
     patchright gives up on it, --download-host points at a mirror/proxy if
     the default CDN itself is the problem, and --retries controls how many
     times a failed download is retried (with backoff) before this command

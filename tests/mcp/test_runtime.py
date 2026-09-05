@@ -182,7 +182,7 @@ class TestReapAndSemaphoreWiring:
         open_es_task = asyncio.create_task(runtime.open_session(language="es"))
         await asyncio.sleep(0.05)
         assert not open_es_task.done(), (
-            "a second language shouldn't open while the first still holds the only slot"
+            "a second language should not open while the first still holds the only slot"
         )
 
         await runtime._pools[Language.ENGLISH].close_idle(idle_timeout=0.0)

@@ -155,7 +155,7 @@ async def open_db(
     A `.db` file copied on its own while its `-wal` still holds
     unflushed writes is missing data. Move `metadata_path` (or its
     default, `<path>.metadata.json` / `metadata.json`) along with it too;
-    it's a separate file and won't follow the `.db` file automatically.
+    it's a separate file and will not follow the `.db` file automatically.
 
     `flush`/`reset` checkpoint and truncate the WAL file as part of what
     they do, so a freshly flushed/reset database has little or nothing

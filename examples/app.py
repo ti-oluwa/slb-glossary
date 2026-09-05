@@ -33,7 +33,7 @@ config = slb_mcp.MCPConfig(
     local=slb_mcp.LocalAccess(allow_write=True),
     tools=slb_mcp.Tool.ALL,
     # Tool-call progress notifications are opt-in per call by default;
-    # `allow_override=False` means a caller can't turn them on themselves.
+    # `allow_override=False` means a caller can not turn them on themselves.
     streaming=slb_mcp.Streaming(allow_override=False),
     # `glossary_sync` over a large topic can run well past a typical
     # request timeout, so it gets 5 minutes instead of accepting whatever
