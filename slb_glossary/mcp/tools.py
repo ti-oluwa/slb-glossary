@@ -171,6 +171,12 @@ class SearchArgs:
     limit: int | None = 5
     """Maximum number of results to return. `None` for unlimited (use with care)."""
 
+    concurrency: int | None = None
+    """
+    Number of term-page fetches to run in parallel during a live fetch.
+    `None` uses this server's own configured default.
+    """
+
     mode: SearchMode | None = None
     """
     Local-search ranking mode. `"lexical"` (exact/fuzzy text match, works
@@ -298,6 +304,12 @@ class TermsOnArgs:
     limit: int | None = 25
     """Maximum number of terms to return. `None` for unlimited (use with care)."""
 
+    concurrency: int | None = None
+    """
+    Number of term-page fetches to run in parallel during a live fetch.
+    `None` uses this server's own configured default.
+    """
+
     exclude: tuple[str, ...] = ()
     """URLs or exact term names to leave out of the results entirely."""
 
@@ -383,6 +395,9 @@ class RandomTermArgs:
     topic: str | None = None
     """Restrict the pick to this topic, or several comma-separated topics."""
 
+    language: str | None = None
+    """Restrict the pick to this glossary language edition, e.g. `"en"`/`"es"`."""
+
     persist: bool = False
     """
     If a live pick happens, cache it locally. Ignored unless the server
@@ -441,11 +456,54 @@ class SyncArgs:
     value: str | None = None
     """The query/topic/letter to sync. Required for every `mode` except `"all"`."""
 
+    language: str | None = None
+    """
+    Which glossary language edition to sync from, e.g. `"en"`/`"es"`.
+    `None` uses this server's own configured default language.
+    """
+
+    topic: str | None = None
+    """
+    Also restrict the fetch to this topic, or several comma-separated
+    topics. For `mode="query"`, further narrows the query; for
+    `mode="letter"`, restricts which terms starting with `value` are
+    synced. Ignored for `mode="topic"` (use `value` for that) and
+    `mode="all"`.
+    """
+
+    start_letter: str | None = None
+    """
+    Also restrict the fetch to terms starting with this letter. Only
+    meaningful for `mode="query"` (for `mode="letter"`, `value` already
+    is the start letter). Ignored for every other mode.
+    """
+
     limit: int | None = None
     """Maximum number of terms to fetch. `None` for unlimited. Ignored for `mode="all"`."""
 
-    concurrency: int = 1
-    """Concurrent term-page fetches while syncing."""
+    concurrency: int | None = None
+    """Concurrent term-page fetches while syncing. `None` uses this server's own configured default."""
+
+    batch_size: int | None = None
+    """
+    Number of results to buffer before each incremental write to the
+    local database. `None` uses this server's own configured default.
+    """
+
+    persist_on_error: bool = True
+    """
+    If `True` (the default), save whatever was already fetched if the
+    sync fails partway through, instead of losing it. The resulting
+    summary's `interrupted` is then `True`, and the error still propagates.
+    """
+
+    skip_existing: bool = True
+    """
+    If `True` (the default), don't re-fetch a term already stored
+    locally under this sync's filters; only terms not already known are
+    asked for. Pass `False` to force a full re-fetch, e.g. to refresh
+    already-stored definitions that may have changed live.
+    """
 
 
 def resolve_source(requested: Source, config: MCPConfig) -> Source:
@@ -506,8 +564,12 @@ async def handle_search(
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
     stream = get_effective_stream(args.stream, config)
+    concurrency = get_effective_concurrency(args.concurrency, 1, config)
     started_at = time.monotonic()
-    async with runtime.acquire(source, language=args.language, capacity=1) as (db, session):
+    async with runtime.acquire(source, language=args.language, capacity=concurrency) as (
+        db,
+        session,
+    ):
         results: list[dict[str, typing.Any]] = []
         count = 0
         async for lookup in query.search(
@@ -519,6 +581,7 @@ async def handle_search(
             start_letter=args.start_letter,
             language=args.language,
             limit=args.limit,
+            concurrency=concurrency,
             mode=args.mode,
             relevance_threshold=args.relevance_threshold,
             exclude=args.exclude or None,
@@ -579,8 +642,12 @@ async def handle_terms_on(
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
     stream = get_effective_stream(args.stream, config)
+    concurrency = get_effective_concurrency(args.concurrency, 1, config)
     started_at = time.monotonic()
-    async with runtime.acquire(source, language=args.language, capacity=1) as (db, session):
+    async with runtime.acquire(source, language=args.language, capacity=concurrency) as (
+        db,
+        session,
+    ):
         results: list[dict[str, typing.Any]] = []
         count = 0
         async for result in query.get_terms_on(
@@ -591,6 +658,7 @@ async def handle_terms_on(
             start_letter=args.start_letter,
             language=args.language,
             limit=args.limit,
+            concurrency=concurrency,
             exclude=args.exclude or None,
             persist=get_effective_persist(args.persist, config),
             persist_batch_size=args.persist_batch_size,
@@ -680,12 +748,13 @@ async def handle_random_term(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    async with runtime.acquire(source, capacity=1) as (db, session):
+    async with runtime.acquire(source, language=args.language, capacity=1) as (db, session):
         lookup = await query.get_random_term(
             db=db,
             session=session,
             source=source,
             topic=args.topic,
+            language=args.language,
             persist=get_effective_persist(args.persist, config),
             fuzzy=args.fuzzy,
         )
@@ -735,8 +804,12 @@ async def handle_sync(
     if args.mode != "all" and not args.value:
         raise ValueError(f"`value` is required for `mode={args.mode!r}`.")
 
+    concurrency = get_effective_concurrency(args.concurrency, 1, config)
     db = await runtime.open_db()
-    async with runtime.acquire(Source.LIVE) as (_, session):
+    async with runtime.acquire(Source.LIVE, language=args.language, capacity=concurrency) as (
+        _,
+        session,
+    ):
         assert session is not None, (
             "`runtime.acquire(Source.LIVE)` should always yield a session; `Runtime.acquire` "
             "only returns a None session when it is not asked for one."
@@ -744,21 +817,52 @@ async def handle_sync(
         if args.mode == "query":
             assert args.value is not None
             summary = await sync.sync_query(
-                db, session, args.value, limit=args.limit, concurrency=args.concurrency
+                db,
+                session,
+                args.value,
+                topic=args.topic,
+                start_letter=args.start_letter,
+                limit=args.limit,
+                concurrency=concurrency,
+                batch_size=args.batch_size,
+                persist_on_error=args.persist_on_error,
+                skip_existing=args.skip_existing,
             )
         elif args.mode == "topic":
             assert args.value is not None
             summary = await sync.sync_topic(
-                db, session, args.value, limit=args.limit, concurrency=args.concurrency
+                db,
+                session,
+                args.value,
+                limit=args.limit,
+                concurrency=concurrency,
+                batch_size=args.batch_size,
+                persist_on_error=args.persist_on_error,
+                skip_existing=args.skip_existing,
             )
         elif args.mode == "letter":
             assert args.value is not None
             summary = await sync.sync_letter(
-                db, session, args.value, limit=args.limit, concurrency=args.concurrency
+                db,
+                session,
+                args.value,
+                topic=args.topic,
+                limit=args.limit,
+                concurrency=concurrency,
+                batch_size=args.batch_size,
+                persist_on_error=args.persist_on_error,
+                skip_existing=args.skip_existing,
             )
         else:
             assert args.mode == "all", f"Unexpected `SyncArgs.mode` {args.mode!r}."
-            summary = await sync.sync_all(db, session, concurrency=args.concurrency)
+            summary = await sync.sync_all(
+                db,
+                session,
+                concurrency=concurrency,
+                batch_size=args.batch_size,
+                persist_on_error=args.persist_on_error,
+                skip_existing=args.skip_existing,
+            )
 
     return dataclasses.asdict(summary)
 

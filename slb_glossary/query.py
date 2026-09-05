@@ -1526,6 +1526,7 @@ async def get_random_term(
     session: Session | None = None,
     source: Source = Source.AUTO,
     topic: str | None = None,
+    language: str | None = None,
     persist: bool | None = None,
     fuzzy: bool = False,
 ) -> QueryResult[SearchResult | None]:
@@ -1546,6 +1547,12 @@ async def get_random_term(
         since a local miss on one random draw says nothing about whether
         the local database is empty.
     :param topic: Restrict the pick to this topic, or several comma-separated topics.
+    :param language: Restrict the pick to this glossary language edition
+        (e.g. `"en"`/`"es"`). For a local read, this filters by each
+        stored result's `.language`; `None` (the default) does not filter.
+        For a live read, `session` is already bound to one language for
+        its whole lifetime, so `language` here is only validated against
+        it, not applied as a filter. See `validate_language`.
     :param persist: If `True`, and a live pick happens, cache it into `db`.
         A single-value lookup, so batching does not apply.
     :param fuzzy: If `True`, a local pick tolerates minor misspellings/
@@ -1554,12 +1561,14 @@ async def get_random_term(
     :return: A `QueryResult` wrapping the picked `SearchResult`, or `None` if
         nothing matched (empty local database/topic, or no live match found).
     :raises QueryError: If neither `db` nor `session` is given,
-        or the requested `source` needs one that was not given.
+        the requested `source` needs one that was not given, or `language`
+        does not match `session`'s own language.
     """
     resolved_source = await resolve_source(db, session, source)
+    validate_language(session, language)
     if resolved_source is Source.LOCAL:
         assert db is not None
-        result = await local.get_random_term(db, topic=topic, fuzzy=fuzzy)
+        result = await local.get_random_term(db, topic=topic, language=language, fuzzy=fuzzy)
         return QueryResult(value=result, source=Source.LOCAL, persisted=False)
 
     persist = constants.persist_by_default if persist is None else persist
@@ -1577,7 +1586,7 @@ async def get_random_term(
     # AUTO: prefer a local pick when the local database actually has
     # something to pick from; only go live when it does not.
     assert db is not None
-    result = await local.get_random_term(db, topic=topic, fuzzy=fuzzy)
+    result = await local.get_random_term(db, topic=topic, language=language, fuzzy=fuzzy)
     if result is not None:
         return QueryResult(value=result, source=Source.LOCAL, persisted=False)
 
@@ -1731,7 +1740,7 @@ async def compare(
 
     semaphore = asyncio.Semaphore(resolved_concurrency)
 
-    async def _get_term(term: str) -> tuple[str, QueryResult]:
+    async def lookup_term(term: str) -> tuple[str, QueryResult]:
         async with semaphore:
             result = await get_term(
                 term,
@@ -1747,7 +1756,7 @@ async def compare(
     # `asyncio.gather` preserves the order of the awaitables passed to it
     # in its results, regardless of which finishes first, so `results`
     # already comes back in `terms`' own order.
-    pairs = await asyncio.gather(*(_get_term(term) for term in terms))
+    pairs = await asyncio.gather(*(lookup_term(term) for term in terms))
     results = dict(pairs)
 
     elapsed = time.monotonic() - started_at

@@ -1,7 +1,7 @@
 """
 The main entry point of `slb_glossary` MCP API.
 
-Holds `MCPApp`, which turns an `MCPConfig` into a ready-to-serve `fastmcp.FastMCP`
+Holds `MCPApp`, which turns an `MCPConfig` into a ready to serve `fastmcp.FastMCP`
 server for the SLB Energy Glossary.
 
 ```python
@@ -30,6 +30,7 @@ import mimetypes
 import pathlib
 import time
 import typing
+from collections.abc import AsyncIterator
 from urllib.parse import urlsplit
 
 import mcp.types
@@ -144,8 +145,14 @@ class MCPApp(NamedComponent):
     underlying `FastMCP` server and its tools are assembled lazily on first
     `server()`/`run()`/`run_async()` call.
 
-    Resource startup happens in `run_async`/`run`, or explicitly via `start()`
-    for callers embedding the server in their own event loop / lifespan management.
+    Resource startup/shutdown (`start`/`aclose`) run automatically via
+    `lifespan`, which every server this builds is constructed with, so
+    they fire whenever this server is actually served, regardless of how.
+    Either `run_async()`/`run()`, mounted inside a larger ASGI app, served
+    directly by an external ASGI runner (`app.server().http_app()`), or
+    driven by FastMCP's own CLI. Call `start()`/`aclose()` yourself only
+    if you need resources open before handing the server off to something
+    else that will also trigger `lifespan`. Both are idempotent.
     """
 
     def __init__(self, config: MCPConfig | None = None) -> None:
@@ -158,6 +165,8 @@ class MCPApp(NamedComponent):
         super().__init__(self.config.server.name)
         self.runtime = Runtime(self.config)
         self._server: FastMCP | None = None
+        self._started = False
+        self._closed = False
 
     def server(self, **server_kwargs: typing.Any) -> FastMCP:
         """
@@ -208,6 +217,7 @@ class MCPApp(NamedComponent):
             "auth": self.config.auth.provider,
             "icons": resolve_icon(self.config.server.logo),
             "middleware": middleware,
+            "lifespan": self.lifespan,
             **server_kwargs,
         }
         server = FastMCP(**kwargs)
@@ -271,8 +281,14 @@ class MCPApp(NamedComponent):
         Perform startup-time resource work (open the local DB, eagerly open a
         live session if configured) and run `Hooks.on_startup` hooks.
 
-        Idempotent. Safe to call before `run_async`, which also calls this.
+        Idempotent. Safe to call more than once (later calls are no-ops),
+        and safe to call yourself even though `lifespan` also calls it -
+        e.g. if you want resources open before handing this server to
+        something else that will also trigger `lifespan`.
         """
+        if self._started:
+            return
+        self._started = True
         started_at = time.monotonic()
         self.configure_logging()
         await self.runtime.start()
@@ -283,7 +299,14 @@ class MCPApp(NamedComponent):
         )
 
     async def aclose(self) -> None:
-        """Tear down every resource opened by `start()` and run `Hooks.on_shutdown` hooks."""
+        """
+        Tear down every resource opened by `start()` and run `Hooks.on_shutdown` hooks.
+
+        Idempotent. Safe to call more than once (later calls are no-ops).
+        """
+        if self._closed:
+            return
+        self._closed = True
         started_at = time.monotonic()
         await self.runtime.aclose()
         for hook in self.config.hooks.on_shutdown:
@@ -291,6 +314,29 @@ class MCPApp(NamedComponent):
         logger.info(
             "[%s] MCP application closed in %.3fs", self.name, time.monotonic() - started_at
         )
+
+    @contextlib.asynccontextmanager
+    async def lifespan(self, server: FastMCP) -> AsyncIterator[None]:
+        """
+        Run `start()`/`aclose()` around this server's actual serving lifetime.
+
+        Passed to `FastMCP` at construction (see `server()`), so
+        `start()`/`aclose()` (and `Hooks.on_startup`/`on_shutdown`) always
+        run whenever this server is actually served .
+        `FastMCP` reference-counts entries into this, so it's safe even if
+        this server ends up served more than one way at once.
+
+        :param server: The `FastMCP` server this lifespan is managing.
+            Unused directly here - `start()`/`aclose()` already have
+            everything they need via `self.runtime`/`self.config` - but
+            required by FastMCP's own `lifespan` calling convention
+            (`Callable[[FastMCP], AbstractAsyncContextManager]`).
+        """
+        await self.start()
+        try:
+            yield
+        finally:
+            await self.aclose()
 
     def configure_logging(self) -> None:
         """
@@ -310,16 +356,20 @@ class MCPApp(NamedComponent):
 
     async def run_async(self, **transport_kwargs: typing.Any) -> None:
         """
-        Start resources, serve until the transport stops, then always clean up.
+        Serve until the transport stops.
+
+        Startup/shutdown (`start`/`aclose`) run automatically via
+        `lifespan`, which this server is constructed with (see
+        `server()`) - both FastMCP's stdio and HTTP-transport run paths
+        enter it around the whole serving lifetime, so this doesn't need
+        to call `start`/`aclose` itself.
 
         :param transport_kwargs: Forwarded to `fastmcp.FastMCP.run_async`,
             e.g. `transport="http", host="0.0.0.0", port=8000`. Defaults
             to FastMCP's own default (stdio) when omitted.
         """
         server = self.server()
-        await self.start()
-        async with contextlib.aclosing(self):
-            await server.run_async(**transport_kwargs)
+        await server.run_async(**transport_kwargs)
 
     def run(self, **transport_kwargs: typing.Any) -> None:
         """
