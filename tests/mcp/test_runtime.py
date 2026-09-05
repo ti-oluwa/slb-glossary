@@ -261,7 +261,7 @@ class TestAclose:
         async with runtime.acquire(Source.LIVE, language="es"):
             pass
 
-        await runtime.aclose()
+        await runtime.close()
 
         assert calls.count("open") == 2
         assert calls.count("close") == 2

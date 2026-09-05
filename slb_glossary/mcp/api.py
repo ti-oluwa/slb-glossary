@@ -150,7 +150,7 @@ class MCPApp(NamedComponent):
     they fire whenever this server is actually served, regardless of how.
     Either `run_async()`/`run()`, mounted inside a larger ASGI app, served
     directly by an external ASGI runner (`app.server().http_app()`), or
-    driven by FastMCP's own CLI. Call `start()`/`aclose()` yourself only
+    driven by FastMCP's own CLI. Call `start()`/`close()` yourself only
     if you need resources open before handing the server off to something
     else that will also trigger `lifespan`. Both are idempotent.
     """
@@ -298,7 +298,7 @@ class MCPApp(NamedComponent):
             "[%s] MCP application started in %.3fs", self.name, time.monotonic() - started_at
         )
 
-    async def aclose(self) -> None:
+    async def close(self) -> None:
         """
         Tear down every resource opened by `start()` and run `Hooks.on_shutdown` hooks.
 
@@ -308,7 +308,7 @@ class MCPApp(NamedComponent):
             return
         self._closed = True
         started_at = time.monotonic()
-        await self.runtime.aclose()
+        await self.runtime.close()
         for hook in self.config.hooks.on_shutdown:
             await hook()
         logger.info(
@@ -318,16 +318,16 @@ class MCPApp(NamedComponent):
     @contextlib.asynccontextmanager
     async def lifespan(self, server: FastMCP) -> AsyncIterator[None]:
         """
-        Run `start()`/`aclose()` around this server's actual serving lifetime.
+        Run `start()`/`close()` around this server's actual serving lifetime.
 
         Passed to `FastMCP` at construction (see `server()`), so
-        `start()`/`aclose()` (and `Hooks.on_startup`/`on_shutdown`) always
+        `start()`/`close()` (and `Hooks.on_startup`/`on_shutdown`) always
         run whenever this server is actually served .
         `FastMCP` reference-counts entries into this, so it's safe even if
         this server ends up served more than one way at once.
 
         :param server: The `FastMCP` server this lifespan is managing.
-            Unused directly here - `start()`/`aclose()` already have
+            Unused directly here - `start()`/`close()` already have
             everything they need via `self.runtime`/`self.config` - but
             required by FastMCP's own `lifespan` calling convention
             (`Callable[[FastMCP], AbstractAsyncContextManager]`).
@@ -336,7 +336,7 @@ class MCPApp(NamedComponent):
         try:
             yield
         finally:
-            await self.aclose()
+            await self.close()
 
     def configure_logging(self) -> None:
         """

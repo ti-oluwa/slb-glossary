@@ -96,7 +96,7 @@ class Runtime(NamedComponent):
 
         logger.info("[%s] Runtime started in %.3fs", self.name, time.monotonic() - started_at)
 
-    async def aclose(self) -> None:
+    async def close(self) -> None:
         """Tear down every resource this runtime opened. Safe to call more than once."""
         if self._closed:
             return
