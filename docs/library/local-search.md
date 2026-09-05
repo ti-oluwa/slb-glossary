@@ -24,7 +24,7 @@ asyncio.run(main())
 
 Pass no path (`slb.local.database()`) and it opens the same default-location database the CLI uses, resolved via [`platformdirs`](https://github.com/tox-dev/platformdirs) (`slb local path` prints exactly where that is). Passing an explicit path, as above, is how you keep a script's own database separate from your everyday CLI usage.
 
-Unlike `slb_glossary.live`, `slb_glossary.local` functions do not return async generators. They returns a plain `list[SearchResult]` (in the case of `local.search`), since there's no network round trip to stream results out of incrementally.
+Unlike `slb_glossary.live`, `slb_glossary.local` functions do not return async generators. They return a plain `list[SearchResult]` (in the case of `local.search`), since there's no network round trip to stream results out of incrementally.
 
 ---
 

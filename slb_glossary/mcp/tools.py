@@ -6,6 +6,7 @@ import typing
 from collections.abc import Awaitable, Callable
 
 from slb_glossary import query
+from slb_glossary.constants import constants
 from slb_glossary.local import sync
 from slb_glossary.mcp.config import MCPConfig, Streaming, Tool
 from slb_glossary.mcp.errors import MCPError
@@ -223,7 +224,7 @@ class SearchArgs:
 
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
-class _TermLookupArgs:
+class TermLookupArgs:
     """Shared arguments between `glossary_get_term` and `glossary_related_terms`."""
 
     term_or_url: str
@@ -250,14 +251,14 @@ class _TermLookupArgs:
 
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
-class GetTermArgs(_TermLookupArgs):
+class GetTermArgs(TermLookupArgs):
     """Arguments for `glossary_get_term`."""
 
     with_similar: bool = False
     """
     If `True`, also gather other results found for `term_or_url` along
     the way (a local `search` pass or a live one), best match first, in
-    addition to the exact match. Useful when you are not sure the exact
+    addition to the exact match. Useful when you're not sure the exact
     name is right and want alternatives back in the same call.
     """
 
@@ -282,7 +283,7 @@ class TermsOnArgs:
     topic: str
     """
     Topic name, or several comma-separated topic names. Call
-    `glossary_get_topics` first if you are unsure of the exact name.
+    `glossary_get_topics` first if you're unsure of the exact name.
     """
 
     source: Source = Source.AUTO
@@ -368,7 +369,7 @@ class TopicsArgs:
 
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
-class RelatedTermsArgs(_TermLookupArgs):
+class RelatedTermsArgs(TermLookupArgs):
     """Arguments for `glossary_related_terms`. Same shape as `glossary_get_term`, minus `with_similar`."""
 
 
@@ -476,6 +477,26 @@ def get_effective_stream(requested: bool, config: MCPConfig) -> bool:
     return requested
 
 
+def get_effective_concurrency(requested: int | None, default: int, config: MCPConfig) -> int:
+    """
+    Resolve a tool's own `concurrency`-style argument, clamped to this
+    server's configured `SessionAccess.max_request_concurrency`, if any.
+
+    :param requested: The caller's requested concurrency, or `None` to
+        use `default`.
+    :param default: What to use in place of `requested=None` (a tool's
+        own configured default, e.g. `constants.compare_concurrency`).
+    :param config: This server's `MCPConfig`.
+    :return: At least `1`, never above
+        `config.session.max_request_concurrency` if that's set.
+    """
+    concurrency = requested if requested is not None else default
+    cap = config.session.max_request_concurrency
+    if cap is not None:
+        concurrency = min(concurrency, cap)
+    return max(concurrency, 1)
+
+
 async def handle_search(
     args: SearchArgs,
     runtime: Runtime,
@@ -486,7 +507,7 @@ async def handle_search(
     source = resolve_source(args.source, config)
     stream = get_effective_stream(args.stream, config)
     started_at = time.monotonic()
-    async with runtime.acquire(source) as (db, session):
+    async with runtime.acquire(source, language=args.language, capacity=1) as (db, session):
         results: list[dict[str, typing.Any]] = []
         count = 0
         async for lookup in query.search(
@@ -531,7 +552,7 @@ async def handle_get_term(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    async with runtime.acquire(source) as (db, session):
+    async with runtime.acquire(source, language=args.language, capacity=1) as (db, session):
         lookup = await query.get_term(
             args.term_or_url,
             db=db,
@@ -559,7 +580,7 @@ async def handle_terms_on(
     source = resolve_source(args.source, config)
     stream = get_effective_stream(args.stream, config)
     started_at = time.monotonic()
-    async with runtime.acquire(source) as (db, session):
+    async with runtime.acquire(source, language=args.language, capacity=1) as (db, session):
         results: list[dict[str, typing.Any]] = []
         count = 0
         async for result in query.get_terms_on(
@@ -596,7 +617,7 @@ async def handle_terms_urls(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    async with runtime.acquire(source) as (db, session):
+    async with runtime.acquire(source, language=args.language, capacity=1) as (db, session):
         urls = [
             lookup.value
             async for lookup in query.get_terms_urls(
@@ -623,7 +644,7 @@ async def handle_topics(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    async with runtime.acquire(source) as (db, session):
+    async with runtime.acquire(source, language=args.language, capacity=1) as (db, session):
         topics = await query.get_topics(
             db=db, session=session, source=source, language=args.language
         )
@@ -638,7 +659,7 @@ async def handle_related_terms(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    async with runtime.acquire(source) as (db, session):
+    async with runtime.acquire(source, language=args.language, capacity=1) as (db, session):
         lookup = await query.related_terms(
             args.term_or_url,
             db=db,
@@ -659,7 +680,7 @@ async def handle_random_term(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    async with runtime.acquire(source) as (db, session):
+    async with runtime.acquire(source, capacity=1) as (db, session):
         lookup = await query.get_random_term(
             db=db,
             session=session,
@@ -679,14 +700,20 @@ async def handle_compare(
     report_progress: ProgressReporter,
 ) -> dict[str, typing.Any]:
     source = resolve_source(args.source, config)
-    async with runtime.acquire(source) as (db, session):
+    concurrency = get_effective_concurrency(
+        args.concurrency, constants.compare_concurrency, config
+    )
+    async with runtime.acquire(source, language=args.language, capacity=concurrency) as (
+        db,
+        session,
+    ):
         lookups = await query.compare(
             args.terms,
             db=db,
             session=session,
             source=source,
             language=args.language,
-            concurrency=args.concurrency,
+            concurrency=concurrency,
             with_similar=args.with_similar,
             persist=get_effective_persist(args.persist, config),
         )
@@ -703,10 +730,10 @@ async def handle_sync(
 ) -> dict[str, typing.Any]:
     if not config.local.allow_write:
         raise MCPError(
-            "`glossary_sync` is unavailable: this server was not configured with local write access."
+            "`glossary_sync` is unavailable. This server was not configured with local write access."
         )
     if args.mode != "all" and not args.value:
-        raise ValueError(f"`value` is required for mode={args.mode!r}.")
+        raise ValueError(f"`value` is required for `mode={args.mode!r}`.")
 
     db = await runtime.open_db()
     async with runtime.acquire(Source.LIVE) as (_, session):
@@ -778,10 +805,10 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         name="glossary_search",
         description=(
             "Authoritative free-text search across the SLB Energy Glossary. Use this for "
-            "keyword/partial-name queries, to check whether a term exists, or when you are not "
+            "keyword/partial-name queries, to check whether a term exists, or when you're not "
             "sure of a term's exact name. Returns the glossary's own published definitions "
             "(never generated), best match first. If you already know the exact term name, "
-            "use glossary_get_term instead. It's cheaper and more precise."
+            "use `glossary_get_term` instead. It's cheaper and more precise."
         ),
         args_type=SearchArgs,
         tags=frozenset({"read", "search"}),
@@ -795,7 +822,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
             "Get the authoritative, exact definition of a single glossary term by its precise "
             "(case-insensitive) name, or by its detail-page URL. The deterministic source of "
             "truth to call before stating what a technical term means, instead of relying on "
-            "your own recollection. Cheaper and more precise than glossary_search when you "
+            "your own recollection. Cheaper and more precise than `glossary_search` when you "
             "already know the exact term name."
         ),
         args_type=GetTermArgs,
@@ -808,7 +835,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         description=(
             "List every authoritative glossary term filed under one or more subject-area "
             "topics, e.g. 'Drilling' or 'Geology,Geophysics'. Use this to enumerate a whole "
-            "category of terminology at once. Call glossary_get_topics first if you are not "
+            "category of terminology at once. Call `glossary_get_topics` first if you're not "
             "sure of the exact topic name."
         ),
         args_type=TermsOnArgs,
@@ -821,7 +848,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         name="glossary_get_terms_urls",
         description=(
             "List glossary term detail-page URLs matching a query/topic/starting letter, "
-            "without fetching full definitions. Lighter-weight than glossary_search. Use "
+            "without fetching full definitions. Lighter-weight than `glossary_search`. Use "
             "this when you only need to enumerate or count candidates, or want a citable "
             "source URL without pulling the whole definition."
         ),
@@ -835,7 +862,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         description=(
             "List every glossary topic (subject area) and how many terms are filed under "
             "each. The authoritative topic taxonomy this server uses. Call this first "
-            "whenever you need a valid topic name for glossary_get_terms_on, rather than "
+            "whenever you need a valid topic name for `glossary_get_terms_on`, rather than "
             "guessing one."
         ),
         args_type=TopicsArgs,
@@ -860,7 +887,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         description=(
             "Get one randomly chosen glossary term (with its authoritative definition), "
             "optionally restricted to a topic. Use this for exploration/discovery/quizzing, "
-            "not for looking up something specific. Use glossary_get_term for that."
+            "not for looking up something specific. Use `glossary_get_term` for that."
         ),
         args_type=RandomTermArgs,
         tags=frozenset({"read", "discovery"}),
@@ -872,7 +899,7 @@ def build_tool_specs(config: MCPConfig) -> list[ToolSpec]:
         description=(
             "Look up several specific glossary terms at once, each with its authoritative "
             "definition, for side-by-side comparison. Use this instead of several separate "
-            "glossary_get_term calls when the user wants to compare/contrast multiple named terms."
+            "`glossary_get_term` calls when the user wants to compare/contrast multiple named terms."
         ),
         args_type=CompareArgs,
         tags=frozenset({"read", "lookup"}),

@@ -57,6 +57,11 @@ class Runtime(NamedComponent):
         self._started = False
         self._closed = False
 
+    @property
+    def closed(self) -> bool:
+        """`True` once `aclose` has run. A closed `Runtime` refuses further `acquire`/`open_session` calls."""
+        return self._closed
+
     async def start(self) -> None:
         """
         Perform startup-time work. Opens a local DB connection (if enabled), eagerly
@@ -162,7 +167,12 @@ class Runtime(NamedComponent):
         async with self._pools_lock:
             pool = self._pools.get(language)
             if pool is None:
-                pool = SessionPool(language, self.config.session.options, self._session_semaphore)
+                pool = SessionPool(
+                    language,
+                    self.config.session.options,
+                    self._session_semaphore,
+                    capacity_tolerance=self.config.session.capacity_tolerance,
+                )
                 self._pools[language] = pool
             return pool
 
@@ -226,13 +236,21 @@ class Runtime(NamedComponent):
         """
         Return `language`'s pooled session (the configured default if
         omitted), opening it on first use, without checking it out.
+
+        :raises MCPError: If this `Runtime` is closed.
         """
+        if self._closed:
+            raise MCPError(f"[{self.name}] Runtime is closed.")
         pool = await self.get_pool(self.resolve_language(language))
         return await pool.open()
 
     @contextlib.asynccontextmanager
     async def acquire(
-        self, source: Source, *, language: str | Language | None = None
+        self,
+        source: Source,
+        *,
+        language: str | Language | None = None,
+        capacity: int | None = None,
     ) -> AsyncIterator[tuple[Database | None, Session | None]]:
         """
         Yield the `(db, session)` pair a tool call needs to satisfy `source`.
@@ -256,7 +274,7 @@ class Runtime(NamedComponent):
         For `PER_CALL`, a fresh session for `language` is opened for the
         duration of the `async with` block and closed on exit, bypassing
         the pool entirely. Worth it over `EAGER`/`LAZY` when callers
-        should not share any session state (cookies, browser identity)
+        shouldn't share any session state (cookies, browser identity)
         even when they happen to request the same language, e.g. a
         server used by multiple untrusted or mutually-distrusting
         callers, albeit at the cost of a fresh browser session per call instead
@@ -286,13 +304,26 @@ class Runtime(NamedComponent):
         :param language: Which glossary language's session this call
             needs, e.g. from a tool's own `language` argument. `None`
             uses the configured default (`SessionAccess.options.language`).
+        :param capacity: How many pages this call expects to want open at
+            once, if the caller knows (e.g. a tool's own `concurrency`
+            argument). This purely advisory as it informs `EAGER`/`LAZY`'s
+            grow-or-reuse decision (see `SessionPool.acquire`) and, for
+            `PER_CALL`, raises that call's own dedicated session's
+            `max_pages` to at least this, so a call that plans to do
+            `capacity` things at once doesn't immediately self-block on
+            its own session's page pool. `None` (the default) doesn't
+            influence either.
         :yield: A `(db, session)` tuple, either of which may be `None` if
             `source` does not require it.
-        :raises MCPError: If `source` needs a resource this `Runtime` was not
-            configured to provide (`local.enabled=False` for `Source.LOCAL`,
-            `session.enabled=False` for `Source.LIVE`), or `language` is not
-            a valid `Language` value.
+        :raises MCPError: If this `Runtime` is closed; if `source` needs a
+            resource this `Runtime` was not configured to provide
+            (`local.enabled=False` for `Source.LOCAL`,
+            `session.enabled=False` for `Source.LIVE`); or if `language`
+            is not a valid `Language` value.
         """
+        if self._closed:
+            raise MCPError(f"[{self.name}] Runtime is closed.")
+
         needs_db = source in (Source.LOCAL, Source.AUTO)
         needs_session = source in (Source.LIVE, Source.AUTO)
 
@@ -312,6 +343,8 @@ class Runtime(NamedComponent):
                 opened_at = time.monotonic()
                 kwargs = self.config.session.options.session_kwargs()
                 kwargs["language"] = resolved_language
+                if capacity is not None:
+                    kwargs["max_pages"] = max(kwargs.get("max_pages", 1), capacity)
                 # A session opened here is about to be used for this call's
                 # live fetch, so there's no reason to defer initialization further.
                 kwargs["initialize"] = True
@@ -335,7 +368,7 @@ class Runtime(NamedComponent):
             return
 
         pool = await self.get_pool(resolved_language)
-        session = await pool.acquire()
+        session = await pool.acquire(capacity)
         try:
             yield db, session
         finally:

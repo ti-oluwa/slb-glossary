@@ -169,7 +169,7 @@ class SessionMode(enum.Enum):
     """
     Open a fresh session for every tool call that needs one, and close it
     immediately after. Slowest and heaviest, but gives every call full
-    isolation. Handy under multi-tenant auth where sessions should not be
+    isolation. Handy under multi-tenant auth where sessions shouldn't be
     shared across callers.
     """
 
@@ -236,6 +236,31 @@ class SessionAccess(Updatable):
     cheaper lever to raise first. Growing an existing session's page
     pool costs nothing extra, where growing this opens a whole new
     browser.
+    """
+
+    capacity_tolerance: int = 1
+    """
+    For `EAGER`/`LAZY` mode: how much of a shortfall in an existing
+    session's free page capacity a call's own requested `capacity` (see
+    `slb_glossary.mcp.runtime.Runtime.acquire`) will tolerate before the
+    pool opens a new browser instead of reusing that session. E.g. with
+    the default of `1`, a call asking for `capacity=3` still reuses a
+    session with only 2 free page slots rather than paying for a whole
+    new session over a shortfall of one - there's a decent chance a slot
+    frees up in time, and running most of the request concurrently on
+    the existing session is usually better than growing for the sake of
+    one slot. Only matters when a call actually specifies a `capacity`;
+    has no effect otherwise. See `SessionPool`'s own docstring.
+    """
+
+    max_request_concurrency: int | None = None
+    """
+    Upper bound this server clamps a tool's own requested concurrency
+    to. Protects against one call claiming an outsized
+    share of a language's page pool (or single-handedly forcing pool
+    growth) by asking for far more concurrency than it needs. `None`
+    (the default) applies no cap, i.e, a tool's own argument, and its own
+    configured default, are used as given.
     """
 
     options: SessionOptions = dataclasses.field(default_factory=SessionOptions)
@@ -613,7 +638,7 @@ class MCPConfig(Updatable):
         if not self.session.enabled and not self.local.enabled:
             raise MCPConfigError(
                 f"{type(self).__name__}: at least one of `session.enabled`/`local.enabled` "
-                f"must be True. A server with neither can not read anything."
+                f"must be True. A server with neither can't read anything."
             )
 
         allowed = self.source_policy.allowed
@@ -629,7 +654,7 @@ class MCPConfig(Updatable):
                 dataclasses.replace(self.source_policy, allowed=frozenset(computed)),
             )
             allowed = self.source_policy.allowed
-            assert allowed is not None  # mypy can not see that object.__setattr__ changed it
+            assert allowed is not None  # mypy can't see that object.__setattr__ changed it
         else:
             if not allowed:
                 raise MCPConfigError(
@@ -661,6 +686,18 @@ class MCPConfig(Updatable):
         if self.session.max_sessions < 1:
             raise MCPConfigError(
                 f"{type(self).__name__}: `session.max_sessions` must be at least 1."
+            )
+        if self.session.capacity_tolerance < 0:
+            raise MCPConfigError(
+                f"{type(self).__name__}: `session.capacity_tolerance` must be at least 0."
+            )
+        if (
+            self.session.max_request_concurrency is not None
+            and self.session.max_request_concurrency < 1
+        ):
+            raise MCPConfigError(
+                f"{type(self).__name__}: `session.max_request_concurrency` must be at least 1 "
+                f"if set."
             )
 
     def resolve_tools(self) -> Tool:

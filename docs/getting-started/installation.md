@@ -6,9 +6,9 @@ Every path through this documentation passes through this page once. If you only
 
 ## Requirements
 
-- **Python 3.10 or newer.** `slb-glossary` uses modern typing syntax (`str | None`) throughout and some of the libraries it depneds on only support this version upwards, which is why the floor is 3.10 rather than something older.
+- **Python 3.10 or newer.** `slb-glossary` uses modern typing syntax (`str | None`) throughout and some of the libraries it depends on only support this version upwards.
 - **About 300MB of free disk space**, for the background browser build. See [below](#installing-the-browser-build) for exactly why.
-- **A network connection**, to install the browser engine neede to look up any given term which are not already cache locally. You can sync the glossary to your local machine though, after which the [local cache](../library/local-search.md#1-cache-live-results-as-you-go) can serve lookups without an internet connection. Searches still work offline as long as the term has been cached, else its just returns no results. See [Syncing the glossary](../cli/sync.md) for details.
+- **A network connection**, to install the browser engine needed to look up any given term which are not already cache locally. You can sync the glossary to your local machine though, after which the [local cache](../library/local-search.md#1-cache-live-results-as-you-go) can serve lookups without an internet connection. Searches still work offline as long as the term has been cached, else its just returns no results. See [Syncing the glossary](../cli/sync.md) for details.
 
 No account, API key, or paid access to anything is needed. The glossary itself is free to browse.
 

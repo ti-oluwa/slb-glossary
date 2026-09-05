@@ -86,7 +86,7 @@ Both do the same underlying work. The CLI is just a wrapper over what the librar
 You can use any one of these on its own, or all three in combination. The [library tutorial](library/index.md) walks you through them in that order.
 
 !!! info "The CLI, and the MCP server, are both built on this same library"
-    `slb search`, `slb define`, and the rest of the CLI commands are a thin layer over exactly the functions described above and covered in [Using the library](library/index.md). The MCP server described in [Connecting an AI agent](agent/mcp-server.md) is another thin layer over the same functions, exposed as tools an agent can call.
+    `slb search`, `slb define`, and the rest of the CLI commands are a thin layer over the functions described above and covered in [Using the library](library/index.md). The MCP server described in [Connecting an AI agent](agent/mcp-server.md) is another layer over these functions, exposed as tools an agent can call.
 
 ## Scope and limitations
 
