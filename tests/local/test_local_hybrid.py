@@ -1,4 +1,8 @@
-"""Tests for `get_result_key`, `compute_rrf_scores`, and `hybrid_search`."""
+"""
+`get_result_key`, `compute_rrf_scores`, and `hybrid_search`'s name-tier-first,
+reciprocal-rank-fusion ranking of lexical and semantic results, plus its
+post-fusion name-overlap rerank (`_rerank_fused_tier`).
+"""
 
 import pytest
 
@@ -248,3 +252,80 @@ class TestHybridSearch:
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
         results = await hybrid_search(db, "zzz_no_such_term_zzz")
         assert results == []
+
+    async def test_contains_tier_bypasses_fusion_same_as_exact_prefix(
+        self, db: Database, mock_embeddings: MockEmbeddings
+    ) -> None:
+        """
+        A whole-phrase containment match (`NameMatchTier.CONTAINS`) is
+        in the guaranteed-top tier too, same as exact/prefix - not just
+        competing in the fused ranking.
+        """
+        await upsert_results(
+            db,
+            [
+                make_search_result(url="https://x.com/a", term="Gas Lift", definition=None),
+                make_search_result(
+                    url="https://x.com/b",
+                    term="Unrelated Concept",
+                    definition="lift lift lift lift lift",
+                ),
+            ],
+        )
+        mock_embeddings.set("Gas Lift", [1.0, 0.0, 0.0, 0.0])
+        mock_embeddings.set("Unrelated Concept. lift lift lift lift lift", [0.0, 1.0, 0.0, 0.0])
+        mock_embeddings.set("lift", [0.0, 1.0, 0.0, 0.0])  # semantically favors the distractor
+        await embed_terms(db)
+
+        results = await hybrid_search(db, "lift")
+        assert results[0][0].term == "Gas Lift"
+        assert results[0][1] == constants.contains_match_score
+
+    async def test_partial_token_tier_does_not_bypass_fusion(
+        self, db: Database, mock_embeddings: MockEmbeddings
+    ) -> None:
+        """
+        A weaker lexical hit (all-tokens/partial-tokens) does not get
+        the guaranteed-top treatment: its reported score comes from
+        fusion (`< contains_match_score`), not the name tier, unlike a
+        genuine exact/prefix/contains match
+        (`test_contains_tier_bypasses_fusion_same_as_exact_prefix`).
+        """
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Gas Lift Valve System")]
+        )
+        await embed_terms(db)
+
+        # "valve unrelatedword" only partially/coincidentally overlaps
+        # the name (one token: "valve"), landing in `PARTIAL_TOKENS`,
+        # not a tier that bypasses fusion.
+        results = await hybrid_search(db, "valve unrelatedword")
+        assert results
+        assert results[0][0].term == "Gas Lift Valve System"
+        assert results[0][1] < constants.contains_match_score
+
+    async def test_rerank_prefers_higher_name_overlap_among_close_fused_scores(
+        self, db: Database, mock_embeddings: MockEmbeddings
+    ) -> None:
+        """
+        Among two candidates the fused ranking scores identically, the
+        one whose name shares more tokens with the query is preferred.
+        """
+        await upsert_results(
+            db,
+            [
+                make_search_result(url="https://x.com/a", term="Wireline Anything", definition=None),
+                make_search_result(url="https://x.com/b", term="Something Else", definition=None),
+            ],
+        )
+        # Both terms tie on lexical bm25-content rank (neither is a
+        # name-tier match) and are equally far semantically, so only the
+        # rerank's name-overlap nudge distinguishes them.
+        mock_embeddings.set("Wireline Anything", [1.0, 0.0, 0.0, 0.0])
+        mock_embeddings.set("Something Else", [1.0, 0.0, 0.0, 0.0])
+        mock_embeddings.set("wireline", [1.0, 0.0, 0.0, 0.0])
+        await embed_terms(db)
+
+        results = await hybrid_search(db, "wireline")
+        assert results
+        assert results[0][0].term == "Wireline Anything"

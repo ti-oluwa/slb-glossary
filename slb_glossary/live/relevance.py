@@ -4,6 +4,7 @@ import typing
 
 from slb_glossary.constants import constants
 from slb_glossary.embeddings import build_embed_text, cosine_similarity, embed
+from slb_glossary.scoring import classify_name_match
 from slb_glossary.types import SearchMode, SearchResult
 from slb_glossary.utils import normalize_text
 
@@ -15,23 +16,19 @@ if typing.TYPE_CHECKING:
 
 def score_name_match(query: str, term: str) -> float | None:
     """
-    Score `term` against `query` on the exact/prefix name tiers only.
+    Score `term` against `query` on the name-match tiers only (see
+    `slb_glossary.scoring.classify_name_match`): exact, prefix,
+    whole-phrase containment either way, all query tokens present, or
+    some query tokens present.
 
     :param query: The free-text query.
     :param term: A result's term name.
-    :return: `constants.exact_match_score`, `constants.prefix_match_score`,
-        or `None` if `term` is neither an exact nor a prefix match. `None`
-        tells the caller to fall back to `score_content_overlap`.
+    :return: The match's tier score (see `classify_name_match`), or
+        `None` if `term` shares no meaningful overlap with `query` at
+        all. `None` tells the caller to fall back to `score_content_overlap`.
     """
-    query_norm = normalize_text(query)
-    term_norm = normalize_text(term)
-    if not query_norm or not term_norm:
-        return None
-    if term_norm == query_norm:
-        return constants.exact_match_score
-    if term_norm.startswith(query_norm):
-        return constants.prefix_match_score
-    return None
+    match = classify_name_match(query, term)
+    return match.score if match else None
 
 
 def score_content_overlap(query: str, *texts: str) -> float:
@@ -100,8 +97,9 @@ def score_result(
         semantic ranking needs every result's rank relative to the
         others, which a single result scored on its own can not provide.
     :return: With `mode=SearchMode.LEXICAL`, a score in `[0.0, 1.0]`:
-        `constants.exact_match_score`/`prefix_match_score` for a name
-        match, otherwise capped at `constants.content_match_score_cap`.
+        one of `slb_glossary.scoring.classify_name_match`'s tier scores
+        for a name match (exact, prefix, phrase-contains, all-tokens,
+        or partial-tokens), otherwise capped at `constants.content_match_score_cap`.
         With `mode=SearchMode.SEMANTIC`, a cosine similarity in
         `[-1.0, 1.0]`, in practice close to `[0.0, 1.0]` for real text,
         not capped.

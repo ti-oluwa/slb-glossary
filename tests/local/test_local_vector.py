@@ -384,3 +384,77 @@ class TestVectorSearch:
         await embed_terms(db)
         results = await vector_search(db, "query", topic="geologyy", fuzzy=True)
         assert [r.term for r, _ in results] == ["Alpha"]
+
+    async def test_min_similarity_none_applies_no_floor(
+        self, db: Database, mock_embeddings: MockEmbeddings
+    ) -> None:
+        """`min_similarity=None` (the default) never drops a candidate, however dissimilar."""
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Far", definition=None, topic=None)]
+        )
+        mock_embeddings.set("Far", [0.0, 1.0, 0.0, 0.0])
+        mock_embeddings.set("query", [1.0, 0.0, 0.0, 0.0])
+        await embed_terms(db)
+
+        results = await vector_search(db, "query")
+        assert [r.term for r, _ in results] == ["Far"]
+
+    async def test_min_similarity_drops_candidates_below_it(
+        self, db: Database, mock_embeddings: MockEmbeddings
+    ) -> None:
+        """A candidate whose similarity is below `min_similarity` is dropped entirely."""
+        await upsert_results(
+            db,
+            [
+                make_search_result(
+                    url="https://x.com/a", term="Close", definition=None, topic=None
+                ),
+                make_search_result(url="https://x.com/b", term="Far", definition=None, topic=None),
+            ],
+        )
+        mock_embeddings.set("Close", [1.0, 0.0, 0.0, 0.0])
+        mock_embeddings.set("Far", [0.0, 1.0, 0.0, 0.0])
+        mock_embeddings.set("query", [1.0, 0.0, 0.0, 0.0])
+        await embed_terms(db)
+
+        results = await vector_search(db, "query", min_similarity=0.5)
+        assert [r.term for r, _ in results] == ["Close"]
+
+    async def test_min_similarity_can_empty_the_result_set(
+        self, db: Database, mock_embeddings: MockEmbeddings
+    ) -> None:
+        """Nothing clearing `min_similarity` returns an empty list, not the nearest neighbor anyway."""
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Far", definition=None, topic=None)]
+        )
+        mock_embeddings.set("Far", [0.0, 1.0, 0.0, 0.0])
+        mock_embeddings.set("query", [1.0, 0.0, 0.0, 0.0])
+        await embed_terms(db)
+
+        results = await vector_search(db, "query", min_similarity=0.9)
+        assert results == []
+
+    async def test_min_similarity_applied_before_limit(
+        self, db: Database, mock_embeddings: MockEmbeddings
+    ) -> None:
+        """A dropped low-similarity candidate does not use up part of `limit`'s budget."""
+        await upsert_results(
+            db,
+            [
+                make_search_result(
+                    url="https://x.com/a", term="Close1", definition=None, topic=None
+                ),
+                make_search_result(
+                    url="https://x.com/b", term="Close2", definition=None, topic=None
+                ),
+                make_search_result(url="https://x.com/c", term="Far", definition=None, topic=None),
+            ],
+        )
+        mock_embeddings.set("Close1", [1.0, 0.0, 0.0, 0.0])
+        mock_embeddings.set("Close2", [0.99, 0.01, 0.0, 0.0])
+        mock_embeddings.set("Far", [0.0, 1.0, 0.0, 0.0])
+        mock_embeddings.set("query", [1.0, 0.0, 0.0, 0.0])
+        await embed_terms(db)
+
+        results = await vector_search(db, "query", limit=2, min_similarity=0.5)
+        assert {r.term for r, _ in results} == {"Close1", "Close2"}

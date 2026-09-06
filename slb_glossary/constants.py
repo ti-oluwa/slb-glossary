@@ -477,6 +477,37 @@ class Constants:
     )
     """Output size of `embedding_model`'s vectors. Keep this matched to that model exactly."""
 
+    semantic_similarity_floor = Constant(
+        0.35,
+        env_var="SLB_GLOSSARY_SEMANTIC_SIMILARITY_FLOOR",
+        validator=lambda v: -1.0 <= v <= 1.0,
+    )
+    """
+    Suggested `min_similarity` for `slb_glossary.local.vector_search`
+    when standalone semantic results need to read as confident, not
+    merely "nearest available".
+
+    **Not applied automatically anywhere** - `vector_search`'s own
+    `min_similarity` defaults to `None` (no filtering at all), and
+    `slb_glossary.local.hybrid_search` always searches with filtering
+    disabled, since RRF fusion only needs *relative* rank, and
+    excluding a candidate outright before fusion would remove
+    otherwise-useful weak-but-present semantic evidence.
+
+    `0.35` is a reasonable starting point for typical `model2vec`
+    static-embedding cosine similarities (short, real, topically
+    related text pairs commonly land above roughly `0.4`; unrelated
+    pairs commonly sit below roughly `0.2-0.3`), **not a value measured
+    against this package's own embedding model** - this sandbox has no
+    network access to download it. Calibrate this for real before
+    relying on it, against your own corpus's actual similarity
+    distribution: embed a range of related and unrelated
+    query/term pairs and look at where the two distributions actually
+    separate, or sweep candidate values through
+    `scripts/relevance_bench.py --semantic` and compare `Recall@k`
+    before and after.
+    """
+
     rrf_k = Constant(
         60,
         env_var="SLB_GLOSSARY_RRF_K",

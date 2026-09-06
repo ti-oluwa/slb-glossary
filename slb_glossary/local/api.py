@@ -422,6 +422,7 @@ async def search(
     mode: SearchMode | str | None = None,
     scored: typing.Literal[False] = False,
     exclude: Collection[str] | None = None,
+    min_similarity: float | None = None,
 ) -> list[SearchResult]: ...
 @typing.overload
 async def search(
@@ -436,6 +437,7 @@ async def search(
     mode: SearchMode | str | None = None,
     scored: typing.Literal[True],
     exclude: Collection[str] | None = None,
+    min_similarity: float | None = None,
 ) -> list[tuple[SearchResult, float]]: ...
 
 
@@ -451,6 +453,7 @@ async def search(
     mode: SearchMode | str | None = None,
     scored: bool = False,
     exclude: Collection[str] | None = None,
+    min_similarity: float | None = None,
 ) -> list[SearchResult] | list[tuple[SearchResult, float]]:
     """
     Search the local database for `query`, best match first.
@@ -500,6 +503,10 @@ async def search(
     :param exclude: URLs and/or term names to leave out of the results
         entirely. See `slb_glossary.utils.split_exclude` for how an entry
         is told apart as a URL vs. a term name.
+    :param min_similarity: With `mode="semantic"` only (ignored
+        otherwise), forwarded as-is to `slb_glossary.local.vector_search`'s
+        own `min_similarity` - see its docstring. `None` (the default)
+        applies no confidence floor, same as calling `vector_search` directly.
     :return: Matching `SearchResult`s, or `(SearchResult, float)` pairs if
         `scored=True`, best match first either way.
     :raises DatabaseError: With `mode="semantic"`/`"hybrid"`, if
@@ -530,6 +537,7 @@ async def search(
             limit=limit,
             fuzzy=fuzzy,
             exclude=exclude,
+            min_similarity=min_similarity,
         )
     else:
         results = await hybrid_search(

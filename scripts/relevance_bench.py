@@ -123,12 +123,67 @@ async def run_semantic_and_hybrid(db: Database) -> None:
     print(semantic.format_table())
     print()
     print(hybrid.format_table())
+    return True
+
+
+async def run_rrf_sweep(db: Database) -> None:
+    """
+    Grid-search `constants.lexical_weight`/`semantic_weight`/`rrf_k`
+    combinations (the ranges from the search-quality spec's RRF-tuning
+    step) against the benchmark, and report the best by overall NDCG@5.
+
+    Needs `embed_terms` to have already run successfully against `db`
+    (see `run_semantic_and_hybrid`) - this only swaps `constants`
+    values and re-runs `hybrid_search`, it does not re-embed anything.
+    """
+    from slb_glossary.constants import constants
+    from slb_glossary.local.hybrid import hybrid_search
+
+    lexical_weights = (0.75, 1.0, 1.25, 1.5, 2.0)
+    semantic_weights = (0.75, 1.0, 1.25, 1.5)
+    rrf_ks = (20, 30, 40, 60)
+
+    original = (constants.lexical_weight, constants.semantic_weight, constants.rrf_k)
+    best: tuple[float, tuple[float, float, int]] | None = None
+    rows: list[tuple[float, float, int, float, float]] = []
+    try:
+        for lexical_weight in lexical_weights:
+            for semantic_weight in semantic_weights:
+                for rrf_k in rrf_ks:
+                    constants.lexical_weight = lexical_weight
+                    constants.semantic_weight = semantic_weight
+                    constants.rrf_k = rrf_k
+                    report = await evaluate(db, hybrid_search, mode_label="hybrid")
+                    rows.append(
+                        (lexical_weight, semantic_weight, rrf_k, report.overall.ndcg_at_5, report.overall.recall_at_5)
+                    )
+                    if best is None or report.overall.ndcg_at_5 > best[0]:
+                        best = (report.overall.ndcg_at_5, (lexical_weight, semantic_weight, rrf_k))
+    finally:
+        constants.lexical_weight, constants.semantic_weight, constants.rrf_k = original
+
+    rows.sort(key=lambda row: row[3], reverse=True)
+    print(f"{'lexical_w':>10}{'semantic_w':>12}{'rrf_k':>8}{'NDCG@5':>10}{'R@5':>8}")
+    for lexical_weight, semantic_weight, rrf_k, ndcg, recall in rows[:10]:
+        print(f"{lexical_weight:>10.2f}{semantic_weight:>12.2f}{rrf_k:>8}{ndcg:>10.3f}{recall:>8.3f}")
+    if best:
+        _, (lw, sw, k) = best
+        print(
+            f"\nBest by NDCG@5: lexical_weight={lw}, semantic_weight={sw}, rrf_k={k} "
+            f"(current baseline: lexical_weight={original[0]}, semantic_weight={original[1]}, rrf_k={original[2]})"
+        )
 
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--semantic", action="store_true", help="Also run semantic/hybrid (needs the `semantic` extra)."
+    )
+    parser.add_argument(
+        "--rrf-sweep",
+        action="store_true",
+        help="Grid-search lexical_weight/semantic_weight/rrf_k for hybrid_search "
+        "(implies --semantic; needs the `semantic` extra and a successful embed).",
     )
     args = parser.parse_args()
 
@@ -137,9 +192,13 @@ async def main() -> None:
         async with database(db_path) as db:
             await seed_corpus(db)
             await run_lexical(db)
-            if args.semantic:
+            if args.semantic or args.rrf_sweep:
                 print()
-                await run_semantic_and_hybrid(db)
+                embedded = await run_semantic_and_hybrid(db)
+                if args.rrf_sweep and embedded:
+                    print()
+                    print("-- RRF sweep (hybrid, by NDCG@5) --")
+                    await run_rrf_sweep(db)
 
 
 if __name__ == "__main__":

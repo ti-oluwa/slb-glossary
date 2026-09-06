@@ -282,6 +282,7 @@ async def vector_search(
     limit: int | None = 10,
     fuzzy: bool = False,
     exclude: Collection[str] | None = None,
+    min_similarity: float | None = None,
 ) -> list[tuple[SearchResult, float]]:
     """
     Rank locally stored, embedded terms by semantic similarity to `query`.
@@ -315,6 +316,19 @@ async def vector_search(
         Has no effect if `topic` is falsy.
     :param exclude: URLs and/or term names to leave out of the results
         entirely.
+    :param min_similarity: Drop a candidate whose cosine similarity is
+        below this. `None` (the default) applies no floor at all - the
+        nearest embedded term always comes back, confidently related to
+        `query` or not (a purely nearest-neighbor search always finds
+        *something*, since it has no notion of "not similar enough").
+        Pass `constants.semantic_similarity_floor` (after calibrating
+        it for your own corpus - see its docstring) to instead let a
+        genuinely unrelated query come back with fewer results, or none
+        at all, rather than a confidently-presented but irrelevant
+        nearest neighbor. Applied after the nearest-neighbor fetch and
+        topic/language/exclude filtering, before `limit` truncates the
+        list, so it never eats into `limit`'s budget by discarding
+        already-excluded rows.
     :return: `(result, similarity)` pairs, most similar first.
         `similarity` is a cosine similarity, in `[-1.0, 1.0]` in theory
         and close to `[0.0, 1.0]` in practice for real text. This is not
@@ -366,14 +380,15 @@ async def vector_search(
     sql = _apply_exclude(sql, params, exclude, url_column="terms.url", term_column="terms.term")
 
     sql += " ORDER BY matches.distance ASC"
-    if limit:
-        sql += " LIMIT ?"
-        params.append(limit)
 
     async with db.connection.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
 
     scored = [(_row_to_result(row), 1.0 - row["distance"]) for row in rows]
+    if min_similarity is not None:
+        scored = [(result, similarity) for result, similarity in scored if similarity >= min_similarity]
+    if limit:
+        scored = scored[:limit]
 
     elapsed = time.monotonic() - started_at
     logger.debug(
