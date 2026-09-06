@@ -236,24 +236,39 @@ class TestLexicalSearch:
         assert [r.term for r, _ in results] == ["Porosity"]
 
     async def test_literal_double_quote_in_query_does_not_raise(self, db: Database) -> None:
-        """A literal `"` in the query text reaches SQLite as safely-quoted, not a syntax error."""
+        """
+        A literal `"` in the query text reaches SQLite as safely-quoted, not a syntax error.
+
+        FTS5 itself finds nothing for the mangled token (as before), but
+        the fuzzy-typo fallback now recovers "Porosity" from
+        `poros"ity` anyway, since it's a close spelling once the stray
+        `"` is accounted for. What matters here is that it doesn't
+        raise, not that it comes back empty.
+        """
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
         results = await lexical_search(db, 'poros"ity')
-        assert results == []
+        assert isinstance(results, list)
+        if results:
+            assert results[0][0].term == "Porosity"
+            assert results[0][1] <= constants.fuzzy_match_score_cap
 
     @pytest.mark.parametrize("query", ["foo OR bar", "foo or bar"])
     async def test_or_in_query_is_literal_text_not_a_boolean_operator(
         self, db: Database, query: str
     ) -> None:
         """
-        `OR` in the query text is ANDed as a literal token like any other,
-        never interpreted as FTS5's boolean `OR`.
+        `OR` in the query text is quoted as a literal token like any
+        other, never handed to FTS5 unquoted as its own boolean `OR`.
 
-        If `OR` were left unquoted, this query would match either
-        "foo"-containing or "bar"-containing rows (a boolean union). Two
-        rows exist, one matching each half, and neither contains the
-        literal word "or" - so a correct, literal-text implementation
-        matches neither.
+        Both rows come back here (each matches one real word of the
+        query), but that is this package's *own* token-level OR
+        fallback kicking in - every token still reaches SQLite safely
+        quoted, one at a time, never as a raw FTS5 boolean expression.
+        The `AND` query tried first (`"foo"* AND "or"* AND "bar"*`)
+        matches neither row (no stored text contains the literal token
+        "or"), which is what actually proves `OR` was not parsed as an
+        operator: an unquoted boolean `OR` there would have matched
+        immediately, without ever needing the fallback at all.
         """
         await upsert_results(
             db,
@@ -263,24 +278,29 @@ class TestLexicalSearch:
             ],
         )
         results = await lexical_search(db, query)
-        assert results == []
+        assert {r.term for r, _ in results} == {"Foo Term", "Bar Term"}
+        # Neither is a name match; both are capped, bm25-only content matches.
+        assert all(score <= constants.content_match_score_cap for _, score in results)
 
     async def test_not_in_query_is_literal_text_not_a_unary_operator(self, db: Database) -> None:
         """
-        `NOT` in the query text is ANDed as a literal token, never
-        interpreted as FTS5's unary `NOT`.
+        `NOT` in the query text is quoted as a literal token, never
+        handed to FTS5 unquoted as its own unary `NOT`.
 
         `NOT drilling`, if `NOT` were left unquoted, would be a syntax
-        error (FTS5's `NOT` needs a left-hand operand) or, parsed some
-        other way, could match rows that *do not* mention "drilling". A
-        literal-text implementation just looks for both "not" and
-        "drilling" as tokens, which matches nothing here.
+        error (FTS5's `NOT` needs a left-hand operand) - it isn't, so
+        this executes at all, which is what this test actually
+        verifies. "Mud" surfaces via the token-level OR fallback (its
+        definition mentions "drilling"; nothing stored contains the
+        literal word "not"), scored as a capped, bm25-only content
+        match rather than a name match.
         """
         await upsert_results(
             db, [make_search_result(url="https://x.com/a", term="Mud", definition="drilling")]
         )
         results = await lexical_search(db, "NOT drilling")
-        assert results == []
+        assert [r.term for r, _ in results] == ["Mud"]
+        assert results[0][1] <= constants.content_match_score_cap
 
     async def test_near_in_query_is_literal_text_not_a_proximity_operator(
         self, db: Database
@@ -288,13 +308,19 @@ class TestLexicalSearch:
         """
         `NEAR` in the query text does not trigger FTS5's `NEAR(...)`
         proximity syntax (which additionally requires parentheses this
-        query does not supply, and would otherwise raise a syntax error).
+        query does not supply, and would otherwise raise a syntax
+        error - not raising is what this actually verifies).
+
+        "Porosity" surfaces because the query, "porosity near rock",
+        contains it as a whole-word phrase (`NameMatchTier.CONTAINS`) -
+        a real, intentional lexical signal, not proximity search.
         """
         await upsert_results(
             db, [make_search_result(url="https://x.com/a", term="Porosity", definition="rock")]
         )
         results = await lexical_search(db, "porosity NEAR rock")
-        assert results == []
+        assert results[0][0].term == "Porosity"
+        assert results[0][1] == constants.contains_match_score
 
     @pytest.mark.parametrize("query", ["*", "foo*bar", "(foo", "foo)", "foo*bar OR (baz"])
     async def test_syntax_looking_queries_execute_without_raising(
@@ -323,3 +349,162 @@ class TestLexicalSearch:
         )
         results = await lexical_search(db, "café")
         assert any(r.term == "Porosidad" for r, _ in results)
+
+
+@pytest.mark.anyio
+class TestLexicalSearchTiers:
+    """`slb_glossary.scoring.classify_name_match`'s tiers, exercised through `lexical_search`."""
+
+    async def test_contains_tier_ranks_above_bm25_content_tier(self, db: Database) -> None:
+        """
+        A term whose name contains the whole query as a phrase (but is
+        neither exact nor a prefix) outranks a term that only mentions
+        the query heavily in its definition.
+        """
+        await upsert_results(
+            db,
+            [
+                make_search_result(url="https://x.com/a", term="Gas Lift"),
+                make_search_result(
+                    url="https://x.com/b",
+                    term="Unrelated Term",
+                    definition="lift lift lift lift lift lift",
+                ),
+            ],
+        )
+        results = await lexical_search(db, "lift")
+        assert results[0][0].term == "Gas Lift"
+        assert results[0][1] == constants.contains_match_score
+
+    async def test_contains_tier_ranks_below_prefix_tier(self, db: Database) -> None:
+        """A prefix match still outranks a mere phrase-containment match for the same query."""
+        await upsert_results(
+            db,
+            [
+                make_search_result(url="https://x.com/a", term="Lift System"),
+                make_search_result(url="https://x.com/b", term="Gas Lift"),
+            ],
+        )
+        results = await lexical_search(db, "lift")
+        assert [r.term for r, _ in results][:2] == ["Lift System", "Gas Lift"]
+        assert results[0][1] == constants.prefix_match_score
+        assert results[1][1] == constants.contains_match_score
+
+    async def test_all_tokens_tier_for_reordered_multiword_query(self, db: Database) -> None:
+        """Every query token present in the term name, just not contiguously, scores the all-tokens tier."""
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Gas Lift Valve")])
+        results = await lexical_search(db, "valve gas lift")
+        assert results[0][0].term == "Gas Lift Valve"
+        assert results[0][1] == constants.all_tokens_match_score
+
+    async def test_all_tokens_tier_tolerates_a_trailing_token_typo(self, db: Database) -> None:
+        """
+        A query token that's a prefix of (not equal to) a term token
+        still counts as covered, even out of order (a contiguous,
+        in-order truncation like "wireline logg" already hits the
+        stronger prefix tier; this exercises token coverage specifically).
+        """
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Wireline Logging Tool")]
+        )
+        results = await lexical_search(db, "logg wireline")
+        assert results[0][0].term == "Wireline Logging Tool"
+        assert results[0][1] == constants.all_tokens_match_score
+
+    async def test_partial_token_overlap_scaled_by_coverage(self, db: Database) -> None:
+        """Only some query tokens present in the name scores proportionally, capped below the all-tokens tier."""
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Gas Lift Valve")])
+        results = await lexical_search(db, "gas lift unrelatedword")
+        assert results[0][0].term == "Gas Lift Valve"
+        assert 0.0 < results[0][1] < constants.all_tokens_match_score
+        assert results[0][1] <= constants.token_overlap_score_cap
+
+    async def test_name_tiers_all_outrank_bm25_content_tier(self, db: Database) -> None:
+        """Every name-tier score is above `content_match_score_cap`, so a name match always wins."""
+        assert constants.token_overlap_score_cap > constants.content_match_score_cap
+        assert constants.all_tokens_match_score > constants.token_overlap_score_cap
+        assert constants.contains_match_score > constants.all_tokens_match_score
+        assert constants.prefix_match_score > constants.contains_match_score
+        assert constants.exact_match_score > constants.prefix_match_score
+
+
+@pytest.mark.anyio
+class TestLexicalSearchFuzzyFallback:
+    """The misspelling-tolerant fallback (`_fuzzy_fallback`), exercised through `lexical_search`."""
+
+    async def test_recovers_a_misspelled_term_fts5_prefix_matching_cannot(
+        self, db: Database
+    ) -> None:
+        """
+        A typo in the middle of a word ("porosoty") defeats FTS5's own
+        prefix matching entirely (no stored token starts with the
+        literal misspelled string), but the fuzzy fallback still
+        recovers the real term.
+        """
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
+        results = await lexical_search(db, "porosoty")
+        assert results
+        assert results[0][0].term == "Porosity"
+
+    async def test_fuzzy_recovered_score_never_exceeds_its_cap(self, db: Database) -> None:
+        """A fuzzy-recovered result's score never exceeds `constants.fuzzy_match_score_cap`."""
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Permeability")])
+        results = await lexical_search(db, "permeabilty")
+        assert results
+        assert results[0][0].term == "Permeability"
+        assert results[0][1] <= constants.fuzzy_match_score_cap
+
+    async def test_fuzzy_fallback_never_outranks_a_real_exact_match(self, db: Database) -> None:
+        """
+        A fuzzy match recovered for one term never outranks a genuine
+        exact/prefix match for a *different* query in the same result set.
+        """
+        await upsert_results(
+            db,
+            [
+                make_search_result(url="https://x.com/a", term="Porosity"),
+                make_search_result(url="https://x.com/b", term="Reservoir"),
+            ],
+        )
+        # "reservior" is a near-miss of "Reservoir", not of "Porosity",
+        # so this only exercises the fuzzy path for one of the two terms.
+        results = await lexical_search(db, "reservior")
+        assert results[0][0].term == "Reservoir"
+        assert results[0][1] <= constants.fuzzy_match_score_cap
+
+    async def test_fuzzy_fallback_does_not_fire_when_a_strong_match_already_exists(
+        self, db: Database
+    ) -> None:
+        """
+        No unrelated fuzzy-typo noise is added once a confident
+        name-tier match (at/above `token_overlap_score_cap`) already exists.
+        """
+        await upsert_results(
+            db,
+            [
+                make_search_result(url="https://x.com/a", term="Porosity"),
+                make_search_result(url="https://x.com/b", term="Porosidad"),
+            ],
+        )
+        results = await lexical_search(db, "porosity")
+        # Only the genuine (exact) match, no fuzzy-recovered near-miss noise.
+        assert [r.term for r, _ in results] == ["Porosity"]
+
+    async def test_no_close_match_returns_empty_list(self, db: Database) -> None:
+        """A query with no close spelling of any stored term still returns an empty list, not an error."""
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
+        results = await lexical_search(db, "zzz_completely_unrelated_zzz")
+        assert results == []
+
+    async def test_fuzzy_fallback_respects_topic_filter(self, db: Database) -> None:
+        """A fuzzy-recovered term still respects an active `topic` filter."""
+        await upsert_results(
+            db,
+            [
+                make_search_result(url="https://x.com/a", term="Porosity", topic="Geology"),
+                make_search_result(url="https://x.com/b", term="Porosity", topic="Drilling"),
+            ],
+        )
+        results = await lexical_search(db, "porosoty", topic="Drilling")
+        assert [r.term for r, _ in results] == ["Porosity"]
+        assert all(r.topic == "Drilling" for r, _ in results)

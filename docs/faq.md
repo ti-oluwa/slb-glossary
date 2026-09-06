@@ -43,6 +43,70 @@ Only for `--mode semantic`/`--mode hybrid` (CLI) or `mode="semantic"`/`"hybrid"`
 
 Yes, `--browser-type firefox`/`webkit` (CLI) or `browser_type="firefox"`/`"webkit"` (library). Chromium is the default and the one this documentation's examples assume. Firefox/WebKit sessions will run just as fine either way. See [Sessions and the Browser](concepts/sessions.md#why-patchright-not-plain-playwright).
 
+## `BrowserError: Failed to launch the glossary browser session`
+
+This wraps whatever Playwright/patchright actually failed on; the detail is usually further down in the traceback. The two common causes:
+
+- **The browser build isn't installed.** Playwright's own error looks like `Executable doesn't exist at .../chrome-linux/chrome`. Run `slb install chromium` (see [Installing the browser build](getting-started/installation.md#installing-the-browser-build)), then `slb install --list` to confirm it's actually there.
+- **A bad `executable_path`/`launch_kwargs` override.** If you've pointed `open_session(executable_path=...)` or `--executable-path` at a specific binary, confirm that path exists and is actually executable.
+
+## `SessionNotInitializedError`
+
+```text
+Session is not initialized and `auto_initialize=False`.
+```
+
+You called a search function on a `Session` that hasn't loaded its topics/size yet. Either call `await session.initialize()` first, open it with `open_session(..., initialize=True)` (the default, so this usually only happens if you built a `Session` some other way), or pass `auto_initialize=True` to the call itself to let it initialize lazily.
+
+## `NetworkError: Could not reach the glossary at ...`
+
+Raised when `session.initialize()` (or a lazy `auto_initialize=True` call) can't load the glossary's homepage at all - a real connectivity problem, a very slow network, or the site being down, not a bug in a specific search. Check the URL is reachable in a normal browser, then raise `timeout`/`--timeout` and see [Retrying a flaky first load](concepts/sessions.md#retrying-a-flaky-first-load).
+
+## `EmbeddingError` when using `--mode semantic`/`hybrid`
+
+Two different messages, two different fixes:
+
+- **`Semantic search needs the 'model2vec' package...`** - install the extra: `pip install slb-glossary[semantic]`.
+- **`Embedding model '...' produces N-dimensional vectors, but constants.embedding_dim is M`** - you've changed `SLB_GLOSSARY_EMBEDDING_MODEL` to a model with a different output size without also updating `SLB_GLOSSARY_EMBEDDING_DIM`. Set them consistently, or leave both at their defaults.
+
+Either way, this is a local-database-only error - `--mode semantic`/`hybrid` doesn't exist for live search at all, so hitting this means you're already on the right path, just missing a step. See [Do I need the semantic extra?](#do-i-need-the-semantic-extra) above.
+
+## `DatabaseError` about `sqlite-vec` or FTS5
+
+- **`Semantic search needs the 'sqlite-vec' package...`** - same fix as the `model2vec` case above: `pip install slb-glossary[semantic]`.
+- **`Could not load the 'sqlite-vec' SQLite extension...`** - the `sqlite-vec` package is installed, but your Python's SQLite build has extension loading disabled. This is a Python/OS packaging issue, not something `slb-glossary` can work around; a build from python.org or your OS's normal package manager usually has it enabled, some minimal/hardened builds don't.
+- **`The installed SQLite build has no FTS5 extension...`** - `slb_glossary.local`'s ordinary lexical search needs FTS5, which is on by default in nearly every modern SQLite build. If you're seeing this, you're likely on a custom-built Python; rebuilding against a stock SQLite (or using a standard python.org/Homebrew/apt build) resolves it.
+
+## `QueryError: needs at least one of db or session`
+
+You called a `slb_glossary.query` function (`search`, `get_term`, etc.) with neither `db` nor `session`. At least one is required so there's something to actually query. Pass a `Database` (for `source=Source.LOCAL`/`AUTO`), a `Session` (for `source=Source.LIVE`/`AUTO`), or both.
+
+A related one: **`source=Source.LOCAL requires db`**/**`source=Source.LIVE requires session`** - you asked for a specific source but didn't pass what it needs. `source=Source.AUTO` (the default) picks whichever of `db`/`session` you gave it, so this only comes up when you've pinned the source explicitly.
+
+## `QueryError` about a session's language not matching
+
+```text
+Requested language 'es' does not match this session's own language 'en'.
+```
+
+A `Session` is opened for one language edition (`Language.ENGLISH` by default) and stays that way for its whole lifetime; you can't search a different language through it mid-session. Open a second `Session` with `language="es"` instead - see [Sessions and the Browser](concepts/sessions.md).
+
+## `ParsingError`
+
+```text
+... did not contain the markup a parser expected.
+```
+
+This means the glossary site's HTML structure no longer matches what `slb_glossary`'s parsers look for - most likely the site changed something, not a one-off fluke. It's worth an issue report with the term/URL that triggered it. In the meantime, `--mode lexical`/`local search` against whatever's already cached still works fine; this only affects fetching new pages live.
+
+## The MCP server won't start: `needs the 'mcp' extra`
+
+`slb mcp serve` (and anything under `slb_glossary.mcp`) needs `pip install slb-glossary[mcp]`. This is a separate extra from `semantic`; you don't need one to use the other.
+
+## Am I going to get rate-limited or blocked?
+
+Nothing in `slb_glossary` throttles your requests for you - that's on you. Keep concurrency modest (see [Sessions and the Browser](concepts/sessions.md) on `max_pages`), avoid tight retry loops on failure, and prefer the local cache (`--cache`, `sync`, `local import`) over repeated live lookups of the same terms. Hammering the site is the fastest way to get treated as a bot regardless of patchright's stealth patches, which reduce automation *detection*, not request *volume*.
+
 ## Something else is wrong
 
 Check `slb --version` and `python -c "import slb_glossary; print(slb_glossary.__version__)"` are the version you expect, then `slb install --list` to confirm the browser build is actually present. If neither explains it, `--log-level debug --log-to some-file.log` (or the matching `log_level`/`LogSink` in library code) is the fastest way to see what actually happened during a run before reporting an issue.

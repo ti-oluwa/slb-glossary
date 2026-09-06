@@ -351,6 +351,110 @@ class Constants:
     lexical scoring. Not applied to semantic or hybrid scoring, which have their own natural scale.
     """
 
+    contains_match_score = Constant(
+        0.75,
+        env_var="SLB_GLOSSARY_CONTAINS_MATCH_SCORE",
+        validator=lambda v: 0.0 <= v <= 1.0,
+    )
+    """
+    Score for a term name that contains the whole query as a
+    whitespace-bounded phrase (or vice-versa: the term name is itself
+    a whitespace-bounded phrase inside a longer query), without being
+    an exact match or a prefix. E.g. query "lift" against term "Gas
+    Lift", or query "gas lift valve system" against term "Gas Lift
+    Valve".
+
+    Ranked below `prefix_match_score` (a term *starting with* the
+    query is stronger evidence than merely containing it somewhere)
+    and above `all_tokens_match_score`. See
+    `slb_glossary.scoring.classify_name_match`.
+    """
+
+    all_tokens_match_score = Constant(
+        0.65,
+        env_var="SLB_GLOSSARY_ALL_TOKENS_MATCH_SCORE",
+        validator=lambda v: 0.0 <= v <= 1.0,
+    )
+    """
+    Score for a term name where every query token is present (as a
+    whole token, or the start of one, tolerating a trailing typo/
+    truncation), but not contiguously as a phrase, e.g. a reordered or
+    interleaved multi-word query. See
+    `slb_glossary.scoring.classify_name_match`.
+    """
+
+    token_overlap_score_cap = Constant(
+        0.55,
+        env_var="SLB_GLOSSARY_TOKEN_OVERLAP_SCORE_CAP",
+        validator=lambda v: 0.0 <= v <= 1.0,
+    )
+    """
+    Upper bound on a term name's score when only *some*, not all, of
+    the query's tokens are present in it. The actual score is this cap
+    scaled by the fraction of query tokens covered. Kept below
+    `all_tokens_match_score` (a partial token match is weaker evidence
+    than a complete one) and above `fuzzy_match_score_cap`/
+    `content_match_score_cap`. See `slb_glossary.scoring.classify_name_match`.
+    """
+
+    fuzzy_match_score_cap = Constant(
+        0.50,
+        env_var="SLB_GLOSSARY_FUZZY_MATCH_SCORE_CAP",
+        validator=lambda v: 0.0 <= v <= 1.0,
+    )
+    """
+    Upper bound on a result's score when it was only found by
+    `slb_glossary.local.lexical.lexical_search`'s misspelling-tolerant
+    fallback (a real term name recovered via fuzzy string matching,
+    not a literal match against the query as typed). Kept below every
+    literal-match tier (`prefix_match_score`, `contains_match_score`,
+    `all_tokens_match_score`, `token_overlap_score_cap`) so a
+    typo-recovered guess never outranks a genuine literal match, but
+    above `relevance_threshold`, since a fuzzy match that clears
+    `fuzzy_match_cutoff` has, in practice, recovered a real term name
+    rather than merely overlapping its content.
+    """
+
+    fuzzy_match_cutoff = Constant(
+        0.72,
+        env_var="SLB_GLOSSARY_FUZZY_MATCH_CUTOFF",
+        validator=lambda v: 0.0 <= v <= 1.0,
+    )
+    """
+    Minimum `difflib` similarity ratio for a stored term name to count
+    as a fuzzy-typo match of the query, in
+    `slb_glossary.local.lexical_search`'s misspelling fallback. Lower
+    tolerates more distant typos at the risk of false positives.
+    """
+
+    fuzzy_candidate_limit = Constant(
+        5,
+        env_var="SLB_GLOSSARY_FUZZY_CANDIDATE_LIMIT",
+        validator=lambda v: v >= 1,
+    )
+    """
+    Max number of fuzzy-typo term-name candidates
+    `slb_glossary.local.lexical_search` considers per query. Keeps the
+    fallback's `difflib` pass and the follow-up row lookup bounded
+    regardless of how many stored terms loosely resemble the query.
+    """
+
+    lexical_candidate_cap = Constant(
+        500,
+        env_var="SLB_GLOSSARY_LEXICAL_CANDIDATE_CAP",
+        validator=lambda v: v >= 1,
+    )
+    """
+    Max rows `slb_glossary.local.lexical_search` pulls from FTS5 before
+    ranking/tiering in Python, regardless of the caller's own `limit`.
+    Ranking (exact/prefix/contains/token-overlap/bm25 tiering) happens
+    in Python after this fetch, so it needs more candidates than the
+    final `limit` to avoid a well-ranked result being cut off by a
+    naive bm25-only pre-sort; this cap just bounds that fetch for a
+    query whose tokens are common enough to match a large fraction of
+    the corpus.
+    """
+
     embedding_model = Constant(
         "minishlab/potion-retrieval-32M",
         env_var="SLB_GLOSSARY_EMBEDDING_MODEL",
