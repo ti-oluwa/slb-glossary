@@ -4,15 +4,9 @@ Run the relevance benchmark (`tests/relevance/`) and print before/after tables.
 
 ```bash
 python scripts/relevance_bench.py            # lexical only (no extra deps)
-python scripts/relevance_bench.py --semantic  # + semantic/hybrid (needs `semantic` extra
-                                               #   and network access to download the
-                                               #   embedding model on first run)
+python scripts/relevance_bench.py --semantic  # + semantic/hybrid (needs `semantic` extra)
+python scripts/relevance_bench.py --rrf-sweep # + grid-search RRF weights/k (implies --semantic)
 ```
-
-"Before" for lexical search is `_legacy_lexical_search` below: a frozen
-copy of the two-tier (exact/prefix, then bm25) algorithm this task
-started from, kept here specifically so this script can report a real
-before/after comparison without needing git history at runtime.
 """
 
 import argparse
@@ -40,13 +34,7 @@ logging.getLogger("slb_glossary").setLevel(logging.WARNING)
 async def _legacy_lexical_search(
     db: Database, query: str, *, limit: int | None = 20, **_: typing.Any
 ) -> list[tuple[SearchResult, float]]:
-    """
-    Frozen copy of `slb_glossary.local.lexical.lexical_search` as it
-    stood before this benchmark/tiering work: two tiers only
-    (exact/prefix name match, computed in SQL, then plain bm25 for
-    everything else), no contains/all-tokens/partial-token tiers, no
-    fuzzy-typo fallback, no `AND`-then-`OR` retrieval fallback.
-    """
+    """Frozen pre-tiering copy of `lexical_search`: exact/prefix only, then plain bm25, no fuzzy fallback."""
     from slb_glossary.local.lexical import build_fts_query
 
     normalized_query = clean_query(query)
@@ -121,11 +109,6 @@ async def run_semantic_and_hybrid(db: Database) -> bool:
         await embed_terms(db, only_missing=False)
     except Exception as exc:
         print(f"Skipping semantic/hybrid: could not embed the corpus ({exc!r}).")
-        print(
-            "This is expected in a network-restricted sandbox: embedding needs a "
-            "one-time download of the model2vec model from Hugging Face. Run this "
-            "script in an environment with that access for real semantic/hybrid numbers."
-        )
         return False
 
     semantic = await evaluate(db, vector_search, mode_label="semantic")
@@ -137,15 +120,7 @@ async def run_semantic_and_hybrid(db: Database) -> bool:
 
 
 async def run_rrf_sweep(db: Database) -> None:
-    """
-    Grid-search `constants.lexical_weight`/`semantic_weight`/`rrf_k`
-    combinations (the ranges from the search-quality spec's RRF-tuning
-    step) against the benchmark, and report the best by overall NDCG@5.
-
-    Needs `embed_terms` to have already run successfully against `db`
-    (see `run_semantic_and_hybrid`) - this only swaps `constants`
-    values and re-runs `hybrid_search`, it does not re-embed anything.
-    """
+    """Grid-search `lexical_weight`/`semantic_weight`/`rrf_k` against the benchmark; report the best by NDCG@5."""
     from slb_glossary.constants import constants
     from slb_glossary.local.hybrid import hybrid_search
 

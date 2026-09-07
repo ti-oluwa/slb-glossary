@@ -208,9 +208,9 @@ def show_similar_prompt(term: str, similar: typing.Sequence[QueryResult[SearchRe
     another right away, or quit with `q`/`x`. Only called on an interactive terminal.
 
     :param term: The originally looked-up term, only used for messaging.
-    :param similar: Similarly-named live results to offer as alternatives,
-        each already wrapped in its own `QueryResult` (with its own
-        score), best match first.
+    :param similar: Alternatives to offer, from whichever source the
+        lookup used (local or live), each already wrapped in its own
+        `QueryResult` (with its own score), best match first.
     """
     click.echo(f'No exact definition found for "{term}".')
     click.echo("Did you mean:")
