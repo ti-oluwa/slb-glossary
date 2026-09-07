@@ -1,13 +1,4 @@
-"""
-Representative oil-and-gas glossary corpus for the relevance benchmark.
-
-See `tests/relevance/__init__.py` for why this is a hand-built subset
-rather than the real synced corpus. Terms are grouped so that several
-closely related/ambiguous concepts sit side by side (several lift
-methods, several logging-while-drilling terms, several pressure terms,
-etc.), which is what makes the "ambiguous"/"conceptual" query
-categories in `dataset.py` meaningful to test against.
-"""
+"""Representative oil-and-gas glossary corpus for the relevance benchmark. Includes related/ambiguous term clusters."""
 
 import typing
 
@@ -169,8 +160,7 @@ CORPUS: list[CorpusEntry] = [
     {
         "term": "Pore Pressure",
         "definition": (
-            "The pressure exerted by fluids contained within the pore spaces "
-            "of a rock formation."
+            "The pressure exerted by fluids contained within the pore spaces of a rock formation."
         ),
         "topic": "Drilling",
     },
@@ -263,8 +253,7 @@ CORPUS: list[CorpusEntry] = [
     {
         "term": "Source Rock",
         "definition": (
-            "A rock rich in organic matter that, if heated sufficiently, will "
-            "generate oil or gas."
+            "A rock rich in organic matter that, if heated sufficiently, will generate oil or gas."
         ),
         "topic": "Geology",
     },

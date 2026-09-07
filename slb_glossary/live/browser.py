@@ -147,12 +147,12 @@ def _resolve_blocked_resources(
     )
 
 
-def _build_blocker(
+def build_blocker(
     blocked_resources: frozenset[str], blocked_hosts: frozenset[str] | None = None
 ) -> typing.Callable[[Route], typing.Awaitable[None]]:
     """Build a Playwright route handler that aborts blocked resource types or hosts."""
 
-    async def _handle_route(route: Route) -> None:
+    async def handle_route(route: Route) -> None:
         request = route.request
         if request.resource_type in blocked_resources:
             await route.abort()
@@ -165,10 +165,10 @@ def _build_blocker(
         else:
             await route.continue_()
 
-    return _handle_route
+    return handle_route
 
 
-def _apply_log_sink(log_sink: LogSink | type[LogSink] | str | pathlib.Path | None) -> None:
+def apply_log_sink(log_sink: LogSink | type[LogSink] | str | pathlib.Path | None) -> None:
     """
     Resolve and install `log_sink` as the destination for `slb_glossary`'s logging.
 
@@ -190,7 +190,7 @@ def _apply_log_sink(log_sink: LogSink | type[LogSink] | str | pathlib.Path | Non
     logger.debug("Session logging routed to %r", resolved)
 
 
-async def _launch_browser(
+async def launch_browser(
     playwright: Playwright,
     browser_type: BrowserType | str,
     *,
@@ -342,7 +342,7 @@ async def open_session(
         reason, including an unsupported `browser_type`.
     :raises LoggingError: If `log_sink` was given but could not be resolved/set up.
     """
-    _apply_log_sink(log_sink)
+    apply_log_sink(log_sink)
 
     if browser_type not in BrowserType:
         raise ValueError(
@@ -362,7 +362,7 @@ async def open_session(
     logger.info("Creating a %r glossary search session using %s", language.value, browser_type)
     playwright = await async_playwright().start()
     try:
-        browser = await _launch_browser(
+        browser = await launch_browser(
             playwright,
             browser_type,
             headless=headless,
@@ -387,7 +387,7 @@ async def open_session(
         blocked_resources = _resolve_blocked_resources(block)
         if blocked_resources:
             await context.route(
-                "**/*", _build_blocker(blocked_resources, blocked_hosts=BLOCKED_HOSTS)
+                "**/*", build_blocker(blocked_resources, blocked_hosts=BLOCKED_HOSTS)
             )
             logger.debug("Blocking resource types: %s", ", ".join(sorted(blocked_resources)))
 

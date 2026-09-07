@@ -350,7 +350,7 @@ async def resolve_lookup(
     :param params: The command's parsed parameters (for `live_session`).
     :param db: An already-open local `Database`, or `None` if local storage
         is disabled for this run.
-    :param source: The resolved `Source` to honor (see `resolve_source`).
+    :param source: The resolved `Source` to honour (see `resolve_source`).
     :param local_call: Awaitable-returning callable given `db`, e.g.
         `lambda db: query.get_term(term, db=db, source=Source.LOCAL)`.
     :param live_call: Awaitable-returning callable given an opened
@@ -420,7 +420,7 @@ async def resolve_stream(
     :param params: The command's parsed parameters (for `live_session`).
     :param db: An already-open local `Database`, or `None` if local storage
         is disabled for this run.
-    :param source: The resolved `Source` to honor (see `resolve_source`).
+    :param source: The resolved `Source` to honour (see `resolve_source`).
     :param local_call: Async-generator-returning callable given `db`, e.g.
         `lambda db: query.search(term, db=db, source=Source.LOCAL)`.
     :param live_call: Async-generator-returning callable given an opened

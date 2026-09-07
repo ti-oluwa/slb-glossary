@@ -46,13 +46,6 @@ or wrap I/O errors itself. Error-wrapping is domain-specific (a caller
 importing rows into a database wants a different error than one just
 inspecting a file), so it's left to whoever calls `read_rows`/the reader
 directly.
-
-A reader is async so that reading a large file does not block the event
-loop while `slb_glossary`'s other async work (a live search, a database
-write) is in flight. The built-in readers below offload their actual
-blocking file I/O to a worker thread via `asyncio.to_thread` internally;
-a custom reader that only does quick, in-memory work can skip that and
-still just be an `async def` generator, no threading needed.
 """
 
 

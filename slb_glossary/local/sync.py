@@ -1,9 +1,4 @@
-"""
-Sync the local database from a live `Session`.
-
-Call these functions as often (or as rarely) as fits your own use of the glossary; see the
-responsible-use note on `sync_all` in particular.
-"""
+"""Sync the local database from a live `Session`."""
 
 import dataclasses
 import datetime
@@ -205,7 +200,7 @@ async def sync_query(
     :param concurrency: Concurrent term-page fetches. Keep this low; see
         `slb_glossary.live.get_results_from_urls`'s own note on server load.
     :param batch_size: Number of results to buffer before each incremental
-        write to `db`. See `slb_glossary.local.upsert_results_incrementally`.
+        write to `db`.
     :param persist_on_error: If `True` (the default), save whatever's
         buffered so far if the fetch raises partway through, instead of
         losing it (the resulting `SyncSummary.interrupted` is then `True`,
@@ -283,7 +278,7 @@ async def sync_topic(
         and skipped (see `skip_existing`) does not use up this budget.
     :param concurrency: Concurrent term-page fetches.
     :param batch_size: Number of results to buffer before each incremental
-        write to `db`. See `slb_glossary.local.upsert_results_incrementally`.
+        write to `db`.
     :param persist_on_error: If `True` (the default), save whatever's
         buffered so far if the fetch raises partway through, instead of
         losing it (the resulting `SyncSummary.interrupted` is then `True`,
@@ -359,7 +354,7 @@ async def sync_letter(
         and skipped (see `skip_existing`) does not use up this budget.
     :param concurrency: Concurrent term-page fetches.
     :param batch_size: Number of results to buffer before each incremental
-        write to `db`. See `slb_glossary.local.upsert_results_incrementally`.
+        write to `db`.
     :param persist_on_error: If `True` (the default), save whatever's
         buffered so far if the fetch raises partway through, instead of
         losing it (the resulting `SyncSummary.interrupted` is then `True`,
@@ -432,15 +427,14 @@ async def sync_all(
     filed under it. This is the heaviest sync this module offers, and the one
     most likely to draw attention from the glossary site.
 
-    Use it sparingly, and mind the local-data disclaimer in
-    `slb_glossary.local`'s package docstring; `sync_query`/`sync_topic`
-    are lighter alternatives for keeping specific terms fresh instead of
-    mirroring the whole site.
+    Use it sparingly, and mind the local-data disclaimer. `sync_query`/`sync_topic`
+    are lighter alternatives for keeping specific terms fresh instead ofmirroring
+    the whole site.
 
     Each topic is upserted incrementally as its terms are fetched (see
     `batch_size`), and if a topic's fetch fails partway through, whatever
     was already fetched for it, and for every topic completed before it
-    is kept: only the failing topic's own in-progress batch is affected by
+    is kept. Only the failing topic's own in-progress batch is affected by
     `persist_on_error`, and the exception still propagates once that's
     handled, ending the sync at that point rather than skipping ahead to
     the next topic.
@@ -449,7 +443,7 @@ async def sync_all(
     :param session: An open `Session` to fetch from.
     :param concurrency: Concurrent term-page fetches, per topic.
     :param batch_size: Number of results to buffer before each incremental
-        write to `db`. See `slb_glossary.local.upsert_results_incrementally`.
+        write to `db`.
     :param persist_on_error: If `True` (the default), save whatever's
         buffered for the topic currently being fetched if it raises
         partway through, instead of losing it (the resulting
@@ -472,8 +466,7 @@ async def sync_all(
     if not topic_names:
         logger.warning(
             "Session reports no topics; nothing to sync. This usually means "
-            "the glossary's topic list failed to load. Try again, or pass "
-            "a higher --retry-attempts."
+            "the glossary's topic list failed to load. Try again."
         )
     logger.info("Syncing entire glossary (%d topics) to local database", topics_count)
     total_written = 0

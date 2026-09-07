@@ -31,10 +31,8 @@ def parse_related(raw: typing.Any) -> tuple[RelatedTerm, ...] | None:
     """
     Parse a related-terms cell/value into a tuple of `RelatedTerm`.
 
-    Accepts a native list (as a JSON reader would already give one) or a
-    JSON array string (as a CSV/XLSX cell would hold one as text), either
-    of `{"term": ..., "url": ...}` objects or `[term, url]` pairs.
-    Anything else is treated as unparsable.
+    Accepts a list or a JSON array string, either of `{"term": ..., "url": ...}`
+    objects or `[term, url]` pairs. Anything else is treated as unparsable.
 
     :param raw: The raw cell/field value.
     :return: The parsed related terms, or `None` if empty/unparsable.
@@ -134,7 +132,7 @@ async def load_file(
     batch_size: int | None = None,
 ) -> int:
     """
-    Import term data from a CSV, JSON, or XLSX file into the local database.
+    Import term data from a CSV, JSON, or XLSX, etc. file into the local database.
 
     Each row/record needs at least `term_field`; every other field is
     optional and can be set to `None` to skip it entirely.
@@ -153,8 +151,8 @@ async def load_file(
     :param topic_field: Column/key holding each row's topic, or `None` to
         leave every imported row's topic unset.
     :param url_field: Column/key holding each row's source URL, or `None`
-        to always synthesize a `local://imported/<slugified-term>` URL -
-        needed since `url` is half of the local database's primary key
+        to always synthesize a `local://imported/<slugified-term>` URL.
+        Needed since `url` is half of the local database's primary key
         (the other half being `topic`).
     :param grammatical_label_field: Column/key holding each row's
         grammatical label (e.g. "Noun"), or `None` to leave it unset.
@@ -227,8 +225,8 @@ async def load_file(
     row_iter = read_rows(resolved_path, format=resolved_format)
     try:
         while True:
-            # Isolate errors actually raised while *reading* the next row
-            # from errors raised while *processing* one already read, so
+            # Isolate errors actually raised while reading the next row
+            # from errors raised while processing one already read, so
             # only the error that occurred while processing gets rewrapped as a
             # `DatabaseError` about the source file.
             try:

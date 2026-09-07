@@ -22,13 +22,15 @@ from slb_glossary.local.types import Database
 from slb_glossary.types import SearchResult
 from tests.relevance.corpus import CORPUS
 from tests.relevance.dataset import CATEGORIES, DATASET, BenchmarkQuery
-from tests.relevance.metrics import mean_reciprocal_rank, ndcg_at_k, recall_at_k
+from tests.relevance.metrics import (
+    compute_mean_reciprocal_rank,
+    compute_ndcg_at_k,
+    compute_recall_at_k,
+)
 
 __all__ = ["EvaluationReport", "evaluate", "seed_corpus"]
 
-SearchFn = typing.Callable[
-    [Database, str], typing.Awaitable[list[tuple[SearchResult, float]]]
-]
+SearchFunction = typing.Callable[..., typing.Awaitable[list[tuple[SearchResult, float]]]]
 """
 Signature every `slb_glossary.local` search function
 (`lexical_search`/`vector_search`/`hybrid_search`) already satisfies:
@@ -121,21 +123,23 @@ class EvaluationReport:
         return "\n".join(lines)
 
 
-def _metrics_for(category: str, ranked: list[list[str]], expecteds: list[frozenset[str]]) -> CategoryMetrics:
+def get_metrics(
+    category: str, ranked: list[list[str]], expecteds: list[frozenset[str]]
+) -> CategoryMetrics:
     return CategoryMetrics(
         category=category,
         n=len(ranked),
-        recall_at_1=recall_at_k(ranked, expecteds, 1),
-        recall_at_3=recall_at_k(ranked, expecteds, 3),
-        recall_at_5=recall_at_k(ranked, expecteds, 5),
-        mrr=mean_reciprocal_rank(ranked, expecteds),
-        ndcg_at_5=ndcg_at_k(ranked, expecteds, 5),
+        recall_at_1=compute_recall_at_k(ranked, expecteds, 1),
+        recall_at_3=compute_recall_at_k(ranked, expecteds, 3),
+        recall_at_5=compute_recall_at_k(ranked, expecteds, 5),
+        mrr=compute_mean_reciprocal_rank(ranked, expecteds),
+        ndcg_at_5=compute_ndcg_at_k(ranked, expecteds, 5),
     )
 
 
 async def evaluate(
     db: Database,
-    search_fn: SearchFn,
+    search_fn: SearchFunction,
     *,
     dataset: list[BenchmarkQuery] | None = None,
     limit: int = 5,
@@ -172,14 +176,14 @@ async def evaluate(
 
     all_ranked = [outcome.ranked_terms for outcome in outcomes]
     all_expected = [outcome.query.expected for outcome in outcomes]
-    overall = _metrics_for("overall", all_ranked, all_expected)
+    overall = get_metrics("overall", all_ranked, all_expected)
 
     by_category: dict[str, CategoryMetrics] = {}
     for category in CATEGORIES:
         subset = [outcome for outcome in outcomes if outcome.query.category == category]
         if not subset:
             continue
-        by_category[category] = _metrics_for(
+        by_category[category] = get_metrics(
             category,
             [outcome.ranked_terms for outcome in subset],
             [outcome.query.expected for outcome in subset],

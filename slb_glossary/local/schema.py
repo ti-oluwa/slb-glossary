@@ -27,8 +27,8 @@ async def get_schema_version(connection: aiosqlite.Connection) -> int:
 
     Backed by SQLite's built-in `PRAGMA user_version` (a plain integer
     the database file itself carries, defaulting to `0` for a database
-    that's never had it set), not what `slb_glossary.local.types.Metadata` holds.
-    So this reflects what's actually inside the `.db` file even if its
+    that's never had it set), not what `slb_glossary.local.types.Metadata`
+    holds. So this reflects what's actually inside the `.db` file even if its
     `metadata.json` sidecar were missing, stale, or edited by hand.
 
     :param connection: An open `aiosqlite` connection.
@@ -137,7 +137,7 @@ FTS_TRIGGERS_CREATE_STATEMENTS = [
 async def initialize(connection: aiosqlite.Connection) -> None:
     """
     Create every table, index, and trigger the local database needs, if missing,
-    and stamp it with `SCHEMA_VERSION` (see `set_schema_version`).
+    and stamp it with `SCHEMA_VERSION`.
 
     Safe to call every time a database is opened as every statement here is
     `IF NOT EXISTS`, so this is a no-op on an already-initialized database

@@ -201,7 +201,7 @@ class Runtime(NamedComponent):
 
         Each pool decides independently which of its own sessions (it
         may hold several) are unused and idle long enough to close
-        (see `SessionPool.close_idle`); a pool left holding zero sessions afterward
+        (see `SessionPool.close_idle`). A pool left holding zero sessions afterward
         is dropped entirely, so a language that's stopped being requested does not
         keep an empty entry around forever.
         """

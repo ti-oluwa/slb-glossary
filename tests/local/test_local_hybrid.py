@@ -1,8 +1,4 @@
-"""
-`get_result_key`, `compute_rrf_scores`, and `hybrid_search`'s name-tier-first,
-reciprocal-rank-fusion ranking of lexical and semantic results, plus its
-post-fusion name-overlap rerank (`_rerank_fused_tier`).
-"""
+"""`get_result_key`, `compute_rrf_scores`, `hybrid_search`'s ranking, and `rerank_fused_tier`."""
 
 import pytest
 
@@ -256,11 +252,7 @@ class TestHybridSearch:
     async def test_contains_tier_bypasses_fusion_same_as_exact_prefix(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:
-        """
-        A whole-phrase containment match (`NameMatchTier.CONTAINS`) is
-        in the guaranteed-top tier too, same as exact/prefix - not just
-        competing in the fused ranking.
-        """
+        """A whole-phrase containment match is in the guaranteed-top tier too, same as exact/prefix."""
         await upsert_results(
             db,
             [
@@ -284,13 +276,7 @@ class TestHybridSearch:
     async def test_partial_token_tier_does_not_bypass_fusion(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:
-        """
-        A weaker lexical hit (all-tokens/partial-tokens) does not get
-        the guaranteed-top treatment: its reported score comes from
-        fusion (`< contains_match_score`), not the name tier, unlike a
-        genuine exact/prefix/contains match
-        (`test_contains_tier_bypasses_fusion_same_as_exact_prefix`).
-        """
+        """A weaker lexical hit (all-tokens/partial-tokens) does not get the guaranteed-top treatment."""
         await upsert_results(
             db, [make_search_result(url="https://x.com/a", term="Gas Lift Valve System")]
         )
@@ -307,14 +293,13 @@ class TestHybridSearch:
     async def test_rerank_prefers_higher_name_overlap_among_close_fused_scores(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:
-        """
-        Among two candidates the fused ranking scores identically, the
-        one whose name shares more tokens with the query is preferred.
-        """
+        """Among two candidates with identical fused scores, the one with more name-token overlap wins."""
         await upsert_results(
             db,
             [
-                make_search_result(url="https://x.com/a", term="Wireline Anything", definition=None),
+                make_search_result(
+                    url="https://x.com/a", term="Wireline Anything", definition=None
+                ),
                 make_search_result(url="https://x.com/b", term="Something Else", definition=None),
             ],
         )

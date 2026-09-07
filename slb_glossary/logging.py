@@ -1,11 +1,6 @@
 """
 Pluggable logging sinks for `slb_glossary`.
 
-This module exists for callers who want more control over where
-log records end up. May be a file for bug reports, `stderr`/`stdout`
-explicitly, or a fully custom destination, without having to hand-roll `
-logging.Handler` boilerplate themselves.
-
 ```python
 from slb_glossary.logging import FileSink, configure_logging
 
@@ -13,7 +8,7 @@ from slb_glossary.logging import FileSink, configure_logging
 configure_logging(sinks=FileSink("slb-glossary.log"), level="DEBUG")
 ```
 
-Sinks can also be routed selectively. Pass a `{filter: sink}` mapping
+Sinks can be routed selectively. Pass a `{filter: sink}` mapping
 instead of a single sink/list, and each record only goes to the sink(s)
 whose filter matches it.
 
@@ -67,7 +62,7 @@ class LogSink(typing.Protocol):
     """
     Protocol for a destination formatted log lines can be written to.
 
-    Implement this interface to route `slb_glossary`'s logging anywhere.
+    Implement this interface to route logging anywhere.
     A file, a socket, a queue for an in-app log viewer, a bug-report buffer, etc.
     """
 
@@ -134,10 +129,12 @@ class FileSink:
         self, path: str | pathlib.Path, *, mode: str = "a", encoding: str = "utf-8"
     ) -> None:
         """
+        Initialize the sink.
+
         :param path: File to write log lines to. Its parent directory is
             created on first write if it does not exist.
         :param mode: File open mode. `"a"` (the default) appends across
-            runs, so a single `--log-to` file can double as a running log
+            runs, so a single file can double as a running log
             for bug reports; pass `"w"` to truncate on each run instead.
         :param encoding: Text encoding to open the file with.
         """
@@ -172,11 +169,11 @@ class FileSink:
 
 SinkFilter = str | typing.Callable[[logging.LogRecord], bool]
 """
-A route filter for `LogSinkHandler`'s `{filter: sink(s)}` mapping form. Can be a
-logger-name pattern (`fnmatch`-style, e.g. `"slb_glossary.query*"`, `"*"`
-for everything) matched against each record's logger name, or a callable
-taking a `logging.LogRecord` and returning whether it should go to that
-route's sink(s).
+A route filter for `LogSinkHandler`'s `{filter: sink(s)}` mapping form. 
+
+Can be a logger-name pattern (`fnmatch`-style, e.g. `"slb_glossary.query*"`, 
+`"*"` for everything) matched against each record's logger name, or a callable
+taking a `logging.LogRecord` and returning whether it should go to that route's sink(s).
 """
 
 
@@ -307,8 +304,7 @@ def resolve_sink(
     default: LogSink | None = None,
 ) -> LogSink:
     """
-    Resolve `--log-to`/`--log-sink`-style input (or a library-level equivalent)
-    into a `LogSink`.
+    Resolve string-style input (or a library-level equivalent) into a `LogSink`.
 
     :param spec: Any of:
         - `None`: returns `default`, or a `StderrSink()` if `default` is also `None`.

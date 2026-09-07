@@ -47,7 +47,7 @@ It does not generate or paraphrase definitions as every result is the
 glossary's own published wording, looked up exactly (from a local cached
 copy, the live site, or both), never invented or approximated. Call a
 tool whenever a definition, spelling, or topic classification needs to be
-authoritative rather than recalled from your own training - e.g. before
+authoritative rather than recalled from your own training, e.g. before
 stating a technical term's definition, disambiguating similar-sounding
 terms, or citing a source for a term used in a report/answer.
 

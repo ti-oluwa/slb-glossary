@@ -17,19 +17,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["hybrid_search"]
 
 RERANK_TOKEN_OVERLAP_WEIGHT = 0.15
-"""
-How much weight `_rerank_fused_tier`'s cheap, deterministic name-overlap
-signal gets when re-ordering the RRF-fused tier, on top of each
-candidate's own (already `[0.0, 1.0]`-normalized) fused RRF score.
-
-Small on purpose: RRF's own fused rank is still the dominant signal.
-This only nudges the order among close-scoring candidates toward the
-one that also happens to share more of its name with the query - a
-genuine glossary-relevant signal RRF's rank-only view can't see on its
-own - without letting it override a clear semantic or lexical winner.
-`0.15` was chosen so that a full token-overlap match (`1.0`) can, at
-most, close a `0.15`-wide RRF score gap; see `_rerank_fused_tier`.
-"""
+"""Weight of `rerank_fused_tier`'s name-overlap nudge, added on top of the fused `[0.0, 1.0]` score."""
 
 
 def get_result_key(result: SearchResult) -> tuple[str, str] | None:
@@ -70,37 +58,16 @@ def compute_rrf_scores(
     return scores
 
 
-def _rerank_fused_tier(
+def rerank_fused_tier(
     query: str, fused: list[tuple[SearchResult, float]]
 ) -> list[tuple[SearchResult, float]]:
     """
-    Nudge the RRF-fused tier's order using each candidate's own name-overlap with `query`.
+    Re-sort the RRF-fused tier, adding a name-overlap nudge
+    (`RERANK_TOKEN_OVERLAP_WEIGHT`) to each score.
 
-    A glossary-aware signal RRF's rank-only view can't see: two
-    candidates can land at the same fused rank for entirely different
-    reasons (one via a strong semantic match, one via a weak,
-    coincidental lexical one), and RRF alone has no way to prefer the
-    one whose *name* is actually closer to the query. This adds
-    `slb_glossary.scoring.token_overlap_ratio` (query tokens present in
-    the term name, `[0.0, 1.0]`) scaled by
-    `RERANK_TOKEN_OVERLAP_WEIGHT` on top of each result's already
-    `[0.0, 1.0]`-normalized fused score, then re-sorts.
-
-    Deliberately cheap and deterministic - no embedding call, no
-    cross-encoder, just a string comparison against data already in
-    hand - and deliberately small relative to the fused score itself,
-    so this only ever breaks ties/reorders close calls, never
-    overturns a clear semantic or lexical winner. The tier this runs
-    over already excludes every exact/prefix/contains name match
-    (`hybrid_search` pulls those out ahead of fusion entirely), so this
-    is choosing among candidates that were, at best, a partial lexical
-    match or a purely semantic one.
-
-    :param query: The original, not-yet-`clean_query`-processed search query.
-    :param fused: `(result, score)` pairs from `hybrid_search`'s RRF
-        fusion, already sorted best-first, `score` in `[0.0, 1.0]`.
-    :return: The same pairs (scores unchanged, so the public score
-        semantics don't shift), re-sorted by the combined key.
+    :param query: The original free-text query, for tokenizing and overlap comparison.
+    :param fused: The RRF-fused tier, best match first.
+    :return: The same results, re-sorted by score + overlap nudge.
     """
     if not fused:
         return fused
@@ -131,29 +98,22 @@ async def hybrid_search(
     Search the local database by both lexical and semantic similarity to `query`,
     fused, best match first.
 
-    A term whose name is an exact, prefix, or whole-phrase-containment
-    match for `query` (`slb_glossary.scoring.classify_name_match`'s top
-    three tiers) is always ranked ahead of everything else, exactly
-    like `lexical_search`, so a semantically related but differently
-    named term never outranks the term actually named that. A weaker
-    lexical hit (all-tokens/partial-tokens; see `classify_name_match`)
-    does not get this guarantee - it competes in the fused ranking
-    below, on equal footing with the semantic evidence, since a partial
-    or coincidental word overlap is not strong enough evidence on its
-    own to override a genuinely better semantic match.
+    An exact, prefix, or whole-phrase-containment name match
+    (`classify_name_match`'s top three tiers) always ranks ahead of
+    everything else. A weaker lexical hit (all-tokens/partial-tokens)
+    competes in the fused ranking instead.
 
     Everything else is ranked by reciprocal rank fusion (RRF) between
     the lexical (bm25) and semantic (embedding) result orderings, then
-    lightly re-ordered by `_rerank_fused_tier`'s cheap, deterministic
-    name-overlap signal.
+    lightly re-ordered by `rerank_fused_tier`'s name-overlap signal.
 
     RRF is the standard way to combine rankers whose raw scores aren't on
     comparable scales, which is exactly the situation here. bm25 is
     unbounded and corpus-dependent, cosine similarity is bounded but has its
     own distribution per embedding model, and any fixed formula over their
     raw scores tends to be tuned to one dataset and misbehave on another.
-    RRF sidesteps that by only looking at each candidate's *rank* in each
-    list, not its raw score:
+    RRF sidesteps that by only looking at each candidate's rank in each
+    list, and not its raw score:
 
     ```
     score = sum(weight / (k + rank), over every ranker that found it)
@@ -161,8 +121,7 @@ async def hybrid_search(
 
     which needs no calibration between the two rankers at all. See
     `constants.rrf_k`/`lexical_weight`/`semantic_weight` to tune it, and
-    `scripts/relevance_bench.py --rrf-sweep` to sweep candidate values
-    against `tests/relevance`'s benchmark and compare the results.
+    `scripts/relevance_bench.py --rrf-sweep` to sweep candidate values.
 
     Needs terms already embedded via `slb_glossary.local.embed_terms`. A
     term synced or imported since the last `embed_terms` call is only
@@ -183,18 +142,10 @@ async def hybrid_search(
     :param exclude: URLs and/or term names to leave out of the results entirely.
     :param candidate_pool: Candidates pulled from each ranker before
         fusion. `None` (the default) uses `constants.hybrid_candidate_pool`.
-        Raise this if a result that should be findable by one ranker, but
-        ranks outside its top few there, is going missing from the fused
-        results; lower it to search faster at the cost of that.
     :return: `(result, score)` pairs, best match first. `score` is one of
         `classify_name_match`'s tier scores for the guaranteed-top tier
         (exact/prefix/contains); everything else is the fused ranking,
-        min-max normalized against its own result set into `[0.0, 1.0]`
-        (the name-overlap rerank only affects ordering, not this
-        reported score), not capped the way `lexical_search`'s own
-        bm25-only score is, since a fused rank already reflects a
-        genuine signal from two independent rankers rather than word
-        overlap alone.
+        min-max normalized into `[0.0, 1.0]`.
     :raises DatabaseError: If `sqlite-vec` is not installed, or its extension
         can not be loaded.
     :raises EmbeddingError: If `model2vec` is not installed, or the
@@ -236,11 +187,8 @@ async def hybrid_search(
         exclude=exclude,
     )
 
-    # The guaranteed-top tier: exact, prefix, or whole-phrase containment
-    # (see `classify_name_match`). Deliberately *not* all-tokens/
-    # partial-tokens too - those are weak enough evidence that they
-    # should compete in the fused ranking below rather than
-    # automatically outranking a strong semantic match.
+    # Guaranteed-top tier: exact/prefix/contains only. Weaker hits
+    # (all-tokens/partial-tokens) compete in the fused ranking below.
     name_tier = [
         (result, score) for result, score in lexical if score >= constants.contains_match_score
     ]
@@ -285,7 +233,7 @@ async def hybrid_search(
         for key in ranked_keys
         if key in results_by_key
     ]
-    fused_tier = _rerank_fused_tier(query, fused_tier)
+    fused_tier = rerank_fused_tier(query, fused_tier)
 
     combined = name_tier + fused_tier
     if limit:

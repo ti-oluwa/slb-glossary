@@ -390,7 +390,8 @@ class TestVectorSearch:
     ) -> None:
         """`min_similarity=None` (the default) never drops a candidate, however dissimilar."""
         await upsert_results(
-            db, [make_search_result(url="https://x.com/a", term="Far", definition=None, topic=None)]
+            db,
+            [make_search_result(url="https://x.com/a", term="Far", definition=None, topic=None)],
         )
         mock_embeddings.set("Far", [0.0, 1.0, 0.0, 0.0])
         mock_embeddings.set("query", [1.0, 0.0, 0.0, 0.0])
@@ -425,7 +426,8 @@ class TestVectorSearch:
     ) -> None:
         """Nothing clearing `min_similarity` returns an empty list, not the nearest neighbor anyway."""
         await upsert_results(
-            db, [make_search_result(url="https://x.com/a", term="Far", definition=None, topic=None)]
+            db,
+            [make_search_result(url="https://x.com/a", term="Far", definition=None, topic=None)],
         )
         mock_embeddings.set("Far", [0.0, 1.0, 0.0, 0.0])
         mock_embeddings.set("query", [1.0, 0.0, 0.0, 0.0])

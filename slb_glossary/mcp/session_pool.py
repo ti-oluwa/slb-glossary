@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["SessionPool"]
 
 
-class _PooledSession:
+class PooledSession:
     """One session inside a `SessionPool`, with its own use-count and idle clock."""
 
     __slots__ = ("last_used", "session", "users")
@@ -69,7 +69,7 @@ class SessionPool:
     total system-wide resource use, not this pool on its own.
 
     Checkout/release/reap track each session's own use-count and idle
-    clock independently (`_PooledSession`), so a language's pool grows
+    clock independently (`PooledSession`), so a language's pool grows
     under load and shrinks back down session by session, as sessions
     individually go idle and get reaped.
 
@@ -128,7 +128,7 @@ class SessionPool:
         self.options = options
         self._semaphore = semaphore
         self._tolerance = capacity_tolerance
-        self._sessions: list[_PooledSession] = []
+        self._sessions: list[PooledSession] = []
         self._lock = asyncio.Lock()
         self._growth_lock = asyncio.Lock()
         """
@@ -162,7 +162,7 @@ class SessionPool:
         """`True` once `close` has run. A closed pool refuses further `acquire`/`open` calls."""
         return self._closed
 
-    async def new(self) -> _PooledSession:
+    async def new(self) -> PooledSession:
         """
         Launch a genuinely new browser instance for this language.
 
@@ -195,9 +195,9 @@ class SessionPool:
             time.monotonic() - opened_at,
             len(self._sessions) + 1,
         )
-        return _PooledSession(session)
+        return PooledSession(session)
 
-    async def _get_or_create(self, capacity: int | None = None) -> _PooledSession:
+    async def _get_or_create(self, capacity: int | None = None) -> PooledSession:
         """
         Return a session that fits `capacity`, or grow the pool with a
         new browser instance if none currently does.
@@ -391,8 +391,8 @@ class SessionPool:
         # can't block a concurrent `acquire`/`release`/`open` on this pool.
         now = time.monotonic()
         async with self._lock:
-            keep: list[_PooledSession] = []
-            to_close: list[_PooledSession] = []
+            keep: list[PooledSession] = []
+            to_close: list[PooledSession] = []
             for pooled in self._sessions:
                 if pooled.in_use or (now - pooled.last_used) < idle_timeout:
                     keep.append(pooled)
@@ -416,7 +416,7 @@ class SessionPool:
         closed. Further `acquire`/`open` calls raise `RuntimeError`
         (`release` stays safe; see its own docstring). For shutdown.
 
-        Safe to call more than once; later calls are no-ops.
+        Safe to call more than once. Later calls are no-ops.
         """
         async with self._lock:
             if self._closed:

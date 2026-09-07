@@ -12,7 +12,7 @@ from slb_glossary.errors import UnsupportedFormatError, WriterError
 from slb_glossary.types import RecordLike, SearchResult
 from slb_glossary.writers import (
     WRITERS,
-    field_names,
+    get_field_names,
     humanize_field,
     records_to_dicts,
     save,
@@ -31,11 +31,11 @@ class TestFieldNames:
     def test_returns_first_records_fields(self) -> None:
         """Returns the field names of the first record."""
         results = make_search_results(2)
-        assert field_names(results) == results[0].fields
+        assert get_field_names(results) == results[0].fields
 
     def test_returns_empty_list_for_empty_records(self) -> None:
         """Returns `[]` when `records` is empty."""
-        assert field_names([]) == []
+        assert get_field_names([]) == []
 
 
 class TestHumanizeField:

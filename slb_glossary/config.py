@@ -109,8 +109,10 @@ class SessionOptions(Updatable):
     """Whether to block images/media/fonts/stylesheets for faster page loads."""
 
     block_resources: Sequence[str] = dataclasses.field(default_factory=list)
-    """Specific request resource types to block, e.g. `["image", "font"]`.
-    Overrides `block` when non-empty."""
+    """
+    Specific request resource types to block, e.g. `["image", "font"]`.
+    Overrides `block` when non-empty.
+    """
 
     timeout: float = 60_000.0
     """Milliseconds to wait for page loads and element lookups."""
@@ -124,7 +126,7 @@ class SessionOptions(Updatable):
     
     Each independent operation (the tab-paging search page, each concurrent
     term-fetch worker) checks out its own page, so this should comfortably
-    cover the highest `--concurrency` a command is run with, plus one for
+    cover the highest `concurrency` a query is run with, plus one for
     a search page paging through tabs at the same time.
     """
 
@@ -283,19 +285,17 @@ class OutputOptions(Updatable):
     """Whether to show the related-terms column by default."""
 
 
-def _is_dataclass_type(candidate: typing.Any) -> bool:
+def is_dataclass_type(candidate: typing.Any) -> bool:
     """Return whether `candidate` is a dataclass *type* (not instance)."""
     return isinstance(candidate, type) and dataclasses.is_dataclass(candidate)
 
 
-def _load_dataclass(cls: type[T], data: Mapping[str, typing.Any]) -> T:
+def load_dataclass(cls: type[T], data: Mapping[str, typing.Any]) -> T:
     """
     Build a `cls` instance from `data`, recursing into nested dataclass fields.
 
-    Keys in `data` with no matching field are ignored (forward-compatible
-    with newer config files which may have been acceptable by an older
-    package version); fields absent from `data` fall back to the dataclass's
-    own defaults.
+    Keys in `data` with no matching field are ignored; fields absent from `data`
+    fall back to the dataclass's own defaults.
 
     :param cls: The dataclass type to build.
     :param data: A mapping of field name to value, as parsed from a config file.
@@ -306,8 +306,8 @@ def _load_dataclass(cls: type[T], data: Mapping[str, typing.Any]) -> T:
         if field.name not in data:
             continue
         value = data[field.name]
-        if _is_dataclass_type(field.type) and isinstance(value, Mapping):
-            kwargs[field.name] = _load_dataclass(typing.cast(type, field.type), value)
+        if is_dataclass_type(field.type) and isinstance(value, Mapping):
+            kwargs[field.name] = load_dataclass(typing.cast(type, field.type), value)
         else:
             kwargs[field.name] = value
     return cls(**kwargs)
@@ -371,10 +371,6 @@ def _strip_none(data: typing.Any) -> typing.Any:
     `SessionOptions.executable_path`, `DatabaseOptions.data_dir`), so those
     need to be dropped rather than written before a TOML dump can succeed.
 
-    A dropped key round-trips safely as `_load_dataclass` falls back
-    to the field's own default for any key missing from a loaded config,
-    and every field this can drop already defaults to `None`.
-
     :param data: A plain dict/list/scalar structure, e.g. from `Config.to_dict()`.
     :return: `data` with `None`-valued dict entries removed, recursing into
         nested dicts and lists. Non-dict/list values are returned unchanged.
@@ -432,7 +428,7 @@ def write_config_file(data: dict[str, typing.Any], path: pathlib.Path, format: s
 @dataclasses.dataclass(slots=True, kw_only=True)
 class Config(Updatable):
     """
-    Top-level, file-loadable configuration for a `Session` and local database.
+    Top-level, file-loadable configuration for a `Session` and `Database`.
 
     ```python
     config = Config.load()  # default path if it exists, else built-in defaults
@@ -459,7 +455,7 @@ class Config(Updatable):
             Unknown keys are ignored; missing keys use their field defaults.
         :return: The built `Config`.
         """
-        return _load_dataclass(cls, data)
+        return load_dataclass(cls, data)
 
     def to_dict(self) -> dict[str, typing.Any]:
         """Return this config as a plain, JSON/TOML/YAML-safe nested dict."""
@@ -571,7 +567,9 @@ class Config(Updatable):
         setattr(
             target,
             leaf,
-            _cast(value, like=current, field_type=field.type if field is not None else None),
+            cast_to_type(
+                value, like=current, field_type=field.type if field is not None else None
+            ),
         )
         logger.debug("Set config key %s = %r", key, getattr(target, leaf))
 
@@ -581,7 +579,7 @@ class Config(Updatable):
         return default_config_path()
 
 
-def _parse_bool(value: str) -> bool:
+def parse_bool(value: str) -> bool:
     """
     Parse a CLI-style boolean string.
 
@@ -598,7 +596,9 @@ def _parse_bool(value: str) -> bool:
     raise ValueError(f"{value!r} is not a boolean")
 
 
-def _cast(value: typing.Any, *, like: typing.Any, field_type: typing.Any = None) -> typing.Any:
+def cast_to_type(
+    value: typing.Any, *, like: typing.Any, field_type: typing.Any = None
+) -> typing.Any:
     """
     Coerce a string `value` to the type of `like`.
 
@@ -626,7 +626,7 @@ def _cast(value: typing.Any, *, like: typing.Any, field_type: typing.Any = None)
     if like is None:
         if field_type is not None and "bool" in str(field_type):
             try:
-                return _parse_bool(value)
+                return parse_bool(value)
             except ValueError as exc:
                 raise ConfigError(f"Could not parse {value!r} as bool: {exc}") from exc
         return value
@@ -636,7 +636,7 @@ def _cast(value: typing.Any, *, like: typing.Any, field_type: typing.Any = None)
 
     try:
         if isinstance(like, bool):
-            return _parse_bool(value)
+            return parse_bool(value)
         if isinstance(like, int):
             return int(value)
         if isinstance(like, float):

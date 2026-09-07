@@ -20,7 +20,7 @@ class Database:
     """
     An open connection to the local search database.
 
-    Obtain one with `slb_glossary.local.open_db`/`database`.
+    Obtain one with `slb_glossary.local.open_db`.
 
     Runs in WAL journal mode, so while open it has two sidecar files next
     to `db_path`; `<db_path>-wal` and `<db_path>-shm`. Moving or copying

@@ -1,11 +1,4 @@
-"""
-Benchmark query set for the relevance harness, run against `tests/relevance/corpus.py`.
-
-Every `BenchmarkQuery.expected` is a set, not a single term, because a
-handful of categories (ambiguous, conceptual) genuinely have more than
-one acceptable answer; `expected` lists every term that should count as
-a relevant hit for that query, not just one "correct" answer.
-"""
+"""Benchmark query set for the relevance harness, run against `tests/relevance/corpus.py`."""
 
 import typing
 
@@ -27,7 +20,7 @@ class BenchmarkQuery(typing.NamedTuple):
     """Which benchmark category this belongs to (see `CATEGORIES`)."""
 
 
-def _q(query: str, expected: str | typing.Iterable[str], category: str) -> BenchmarkQuery:
+def build_query(query: str, expected: str | typing.Iterable[str], category: str) -> BenchmarkQuery:
     """Build a `BenchmarkQuery`, accepting a single expected term or several."""
     terms = frozenset([expected]) if isinstance(expected, str) else frozenset(expected)
     return BenchmarkQuery(query=query, expected=terms, category=category)
@@ -46,119 +39,112 @@ CATEGORIES: tuple[str, ...] = (
 
 DATASET: list[BenchmarkQuery] = [
     # --- Exact ---------------------------------------------------------------
-    _q("porosity", "Porosity", "exact"),
-    _q("gas lift", "Gas Lift", "exact"),
-    _q("wireline logging", "Wireline Logging", "exact"),
-    _q("permeability", "Permeability", "exact"),
-    _q("blowout preventer", "Blowout Preventer", "exact"),
-    _q("casing", "Casing", "exact"),
-    _q("hydraulic fracturing", "Hydraulic Fracturing", "exact"),
+    build_query("porosity", "Porosity", "exact"),
+    build_query("gas lift", "Gas Lift", "exact"),
+    build_query("wireline logging", "Wireline Logging", "exact"),
+    build_query("permeability", "Permeability", "exact"),
+    build_query("blowout preventer", "Blowout Preventer", "exact"),
+    build_query("casing", "Casing", "exact"),
+    build_query("hydraulic fracturing", "Hydraulic Fracturing", "exact"),
     # --- Natural language ------------------------------------------------------
-    _q("what is porosity", "Porosity", "natural_language"),
-    _q("define gas lift", "Gas Lift", "natural_language"),
-    _q("what does mwd mean", "Measurement While Drilling", "natural_language"),
-    _q("meaning of wireline logging", "Wireline Logging", "natural_language"),
-    _q("tell me about permeability", "Permeability", "natural_language"),
-    _q("what is a blowout preventer", "Blowout Preventer", "natural_language"),
-    _q("what's a kick", "Kick", "natural_language"),
+    build_query("what is porosity", "Porosity", "natural_language"),
+    build_query("define gas lift", "Gas Lift", "natural_language"),
+    build_query("what does mwd mean", "Measurement While Drilling", "natural_language"),
+    build_query("meaning of wireline logging", "Wireline Logging", "natural_language"),
+    build_query("tell me about permeability", "Permeability", "natural_language"),
+    build_query("what is a blowout preventer", "Blowout Preventer", "natural_language"),
+    build_query("what's a kick", "Kick", "natural_language"),
     # --- Paraphrase --------------------------------------------------------------
-    _q("ability of a rock to store fluids", "Porosity", "paraphrase"),
-    _q("method of artificially lifting fluids from a well", "Gas Lift", "paraphrase"),
-    _q("measurement while drilling", "Measurement While Drilling", "paraphrase"),
-    _q("logging performed using a cable", "Wireline Logging", "paraphrase"),
-    _q(
+    build_query("ability of a rock to store fluids", "Porosity", "paraphrase"),
+    build_query("method of artificially lifting fluids from a well", "Gas Lift", "paraphrase"),
+    build_query("measurement while drilling", "Measurement While Drilling", "paraphrase"),
+    build_query("logging performed using a cable", "Wireline Logging", "paraphrase"),
+    build_query(
         "ability of a rock to transmit fluids through it",
         "Permeability",
         "paraphrase",
     ),
-    _q(
+    build_query(
         "unwanted influx of fluid into the wellbore during drilling",
         "Kick",
         "paraphrase",
     ),
-    _q("common name for drilling fluid", "Mud", "paraphrase"),
+    build_query("common name for drilling fluid", "Mud", "paraphrase"),
     # --- Partial ---------------------------------------------------------------
-    _q("gas lift valve", "Gas Lift Valve", "partial"),
-    _q("reservoir press", "Reservoir Pressure", "partial"),
-    _q("wireline", "Wireline Logging", "partial"),
-    _q("gas lif", "Gas Lift", "partial"),
-    _q("electrical submersible", "Electrical Submersible Pump", "partial"),
-    _q("bottomhole", ["Bottomhole Assembly", "Bottomhole Pressure"], "partial"),
+    build_query("gas lift valve", "Gas Lift Valve", "partial"),
+    build_query("reservoir press", "Reservoir Pressure", "partial"),
+    build_query("wireline", "Wireline Logging", "partial"),
+    build_query("gas lif", "Gas Lift", "partial"),
+    build_query("electrical submersible", "Electrical Submersible Pump", "partial"),
+    build_query("bottomhole", ["Bottomhole Assembly", "Bottomhole Pressure"], "partial"),
     # --- Misspelling -------------------------------------------------------------
-    _q("porosoty", "Porosity", "misspelling"),
-    _q("permeabilty", "Permeability", "misspelling"),
-    _q("reservior", "Reservoir", "misspelling"),
-    _q("wireline logg", "Wireline Logging", "misspelling"),
-    _q("hydralic fracturing", "Hydraulic Fracturing", "misspelling"),
-    _q("blowout preventor", "Blowout Preventer", "misspelling"),
+    build_query("porosoty", "Porosity", "misspelling"),
+    build_query("permeabilty", "Permeability", "misspelling"),
+    build_query("reservior", "Reservoir", "misspelling"),
+    build_query("wireline logg", "Wireline Logging", "misspelling"),
+    build_query("hydralic fracturing", "Hydraulic Fracturing", "misspelling"),
+    build_query("blowout preventor", "Blowout Preventer", "misspelling"),
     # --- Conceptual (exact words need not occur in the target term) --------------
-    _q("percentage of pore space in a rock", "Porosity", "conceptual"),
-    _q("pumpjack", "Sucker Rod Pump", "conceptual"),
-    _q("steel pipe that lines a wellbore", "Casing", "conceptual"),
-    _q("rock rich in organic matter that generates oil", "Source Rock", "conceptual"),
-    _q(
+    build_query("percentage of pore space in a rock", "Porosity", "conceptual"),
+    build_query("pumpjack", "Sucker Rod Pump", "conceptual"),
+    build_query("steel pipe that lines a wellbore", "Casing", "conceptual"),
+    build_query("rock rich in organic matter that generates oil", "Source Rock", "conceptual"),
+    build_query(
         "well stimulation technique that pumps fluid to create fractures",
         "Hydraulic Fracturing",
         "conceptual",
     ),
-    _q(
+    build_query(
         "downhole electric motor driven pump for lifting oil",
         "Electrical Submersible Pump",
         "conceptual",
     ),
     # --- Ambiguous (several corpus terms are genuinely close) ---------------------
-    _q(
+    build_query(
         "pressure of fluid in the rock",
         ["Pore Pressure", "Formation Pressure", "Reservoir Pressure"],
         "ambiguous",
     ),
-    _q(
+    build_query(
         "measuring formation properties while drilling",
         ["Measurement While Drilling", "Logging While Drilling"],
         "ambiguous",
     ),
-    _q(
+    build_query(
         "artificial lift method",
         ["Artificial Lift", "Gas Lift", "Electrical Submersible Pump", "Sucker Rod Pump"],
         "ambiguous",
     ),
-    _q(
+    build_query(
         "log used to identify shale",
         ["Gamma Ray Log", "Resistivity Log"],
         "ambiguous",
     ),
     # --- Definition-oriented (describes the concept, doesn't name it) -------------
-    _q(
+    build_query(
         "geological structure that traps oil and gas underground",
         "Trap",
         "definition_oriented",
     ),
-    _q(
+    build_query(
         "impermeable rock layer that stops oil escaping upward",
         "Seal",
         "definition_oriented",
     ),
-    _q(
+    build_query(
         "vessel that splits well fluid into oil gas and water",
         "Separator",
         "definition_oriented",
     ),
-    _q(
+    build_query(
         "injecting water into a reservoir to push oil toward wells",
         "Waterflooding",
         "definition_oriented",
     ),
-    _q(
+    build_query(
         "fraction of reservoir pore space occupied by water",
         "Water Saturation",
         "definition_oriented",
     ),
 ]
-"""
-The benchmark query set. Deliberately not tiny or hand-picked-easy: it
-spans every category `slb_glossary`'s own search spec calls for
-(exact/natural-language/paraphrase/partial/misspelling/conceptual/
-ambiguous/definition-oriented), against a corpus with several
-genuinely-related term clusters, so a change that only helps the easy
-cases shows up as a regression here, not an improvement.
-"""
+"""Every category in `slb_glossary`'s search spec, against a corpus with several related term clusters."""

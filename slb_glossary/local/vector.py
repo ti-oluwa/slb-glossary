@@ -1,8 +1,7 @@
 """
 Local semantic search API. Uses cosine similarity over `model2vec`-embedded terms.
 
-Backed by the `sqlite-vec` SQLite extension (a `vec0` virtual table), so
-nearest-neighbor search runs in SQLite itself rather than a Python scan.
+Backed by the `sqlite-vec` SQLite extension (a `vec0` virtual table).
 `embed_terms` computes and stores each locally stored term's vector.
 `vector_search` embeds a query the same way and ranks stored terms
 against it.
@@ -78,9 +77,7 @@ async def ensure_table(db: Database) -> None:
     Load `sqlite-vec` and create the local vector table if missing.
 
     Also resolves `embedding_dim()`, which loads the embedding model, so
-    only call this where a term or query is actually about to be
-    embedded. `delete_embeddings`/maintenance cleanup do not need the
-    model at all, just the table, so they do not go through this.
+    only call this where a term or query is actually about to be embedded.
 
     :param db: The local database to prepare.
     :raises DatabaseError: If `sqlite-vec` is not installed, or its
@@ -105,11 +102,6 @@ async def ensure_table(db: Database) -> None:
 async def clear(db: Database) -> None:
     """
     Delete every stored embedding, if the vector table exists at all.
-
-    Used by `slb_glossary.local.maintenance.flush`/`reset`, which have
-    to work on a database that never had semantic search set up, so this
-    is a deliberate no-op rather than an error in that case, including
-    when `sqlite-vec` itself is not installed.
 
     :param db: The local database to clear.
     """
@@ -246,7 +238,7 @@ async def delete_embeddings(db: Database, *, urls: Collection[str] | None = None
     Delete stored embeddings, optionally scoped to `urls`.
 
     A no-op if no embeddings have ever been stored (i.e `embed_terms` was
-    never called), so this is always safe to call speculatively.
+    never called). So this is safe to call speculatively.
 
     :param db: The local database to write to.
     :param urls: If given, only delete embeddings for rows at these URLs
@@ -289,21 +281,18 @@ async def vector_search(
 
     Purely semantic. A paraphrase or a related concept can outrank a
     result that shares no words with `query` at all, which lexical
-    search (`slb_glossary.local.search`) can never do. It also has no
-    equivalent of lexical search's exact/prefix name tier, so a term
-    named exactly what you searched for is not guaranteed to rank first.
+    search can never do. It also has no equivalent of lexical search's
+    exact/prefix name tier, so a term named exactly what you searched
+    for is not guaranteed to rank first.
 
     Prefer `slb_glossary.local.hybrid_search` unless you specifically
     want ranking with no lexical signal mixed in.
 
-    Only terms already embedded via `embed_terms` are considered; a term
+    Only terms already embedded via `embed_terms` are considered. A term
     synced or imported since the last `embed_terms` call is invisible here.
 
     :param db: The local database to search.
-    :param query: Free-text query. Passed through
-        `slb_glossary.natural_language.clean_query` first, same as
-        `slb_glossary.local.lexical_search`, so a plain-English question
-        like "what is X" is embedded as just `X`.
+    :param query: Free-text query.
     :param topic: Restrict results to this topic, or several
         comma-separated topics (case-insensitive exact match by default).
     :param start_letter: Restrict results to terms starting with this letter.
@@ -316,19 +305,10 @@ async def vector_search(
         Has no effect if `topic` is falsy.
     :param exclude: URLs and/or term names to leave out of the results
         entirely.
-    :param min_similarity: Drop a candidate whose cosine similarity is
-        below this. `None` (the default) applies no floor at all - the
-        nearest embedded term always comes back, confidently related to
-        `query` or not (a purely nearest-neighbor search always finds
-        *something*, since it has no notion of "not similar enough").
-        Pass `constants.semantic_similarity_floor` (after calibrating
-        it for your own corpus - see its docstring) to instead let a
-        genuinely unrelated query come back with fewer results, or none
-        at all, rather than a confidently-presented but irrelevant
-        nearest neighbor. Applied after the nearest-neighbor fetch and
-        topic/language/exclude filtering, before `limit` truncates the
-        list, so it never eats into `limit`'s budget by discarding
-        already-excluded rows.
+    :param min_similarity: Drop candidates with a cosine similarity below
+        this. `None` (the default) applies no floor. Pass
+        `constants.semantic_similarity_floor` to exclude low-confidence
+        matches instead. Applied before `limit`.
     :return: `(result, similarity)` pairs, most similar first.
         `similarity` is a cosine similarity, in `[-1.0, 1.0]` in theory
         and close to `[0.0, 1.0]` in practice for real text. This is not
@@ -341,7 +321,7 @@ async def vector_search(
     await ensure_table(db)
     started_at = time.monotonic()
 
-    from slb_glossary.local.api import _apply_exclude, _row_to_result, resolve_topic
+    from slb_glossary.local.api import _apply_sql_exclude, resolve_topic, row_to_result
 
     normalized_query = clean_query(query)
     query_vector = embed([normalized_query])[0].astype("float32").tobytes()
@@ -377,16 +357,20 @@ async def vector_search(
         sql += " AND terms.language = ?"
         params.append(language)
 
-    sql = _apply_exclude(sql, params, exclude, url_column="terms.url", term_column="terms.term")
+    sql = _apply_sql_exclude(
+        sql, params, exclude, url_column="terms.url", term_column="terms.term"
+    )
 
     sql += " ORDER BY matches.distance ASC"
 
     async with db.connection.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
 
-    scored = [(_row_to_result(row), 1.0 - row["distance"]) for row in rows]
+    scored = [(row_to_result(row), 1.0 - row["distance"]) for row in rows]
     if min_similarity is not None:
-        scored = [(result, similarity) for result, similarity in scored if similarity >= min_similarity]
+        scored = [
+            (result, similarity) for result, similarity in scored if similarity >= min_similarity
+        ]
     if limit:
         scored = scored[:limit]
 

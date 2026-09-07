@@ -37,15 +37,19 @@ class Principal(typing.NamedTuple):
 
     scopes: frozenset[str] = frozenset()
     """
-    This caller's OAuth scopes, straight from their `AccessToken`. Read
-    them from `slb_glossary.mcp.types.ToolRunContext.principal` in a hook
-    if you need scope-gated behavior beyond what
+    This caller's OAuth scopes, straight from their `AccessToken`. 
+
+    Read them from `slb_glossary.mcp.types.ToolRunContext.principal` in 
+    a hook if you need scope-gated behavior beyond what
     `slb_glossary.mcp.config.Auth.required_scopes` already enforces.
     """
 
 
 ANONYMOUS = Principal(id="anonymous")
-"""The `Principal` used when there's no `AccessToken` for the current call (no `Auth.provider` configured, or an unauthenticated transport like stdio)."""
+"""
+The `Principal` used when there's no `AccessToken` for the current call 
+(no `Auth.provider` configured, or an unauthenticated transport like stdio).
+"""
 
 
 def get_principal_from_token(token: AccessToken | None) -> Principal:
@@ -65,14 +69,11 @@ class StaticTokenVerifier(TokenVerifier):
     """
     A FastMCP `AuthProvider` backed by a fixed, in-process mapping of bearer token to identity.
 
-    Unlike a hand-rolled lookup done inside a tool or middleware, this is
-    a real `TokenVerifier`. Pass it to `Auth.provider` and it secures the
-    transport itself, the same as any OAuth-backed provider.
-    An unrecognized token never reaches a tool call.
+    Pass it to `Auth.provider` and it secures the transport itself, the same as any OAuth-backed
+    provider. An unrecognized token never reaches a tool call.
 
-    Meant for simple, fixed API-key setups. For anything backed by a
-    database, external identity provider, or tokens that expire/rotate,
-    implement your own `TokenVerifier` instead.
+    Meant for simple, fixed API-key setups. For anything backed by a database, external identity
+    provider, or tokens that expire/rotate, implement your own `TokenVerifier` instead.
     """
 
     def __init__(self, tokens: typing.Mapping[str, str | typing.Mapping[str, typing.Any]]) -> None:

@@ -1,4 +1,4 @@
-"""Lightweight internet-connectivity check utilities."""
+"""Internet connectivity check utilities."""
 
 import asyncio
 import logging
@@ -18,8 +18,7 @@ PROBE_TARGETS: tuple[tuple[str, int], ...] = (
 )
 """
 Well-known, highly-available public DNS resolvers, probed by raw IP:port
-TCP connect. No DNS lookup needed (so a broken resolver does not read
-as "no internet"), and no HTTP/TLS handshake, just a bare TCP SYN/ACK.
+TCP connect. No DNS lookup needed, and no HTTP/TLS handshake, just a bare TCP SYN/ACK.
 """
 
 _CACHE: tuple[float, bool] | None = None

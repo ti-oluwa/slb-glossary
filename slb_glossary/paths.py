@@ -46,15 +46,16 @@ def get_data_dir(override: str | pathlib.Path | None = None) -> pathlib.Path:
     creating it if needed.
 
     This is where `slb_glossary.local` keeps its SQLite database and
-    `metadata.json`. Resolution order: `override` if given, then the
+    `metadata.json`.
+
+    Resolution order is; `override` if given, then the
     `SLB_GLOSSARY_DATA_DIR` environment variable, then the OS-appropriate
     user data directory (e.g. `~/.local/share/slb-glossary` on Linux,
     `~/Library/Application Support/slb-glossary` on macOS,
     `%LOCALAPPDATA%\\slb-glossary` on Windows).
 
     :param override: A directory to use instead of any environment
-        variable or OS default, e.g. `Config.local.data_dir` or a
-        user-supplied `--data-dir` CLI option.
+        variable or OS default.
     :return: The resolved data directory. Created (including parents) if
         it did not already exist.
     """
@@ -74,7 +75,7 @@ def get_config_dir(override: str | pathlib.Path | None = None) -> pathlib.Path:
     creating it if needed.
 
     Same resolution order as `get_data_dir`, but for the OS-appropriate
-    user *config* directory (e.g. `~/.config/slb-glossary` on Linux).
+    user config directory (e.g. `~/.config/slb-glossary` on Linux).
 
     :param override: A directory to use instead of any environment
         variable or OS default.

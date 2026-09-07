@@ -59,7 +59,7 @@ Every function takes `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`, de
 | `get_terms_urls(...)` | async generator | `QueryResult[str]` |
 | `get_topics(...)` | coroutine | `QueryResult[dict[str, int]]` |
 | `get_random_term(...)` | coroutine | `QueryResult[SearchResult \| None]` |
-| `resolve_source(db, session, source)` | coroutine -> `Source` | Validates a requested `Source` against what `db`/`session` are actually available, raising if it can not be honored. |
+| `resolve_source(db, session, source)` | coroutine -> `Source` | Validates a requested `Source` against what `db`/`session` are actually available, raising if it can not be honoured. |
 | `Source` | `Enum` | `LOCAL` \| `LIVE` \| `AUTO`. |
 | `QueryResult` | `dataclass` | `.value`, `.source`, `.persisted`, `.score` (`float \| None`). See [The Data Model](../concepts/data-model.md#queryresult). |
 | `SimilarResult` | `dataclass` | `.exact` (`QueryResult[SearchResult] \| None`), `.similar` (`tuple[QueryResult[SearchResult], ...]`). What `get_term`/`compare` return (wrapped in a `QueryResult`) when called with `with_similar=True`. See [The Data Model](../concepts/data-model.md#similarresult). |

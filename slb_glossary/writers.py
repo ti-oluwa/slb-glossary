@@ -9,12 +9,12 @@ from collections.abc import Sequence
 
 from slb_glossary.errors import UnsupportedFormatError, WriterError
 from slb_glossary.types import RecordLike, materialize_records
+from slb_glossary.utils import humanize_field
 
 __all__ = [
     "WRITERS",
     "Writer",
-    "field_names",
-    "humanize_field",
+    "get_field_names",
     "records_to_dicts",
     "save",
     "supported_formats",
@@ -51,19 +51,9 @@ context already attached).
 """
 
 
-def field_names(records: Sequence[RecordLike]) -> list[str]:
+def get_field_names(records: Sequence[RecordLike]) -> list[str]:
     """Return the field names of `records`, or `[]` if `records` is empty."""
     return list(records[0].fields) if records else []
-
-
-ACRONYMS = frozenset({"url", "id"})
-"""Field-name words rendered upper-case rather than title-cased by `humanize_field`."""
-
-
-def humanize_field(field: str) -> str:
-    """Turn a `snake_case` field name into a `Title Case` header."""
-    words = field.split("_")
-    return " ".join(word.upper() if word in ACRONYMS else word.title() for word in words)
 
 
 def make_json_safe(value: typing.Any) -> typing.Any:
@@ -142,7 +132,7 @@ async def write_csv(records: Sequence[RecordLike], destination: pathlib.Path) ->
     """Write `records` to `destination` as CSV, with a humanized header row."""
 
     def _write() -> None:
-        fields = field_names(records)
+        fields = get_field_names(records)
         with open(destination, "w", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
             writer.writerow([humanize_field(field) for field in fields])
@@ -230,7 +220,7 @@ async def write_xlsx(records: Sequence[RecordLike], destination: pathlib.Path) -
         ) from exc
 
     def _write() -> None:
-        fields = field_names(records)
+        fields = get_field_names(records)
         workbook = openpyxl.Workbook()
         sheet = workbook.active
         if sheet is None:

@@ -1,4 +1,4 @@
-"""Search engine API for the SLB glossary."""
+"""Live search API for the glossary."""
 
 import asyncio
 import logging
@@ -46,12 +46,6 @@ RELATED_KEYWORDS = ("related term", "see related", "synonyms", "alternate form")
 async def ensure_initialized(session: Session, auto_initialize: bool = True) -> None:
     """
     Initialize `session` if it is not already, or raise if it can not be.
-
-    Every function here that actually touches the live site (as opposed
-    to just reading something already loaded, like `session.language`)
-    calls this first, so a session opened lazily via `open_session(..., initialize=False)`
-    only pays to load `topics`/`size` at the point something genuinely
-    needs them, not up front.
 
     :param session: The session to ensure is initialized.
     :param auto_initialize: If `True` (the default) and `session` is not
@@ -113,7 +107,7 @@ def _find_related_links(blocks: typing.Sequence[TermBlock]) -> tuple[RelatedTerm
     return ()
 
 
-async def _wait_for_settle(
+async def _load_search_url(
     session: Session,
     url: str,
     *,
@@ -223,7 +217,7 @@ async def get_terms_urls(
     :yield: Term detail page URLs, in the order the glossary site returns
         them, `exclude`d ones skipped.
     :param auto_initialize: If `session` is not initialized yet, initialize
-        it automatically (the default) or raise. See `ensure_initialized`.
+        it automatically (the default) or raise.
     :raises ValueError: If `limit` is given and is less than 1.
     :raises SessionNotInitializedError: If `session` is not initialized and
         `auto_initialize` is `False`.
@@ -277,7 +271,7 @@ async def get_terms_urls(
         assert page is not None
         # The glossary auto-runs an unfiltered query as soon as the search
         # screen loads (that's what populates the facet panel), so the page
-        # always has *some* results-panel state to diff a filtered search
+        # always has some results-panel state to diff a filtered search
         # against, so we read it now rather than starting from an empty baseline.
         # An empty baseline previously meant "nothing to wait for", so the
         # very first search of every session read that pre-filter panel
@@ -295,7 +289,7 @@ async def get_terms_urls(
                 start_letter=start_letter,
                 pager_query=pager_query,
             )
-            links, header_text = await _wait_for_settle(
+            links, header_text = await _load_search_url(
                 session,
                 url=url,
                 page=page,
@@ -392,7 +386,7 @@ async def get_results_from_url(
         topic text parsed off the page (canonicalizing minor
         formatting differences between the two). Every other topic
         listed alongside it, and every other definition on the page,
-        is still yielded regardless - this only affects how one
+        is still yielded regardless. This only affects how one
         matching topic entry is labeled, not which definitions/topics
         are yielded at all.
     :param page: A page to navigate to `url` on. When given, it's assumed
@@ -421,7 +415,7 @@ async def get_results_from_url(
         section has no illustrative image, even if a sibling section
         does. `related` is empty when that section has no related-term links.
     :param auto_initialize: If `session` is not initialized yet, initialize
-        it automatically (the default) or raise. See `ensure_initialized`.
+        it automatically (the default) or raise.
     :raises SessionNotInitializedError: If `session` is not initialized and
         `auto_initialize` is `False`.
     :raises ParsingError: If the page loaded but its structure didn't
@@ -562,7 +556,7 @@ async def get_results_from_urls(
         default) excludes nothing.
     :yield: `SearchResult`s as they're fetched, `exclude`d URLs/terms skipped.
     :param auto_initialize: If `session` is not initialized yet, initialize
-        it automatically (the default) or raise. See `ensure_initialized`.
+        it automatically (the default) or raise.
     :raises ValueError: If `concurrency` is less than 1.
     :raises SessionNotInitializedError: If `session` is not initialized and
         `auto_initialize` is `False`.
@@ -724,7 +718,7 @@ async def search(
     Search the glossary for `query` and yield matching definitions.
 
     A matched term can carry several definitions (one per topic), so more
-    than `limit` results may be yielded; `limit` bounds the number of terms
+    than `limit` results may be yielded. `limit` bounds the number of terms
     looked up, not the number of definitions returned.
 
     :param session: An open glossary session.
@@ -742,7 +736,7 @@ async def search(
         already stored locally. See `get_terms_urls`/`get_results_from_urls`.
         `None` (the default) excludes nothing.
     :param auto_initialize: If `session` is not initialized yet, initialize
-        it automatically (the default) or raise. See `ensure_initialized`.
+        it automatically (the default) or raise.
     :yield: `SearchResult`s for the matched terms. In sequential order
         (`concurrency=1`) these are most-relevant-first; with higher
         concurrency, results may arrive out of relevance order.
@@ -816,7 +810,7 @@ async def get_terms_on(
         already stored locally. See `get_terms_urls`/`get_results_from_urls`.
         `None` (the default) excludes nothing.
     :param auto_initialize: If `session` is not initialized yet, initialize
-        it automatically (the default) or raise. See `ensure_initialized`.
+        it automatically (the default) or raise.
     :yield: One `SearchResult` per term filed under `topic`.
     :raises SessionNotInitializedError: If `session` is not initialized and
         `auto_initialize` is `False`.

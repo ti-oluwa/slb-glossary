@@ -36,21 +36,21 @@ __all__ = [
 ]
 
 
-def _dump_related(related: tuple[RelatedTerm, ...] | None) -> str | None:
+def dump_related(related: tuple[RelatedTerm, ...] | None) -> str | None:
     """Serialize a `SearchResult.related` tuple to a compact JSON string."""
     if not related:
         return None
     return json.dumps([[link.term, link.url] for link in related])
 
 
-def _load_related(raw: str | None) -> tuple[RelatedTerm, ...] | None:
+def load_related(raw: str | None) -> tuple[RelatedTerm, ...] | None:
     """Deserialize a `related_json` column back into a `SearchResult.related` tuple."""
     if not raw:
         return None
     return tuple(RelatedTerm(term=term, url=url) for term, url in json.loads(raw))
 
 
-def _row_to_result(row: aiosqlite.Row) -> SearchResult:
+def row_to_result(row: aiosqlite.Row) -> SearchResult:
     """Build a `SearchResult` from a `terms` row (or a row that at least joins in its columns)."""
     return SearchResult(
         term=row["term"],
@@ -60,7 +60,7 @@ def _row_to_result(row: aiosqlite.Row) -> SearchResult:
         url=row["url"],
         image=row["image"],
         image_caption=row["image_caption"],
-        related=_load_related(row["related_json"]),
+        related=load_related(row["related_json"]),
         language=row["language"],
     )
 
@@ -137,7 +137,7 @@ async def upsert_results(
             language if language is not None else result.language,
             result.image,
             result.image_caption,
-            _dump_related(result.related),
+            dump_related(result.related),
             source,
             now,
         )
@@ -195,8 +195,7 @@ async def upsert_results_incrementally(
 
     `upsert_results` only writes once its entire input has been consumed,
     which means the whole stream sits in memory until then, and a stream
-    that dies partway through (a browser crash, a network blip, the
-    process getting killed) loses everything already fetched, since
+    that dies partway through loses everything already fetched, since
     nothing was ever written. This writes to `db` every `batch_size`
     results instead, and again with whatever's left over once `results`
     ends, including when it ends via an exception, if `persist_on_error`
@@ -215,8 +214,7 @@ async def upsert_results_incrementally(
         cost of more (smaller) database writes; larger values write less
         often but risk losing more unsaved results if something goes wrong
         before the next flush. `None` (the default) uses
-        `constants.persist_batch_size`, resolved
-        fresh on this call.
+        `constants.persist_batch_size`, resolved fresh on this call.
     :param persist_on_error: If `True` (the default), flush whatever's
         currently buffered when `results` raises, before letting the
         exception propagate, so an interrupted fetch still saves the
@@ -293,7 +291,7 @@ async def upsert_results_incrementally(
             stats["batches"] = batches_written
 
 
-def _apply_exclude(
+def _apply_sql_exclude(
     sql: str,
     params: list[typing.Any],
     exclude: Collection[str] | None,
@@ -303,7 +301,7 @@ def _apply_exclude(
 ) -> str:
     """
     Append `AND <url_column> NOT IN (...)`/`AND LOWER(TRIM(<term_column>)) NOT IN (...)`
-    for `exclude`.
+    for `exclude`, to the SQL query string.
 
     `exclude` can hold URLs, term names, or a mix of both (see
     `slb_glossary.utils.split_exclude`); this appends whichever clauses
@@ -339,11 +337,7 @@ def fuzzy_match_topics(
 ) -> str:
     """
     Resolve a user-supplied topic name to its closest match(es) among locally
-    stored topics.
-
-    Same difflib-based approach as `slb_glossary.utils.get_topic_match`
-    uses for the live glossary's topic list, applied to whatever's actually
-    been synced/imported into the local database instead.
+    stored topics. Uses `difflib.get_close_matches`.
 
     :param topics: Known local topic names, e.g. `get_topics(db)`'s
         return value (or any iterable of topic name strings).
@@ -468,9 +462,8 @@ async def search(
     - `"hybrid"`: `slb_glossary.local.hybrid_search`, both, fused. Same
       extra/embedding requirement as `"semantic"`.
 
-    `constants.default_search_mode` is `"lexical"` rather than
-    `"hybrid"` out of the box, so that plain `search(db, query)` keeps
-    working on a database that's never had `embed_terms` run on it, and
+    `constants.default_search_mode` is `"lexical"`, so plain `search(db, query)`
+    works on a database that's never had `embed_terms` run on it, and
     without forcing the `semantic` extra on every install. Set that
     constant (or pass `mode="hybrid"` per call) once you've embedded your
     terms; it generally ranks better than `"lexical"` alone.
@@ -480,7 +473,7 @@ async def search(
     the mode's underlying function separately.
 
     Unlike `slb_glossary.live.search`, this never touches the live
-    glossary site; results are only as fresh as the last sync, import,
+    glossary site. Results are only as fresh as the last sync, import,
     or (for `"semantic"`/`"hybrid"`) `embed_terms` call.
 
     :param db: The local database to search.
@@ -505,7 +498,7 @@ async def search(
         is told apart as a URL vs. a term name.
     :param min_similarity: With `mode="semantic"` only (ignored
         otherwise), forwarded as-is to `slb_glossary.local.vector_search`'s
-        own `min_similarity` - see its docstring. `None` (the default)
+        own `min_similarity`, see its docstring. `None` (the default)
         applies no confidence floor, same as calling `vector_search` directly.
     :return: Matching `SearchResult`s, or `(SearchResult, float)` pairs if
         `scored=True`, best match first either way.
@@ -569,8 +562,7 @@ async def get_terms_on(
     By default, `topic` must match a topic name already stored in the
     local database exactly (case-insensitively). Pass `fuzzy=True` to
     tolerate minor misspellings/partial names instead, resolved against
-    whatever topics are actually present locally (there's no access to the
-    live site's full topic list here, unlike `slb_glossary.live.get_terms_on`).
+    whatever topics are actually present locally.
 
     :param db: The local database to read from.
     :param topic: Topic name, or several comma-separated topic names.
@@ -619,7 +611,7 @@ async def get_terms_on(
     if language:
         sql += " AND language = ?"
         params.append(language)
-    sql = _apply_exclude(sql, params, exclude)
+    sql = _apply_sql_exclude(sql, params, exclude)
 
     sql += " ORDER BY term"
     if limit:
@@ -629,7 +621,7 @@ async def get_terms_on(
     async with db.connection.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
 
-    results = [_row_to_result(row) for row in rows]
+    results = [row_to_result(row) for row in rows]
     elapsed = time.monotonic() - started_at
     logger.debug(
         "Local `get_terms_on(%r)` returned %d term(s) in %.3fs", topic, len(results), elapsed
@@ -649,7 +641,8 @@ async def iter_terms(
     batch_size: int | None = None,
 ) -> typing.AsyncIterator[SearchResult]:
     """
-    Stream every locally stored term, optionally filtered, for a full or partial database export.
+    Stream every locally stored term, optionally filtered, for a full or partial
+    database export.
 
     Unlike `search`/`get_terms_on`, there's no relevance ranking here and
     no required filter. Omit every one of `topic`/`start_letter`/`language`
@@ -659,11 +652,6 @@ async def iter_terms(
     batches (see `batch_size`) rather than all at once, so exporting
     a large local database does not require holding the whole thing in
     memory before the first result is even available.
-
-    `slb_glossary.writers.save` does still collect the full stream into
-    memory before writing it out, so streaming here mainly helps a
-    `limit`-bounded partial export return early, and keeps the database-side
-    read itself from ever having to materialize an unbounded result set at once.
 
     :param db: The local database to read from.
     :param topic: Restrict results to this topic, or several
@@ -703,7 +691,7 @@ async def iter_terms(
     if language:
         sql += " AND language = ?"
         params.append(language)
-    sql = _apply_exclude(sql, params, exclude)
+    sql = _apply_sql_exclude(sql, params, exclude)
 
     sql += " ORDER BY term"
     if limit:
@@ -719,7 +707,7 @@ async def iter_terms(
                 break
             for row in rows:
                 yielded += 1
-                yield _row_to_result(row)
+                yield row_to_result(row)
 
     logger.debug(
         "Local `iter_terms` (topic=%r start_letter=%r language=%r) streamed %d term(s) in %.3fs",
@@ -789,8 +777,7 @@ async def get_term(
         other locally stored results, via `lexical_search` on `term_or_url`
         itself, best match first, the exact match (if any) excluded. Each
         paired with its own relevance score, the same shape `lexical_search`
-        itself returns. Handy for a "did you mean" prompt when the exact
-        match turns out to be `None`, or just to see what else is nearby.
+        itself returns. Handy if you want to see what else is nearby.
     :param similar_pool_size: Candidates `lexical_search` pulls before
         alternatives are drawn from them. Only used when `with_similar=True`.
         `None` (the default) uses `constants.similar_terms_pool_size`,
@@ -816,7 +803,7 @@ async def get_term(
     async with db.connection.execute(sql, params) as cursor:
         row = await cursor.fetchone()
 
-    result = _row_to_result(row) if row is not None else None
+    result = row_to_result(row) if row is not None else None
     if result is None:
         logger.debug("No local term found for %r", term_or_url)
 
@@ -870,7 +857,7 @@ async def get_term_definitions(
     async with db.connection.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
 
-    results = [_row_to_result(row) for row in rows]
+    results = [row_to_result(row) for row in rows]
     logger.debug("Local `get_term_definitions(%r)` returned %d row(s)", term_or_url, len(results))
     return results
 
@@ -944,7 +931,7 @@ async def get_random_term(
     if row is None:
         logger.debug("No local term available for random pick (topic=%r)", topic)
         return None
-    return _row_to_result(row)
+    return row_to_result(row)
 
 
 async def get_terms_urls(
@@ -1031,7 +1018,7 @@ async def get_terms_urls(
         sql += " AND language = ?"
         params.append(language)
 
-    sql = _apply_exclude(sql, params, exclude)
+    sql = _apply_sql_exclude(sql, params, exclude)
 
     sql += " ORDER BY term"
     if limit:

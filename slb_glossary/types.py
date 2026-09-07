@@ -145,18 +145,17 @@ class Updatable:
     opts2 = opts.update(timeout=60.0)  # instead of dataclasses.replace(opts, timeout=60.0)
     ```
 
-    For a **frozen** dataclass, `update` returns a new instance with
-    `changes` applied so `self` is untouched, exactly like
-    `dataclasses.replace`, just shorter to write and to chain
+    For a frozen dataclass, `update` returns a new instance with `changes` applied so `self`
+    is untouched, exactly like `dataclasses.replace`, just shorter to write and to chain
     (`config.update(a=1).update(b=2)`).
 
-    For a **non-frozen** one, `update` mutates `self` in place, field by field,
+    For a non-frozen one, `update` mutates `self` in place, field by field,
     and returns `self` so a caller that does not know (or care) whether a particular config is
     frozen can still call `.update(...)` and either use the return value or not, uniformly.
 
     `changes` are applied via `dataclasses.replace`/`setattr`.
 
-    Declare this *before* other bases so it does not shadow a dataclass
+    Note: Declare this before other bases so it does not shadow a dataclass
     field actually named `update`, e.g. `class Foo(Updatable): ...` not
     `class Foo(SomethingElse, Updatable): ...` if `SomethingElse` has an
     `update` field/method of its own.

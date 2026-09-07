@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 T = typing.TypeVar("T")
 
 
-_ENV_CASTERS: dict[type, typing.Callable[[str], typing.Any]] = {
+ENV_CASTERS: dict[type, typing.Callable[[str], typing.Any]] = {
     bool: lambda raw: raw.strip().lower() in ("1", "true", "yes", "on"),
     int: int,
     float: float,
@@ -82,7 +82,7 @@ def env(
         elif not isinstance(expected, builtins.type) and callable(expected):
             value = expected(raw)  # type: ignore[arg-type,assignment]
         else:
-            caster = _ENV_CASTERS.get(expected, expected)
+            caster = ENV_CASTERS.get(expected, expected)
             value = caster(raw)  # type: ignore[union-attr]
     except (ValueError, TypeError) as exc:
         raise EnvironmentVariableError(
@@ -141,14 +141,14 @@ def get_topic_match(topics: typing.Mapping[str, int], topic: str) -> str:
     return ",".join(resolved).title()
 
 
-_ACRONYMS = frozenset({"url", "id"})
+ACRONYMS = frozenset({"url", "id"})
 """Field-name words rendered upper-case rather than title-cased by `humanize_field`."""
 
 
 def humanize_field(field: str) -> str:
     """Turn a `snake_case` field name into a `Title Case` column header."""
     words = field.split("_")
-    return " ".join(word.upper() if word in _ACRONYMS else word.title() for word in words)
+    return " ".join(word.upper() if word in ACRONYMS else word.title() for word in words)
 
 
 async def log_timed_yields(

@@ -16,16 +16,12 @@ if typing.TYPE_CHECKING:
 
 def score_name_match(query: str, term: str) -> float | None:
     """
-    Score `term` against `query` on the name-match tiers only (see
-    `slb_glossary.scoring.classify_name_match`): exact, prefix,
-    whole-phrase containment either way, all query tokens present, or
-    some query tokens present.
+    Score `term` against `query` on name-match tiers (see `classify_name_match`).
 
     :param query: The free-text query.
     :param term: A result's term name.
-    :return: The match's tier score (see `classify_name_match`), or
-        `None` if `term` shares no meaningful overlap with `query` at
-        all. `None` tells the caller to fall back to `score_content_overlap`.
+    :return: The match's tier score, or `None` if no overlap at all
+        (fall back to `score_content_overlap`).
     """
     match = classify_name_match(query, term)
     return match.score if match else None
@@ -97,9 +93,8 @@ def score_result(
         semantic ranking needs every result's rank relative to the
         others, which a single result scored on its own can not provide.
     :return: With `mode=SearchMode.LEXICAL`, a score in `[0.0, 1.0]`:
-        one of `slb_glossary.scoring.classify_name_match`'s tier scores
-        for a name match (exact, prefix, phrase-contains, all-tokens,
-        or partial-tokens), otherwise capped at `constants.content_match_score_cap`.
+        one of `classify_name_match`'s tier scores for a name match,
+        otherwise capped at `constants.content_match_score_cap`.
         With `mode=SearchMode.SEMANTIC`, a cosine similarity in
         `[-1.0, 1.0]`, in practice close to `[0.0, 1.0]` for real text,
         not capped.

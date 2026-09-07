@@ -12,8 +12,8 @@ from slb_glossary.config import (
     OutputOptions,
     RetryOptions,
     SessionOptions,
-    _cast,
-    _parse_bool,
+    cast_to_type,
+    parse_bool,
 )
 from slb_glossary.errors import ConfigError
 from slb_glossary.retries import BackoffType, RetryPolicy
@@ -29,7 +29,7 @@ class TestRetryOptions:
         )
         policy = options.retry_policy()
         assert policy.attempts == 5
-        assert policy.base_delay == 1.0
+        assert policy.base_delay == 1
         assert policy.backoff_type is BackoffType.LINEAR
         assert policy.factor == 3.0
         assert policy.max_delay == 20.0
@@ -257,27 +257,27 @@ class TestParseBool:
     @pytest.mark.parametrize("raw", ["true", "1", "yes", "on", "TRUE", " Yes "])
     def test_recognizes_truthy_strings(self, raw: str) -> None:
         """Recognized truthy strings (case/whitespace-insensitive) parse to `True`."""
-        assert _parse_bool(raw) is True
+        assert parse_bool(raw) is True
 
     @pytest.mark.parametrize("raw", ["false", "0", "no", "off", "FALSE"])
     def test_recognizes_falsy_strings(self, raw: str) -> None:
         """Recognized falsy strings (case-insensitive) parse to `False`."""
-        assert _parse_bool(raw) is False
+        assert parse_bool(raw) is False
 
     def test_raises_value_error_for_unrecognized_string(self) -> None:
         """A string in neither set raises `ValueError`."""
         with pytest.raises(ValueError):
-            _parse_bool("maybe")
+            parse_bool("maybe")
 
 
 class TestCast:
     def test_non_string_value_passes_through_unchanged(self) -> None:
         """A non-`str` `value` is returned unchanged, regardless of `like`."""
-        assert _cast(5, like=0) == 5
+        assert cast_to_type(5, like=0) == 5
 
     def test_string_like_passes_value_through_unchanged(self) -> None:
         """When `like` is itself a `str`, `value` is returned unchanged (no coercion needed)."""
-        assert _cast("hello", like="world") == "hello"
+        assert cast_to_type("hello", like="world") == "hello"
 
     @pytest.mark.parametrize(
         ("value", "like", "expected"),
@@ -287,31 +287,31 @@ class TestCast:
         self, value: str, like: bool | int | float, expected: bool | int | float
     ) -> None:
         """`value` is coerced to `bool`/`int`/`float` matching `like`'s type."""
-        assert _cast(value, like=like) == expected
+        assert cast_to_type(value, like=like) == expected
 
     def test_coerces_comma_separated_string_to_list(self) -> None:
         """A comma-separated string coerces to a stripped list of items when `like` is a list."""
-        assert _cast("a, b ,c", like=["x"]) == ["a", "b", "c"]
+        assert cast_to_type("a, b ,c", like=["x"]) == ["a", "b", "c"]
 
     def test_coerces_json_string_to_dict(self) -> None:
         """A JSON string coerces to a dict when `like` is a dict."""
-        assert _cast('{"a": 1}', like={"x": 1}) == {"a": 1}
+        assert cast_to_type('{"a": 1}', like={"x": 1}) == {"a": 1}
 
     def test_raises_config_error_on_uncoercible_value(self) -> None:
         """An uncoercible string raises `ConfigError` for a non-`str` `like`."""
         with pytest.raises(ConfigError):
-            _cast("not-a-number", like=0)
+            cast_to_type("not-a-number", like=0)
 
     def test_like_none_and_bool_shaped_field_type_parses_as_bool(self) -> None:
         """`like=None` with a bool-shaped `field_type` still parses the string as bool."""
         field_type = next(
             f.type for f in dataclasses.fields(SessionOptions) if f.name == "use_stealth"
         )
-        assert _cast("false", like=None, field_type=field_type) is False
+        assert cast_to_type("false", like=None, field_type=field_type) is False
 
     def test_like_none_and_non_bool_field_type_returns_value_unchanged(self) -> None:
         """`like=None` with a non-bool-shaped `field_type` returns the raw string unchanged."""
         field_type = next(
             f.type for f in dataclasses.fields(SessionOptions) if f.name == "executable_path"
         )
-        assert _cast("some/path", like=None, field_type=field_type) == "some/path"
+        assert cast_to_type("some/path", like=None, field_type=field_type) == "some/path"

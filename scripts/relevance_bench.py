@@ -25,13 +25,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from slb_glossary.constants import constants  # noqa: E402
-from slb_glossary.local.connection import database  # noqa: E402
-from slb_glossary.local.types import Database  # noqa: E402
-from slb_glossary.phrasing import clean_query  # noqa: E402
-from slb_glossary.types import SearchResult  # noqa: E402
-from slb_glossary.utils import normalize_text  # noqa: E402
-from tests.relevance.harness import evaluate, seed_corpus  # noqa: E402
+from slb_glossary.constants import constants
+from slb_glossary.local.api import row_to_result
+from slb_glossary.local.connection import database
+from slb_glossary.local.types import Database
+from slb_glossary.phrasing import clean_query
+from slb_glossary.types import SearchResult
+from slb_glossary.utils import normalize_text
+from tests.relevance.harness import evaluate, seed_corpus
 
 logging.getLogger("slb_glossary").setLevel(logging.WARNING)
 
@@ -46,7 +47,6 @@ async def _legacy_lexical_search(
     everything else), no contains/all-tokens/partial-token tiers, no
     fuzzy-typo fallback, no `AND`-then-`OR` retrieval fallback.
     """
-    from slb_glossary.local.api import _row_to_result
     from slb_glossary.local.lexical import build_fts_query
 
     normalized_query = clean_query(query)
@@ -66,7 +66,9 @@ async def _legacy_lexical_search(
     async with db.connection.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
 
-    others_bm25 = [row["bm25_score"] for row in rows if not row["is_exact"] and not row["is_prefix"]]
+    others_bm25 = [
+        row["bm25_score"] for row in rows if not row["is_exact"] and not row["is_prefix"]
+    ]
     worst = max(others_bm25, default=0.0)
     best = min(others_bm25, default=0.0)
     spread = (worst - best) or 1.0
@@ -78,8 +80,10 @@ async def _legacy_lexical_search(
         elif row["is_prefix"]:
             score = constants.prefix_match_score
         else:
-            score = round(constants.content_match_score_cap * (worst - row["bm25_score"]) / spread, 4)
-        scored.append((_row_to_result(row), score))
+            score = round(
+                constants.content_match_score_cap * (worst - row["bm25_score"]) / spread, 4
+            )
+        scored.append((row_to_result(row), score))
 
     if limit:
         scored = scored[:limit]
@@ -97,26 +101,32 @@ async def run_lexical(db: Database) -> None:
     print()
     print(f"Failures still outside the top 3, after ({len(after.failures())}):")
     for outcome in after.failures():
-        print(f"  [{outcome.query.category}] {outcome.query.query!r} -> {outcome.ranked_terms[:5]!r}")
+        print(
+            f"  [{outcome.query.category}] {outcome.query.query!r} -> {outcome.ranked_terms[:5]!r}"
+        )
 
 
-async def run_semantic_and_hybrid(db: Database) -> None:
+async def run_semantic_and_hybrid(db: Database) -> bool:
     try:
         from slb_glossary.local.hybrid import hybrid_search
         from slb_glossary.local.vector import embed_terms, vector_search
     except ImportError:
-        print("Skipping semantic/hybrid: `semantic` extra not installed "
-              "(`pip install slb-glossary[semantic]`).")
-        return
+        print(
+            "Skipping semantic/hybrid: `semantic` extra not installed "
+            "(`pip install slb-glossary[semantic]`)."
+        )
+        return False
 
     try:
         await embed_terms(db, only_missing=False)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"Skipping semantic/hybrid: could not embed the corpus ({exc!r}).")
-        print("This is expected in a network-restricted sandbox: embedding needs a "
-              "one-time download of the model2vec model from Hugging Face. Run this "
-              "script in an environment with that access for real semantic/hybrid numbers.")
-        return
+        print(
+            "This is expected in a network-restricted sandbox: embedding needs a "
+            "one-time download of the model2vec model from Hugging Face. Run this "
+            "script in an environment with that access for real semantic/hybrid numbers."
+        )
+        return False
 
     semantic = await evaluate(db, vector_search, mode_label="semantic")
     hybrid = await evaluate(db, hybrid_search, mode_label="hybrid")
@@ -155,7 +165,13 @@ async def run_rrf_sweep(db: Database) -> None:
                     constants.rrf_k = rrf_k
                     report = await evaluate(db, hybrid_search, mode_label="hybrid")
                     rows.append(
-                        (lexical_weight, semantic_weight, rrf_k, report.overall.ndcg_at_5, report.overall.recall_at_5)
+                        (
+                            lexical_weight,
+                            semantic_weight,
+                            rrf_k,
+                            report.overall.ndcg_at_5,
+                            report.overall.recall_at_5,
+                        )
                     )
                     if best is None or report.overall.ndcg_at_5 > best[0]:
                         best = (report.overall.ndcg_at_5, (lexical_weight, semantic_weight, rrf_k))
@@ -165,7 +181,9 @@ async def run_rrf_sweep(db: Database) -> None:
     rows.sort(key=lambda row: row[3], reverse=True)
     print(f"{'lexical_w':>10}{'semantic_w':>12}{'rrf_k':>8}{'NDCG@5':>10}{'R@5':>8}")
     for lexical_weight, semantic_weight, rrf_k, ndcg, recall in rows[:10]:
-        print(f"{lexical_weight:>10.2f}{semantic_weight:>12.2f}{rrf_k:>8}{ndcg:>10.3f}{recall:>8.3f}")
+        print(
+            f"{lexical_weight:>10.2f}{semantic_weight:>12.2f}{rrf_k:>8}{ndcg:>10.3f}{recall:>8.3f}"
+        )
     if best:
         _, (lw, sw, k) = best
         print(
@@ -177,7 +195,9 @@ async def run_rrf_sweep(db: Database) -> None:
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--semantic", action="store_true", help="Also run semantic/hybrid (needs the `semantic` extra)."
+        "--semantic",
+        action="store_true",
+        help="Also run semantic/hybrid (needs the `semantic` extra).",
     )
     parser.add_argument(
         "--rrf-sweep",

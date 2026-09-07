@@ -1,15 +1,12 @@
 """
 Text embedding for semantic scoring/search over glossary terms, local or live.
 
-Wraps a single, package-managed `model2vec` static embedding model (see
-`constants.embedding_model`), so `slb_glossary.local`'s semantic search
-and `slb_glossary.live`'s semantic result scoring embed text the same
-way, without either needing its own model.
+Wraps a single, package-managed `model2vec` static embedding model
+(`constants.embedding_model`).
 
 The model is downloaded once from Hugging Face and cached locally by `model2vec`.
 
-Install the `semantic` extra to use anything in this module:
-`pip install slb-glossary[semantic]`.
+Install the `semantic` extra to use anything in this module: `pip install slb-glossary[semantic]`.
 """
 
 import functools
@@ -79,8 +76,8 @@ def embedding_dim() -> int:
     Return the output size of the package's embedding model.
 
     Loads the model on first call, purely to confirm its real output
-    size matches `constants.embedding_dim` (the local vector table is
-    created with that fixed size, see `slb_glossary.local.vectors`).
+    size matches `constants.embedding_dim` since the local vector table is
+    created with that fixed size.
 
     :raises EmbeddingError: If the `semantic` extra is not installed, or
         the model's real output size does not match `constants.embedding_dim`.

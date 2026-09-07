@@ -109,7 +109,7 @@ class Pages:
     Accounting is driven by the page's own `close` event rather than by
     callers remembering to release th page, so a page closed any way
     (via `PageHandle`, a direct `page.close()`, or the context tearing it
-    down) always frees its slot exactly once.
+    down) always frees its slot.
     """
 
     context: BrowserContext
@@ -159,7 +159,7 @@ class Pages:
 
         released = False
 
-        def _on_close(*_: typing.Any) -> None:
+        def discard_and_release(*_: typing.Any) -> None:
             nonlocal released
             if released:
                 return
@@ -168,7 +168,7 @@ class Pages:
             self._semaphore.release()
             logger.debug("Closed pool page (pool size now %d/%d)", self.size, self.max_size)
 
-        page.on("close", _on_close)
+        page.on("close", discard_and_release)
         self._pages.add(page)
         logger.debug(
             "Opened pool page (pool size now %d/%d) in %.3fs",

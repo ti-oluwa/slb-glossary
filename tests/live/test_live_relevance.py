@@ -1,9 +1,4 @@
-"""
-`live.relevance`: `score_name_match`'s name-match tiers (shared with
-`slb_glossary.local.lexical_search` via `slb_glossary.scoring`),
-`score_content_overlap`'s token-coverage scoring, and `score_result`'s
-lexical/semantic dispatch.
-"""
+"""`live.relevance`: `score_name_match`, `score_content_overlap`, `score_result`."""
 
 import pytest
 
@@ -27,17 +22,15 @@ class TestScoreNameMatch:
         assert score_name_match("poros", "Porosity") == constants.prefix_match_score
 
     def test_contains_match_scores_contains_match_score(self) -> None:
-        """
-        A term that contains the whole query as a phrase (or vice-versa),
-        without being exact or a prefix, scores `constants.contains_match_score`
-        - now shared with `slb_glossary.local.lexical_search` via
-        `slb_glossary.scoring.classify_name_match`.
-        """
+        """A term that contains the whole query as a phrase (or vice-versa) scores `contains_match_score`."""
         assert score_name_match("lift", "Gas Lift") == constants.contains_match_score
 
     def test_all_tokens_match_scores_all_tokens_match_score(self) -> None:
         """Every query token present in the term name, just reordered, scores `all_tokens_match_score`."""
-        assert score_name_match("valve gas lift", "Gas Lift Valve") == constants.all_tokens_match_score
+        assert (
+            score_name_match("valve gas lift", "Gas Lift Valve")
+            == constants.all_tokens_match_score
+        )
 
     def test_no_match_returns_none(self) -> None:
         """No overlap at all (not even a partial token) returns `None`."""

@@ -21,24 +21,19 @@ PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"^meaning\s+of\s+(?:a|an|the)?\s*(?P<term>.+?)\s*\??$",
     )
 )
-"""
-Recognized phrasings. Each is matched whole-string (not just a prefix),
-so a query that merely contains one of these words somewhere ("geometric
-mean", "explain and give an example") is not mangled. Only a query that
-is one of these phrasings, start to end, gets stripped down to its `term` group.
-"""
+"""Regex patterns for common query phrasings"""
 
 
 def clean_query(query: str) -> str:
     """
     Strip a recognized natural-language wrapper off `query`, leaving just the term.
 
-    Local and live matching both work against actual term names and
-    words, not conversational phrasing. Unstripped, a query like "what is
-    porosity" would be searched as the literal phrase "what is porosity",
-    which typically matches nothing, since no term's name or text
-    contains the word "what". Stripping first gives such a query the same
-    shot at a real match that searching "porosity" directly would get.
+    Local and live matching both work best against actual term names and
+    words. Unstripped, a query like "what is porosity" would be searched as
+    the literal phrase "what is porosity", which may not match anything.
+
+    Stripping first gives such a query the same shot at a real match that
+    searching "porosity" directly would get.
 
     :param query: The raw query as given by the caller.
     :return: `query` with a recognized wrapper stripped and surrounding

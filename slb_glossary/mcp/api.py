@@ -61,7 +61,8 @@ __all__ = ["MCPApp", "load_app", "resolve_icon"]
 
 def resolve_icon(logo: str | None) -> list[mcp.types.Icon] | None:
     """
-    Resolve `slb_glossary.mcp.config.ServerInfo.logo` into an `icons` list for `fastmcp.FastMCP`.
+    Resolve `slb_glossary.mcp.config.ServerInfo.logo` into an `icons` list
+    for `fastmcp.FastMCP`.
 
     An `http(s)://` URL is passed straight through as the icon's `src`.
     Anything else is treated as a local file path and inlined as a
@@ -141,18 +142,19 @@ class MCPApp(NamedComponent):
     """
     A configured, buildable MCP server for the SLB Energy Glossary.
 
-    Construction (`MCPApp(config)`) is cheap and does no I/O. The
+    Initialization (`MCPApp(config)`) is cheap and does no I/O. The
     underlying `FastMCP` server and its tools are assembled lazily on first
     `server()`/`run()`/`run_async()` call.
 
     Resource startup/shutdown (`start`/`aclose`) run automatically via
-    `lifespan`, which every server this builds is constructed with, so
-    they fire whenever this server is actually served, regardless of how.
-    Either `run_async()`/`run()`, mounted inside a larger ASGI app, served
-    directly by an external ASGI runner (`app.server().http_app()`), or
-    driven by FastMCP's own CLI. Call `start()`/`close()` yourself only
-    if you need resources open before handing the server off to something
-    else that will also trigger `lifespan`. Both are idempotent.
+    `lifespan`, so they fire whenever this server is actually served,
+    regardless of how. Either `run_async()`/`run()`, mounted inside a
+    larger ASGI app, served directly by an external ASGI runner
+    (`app.server().http_app()`), or driven by FastMCP's own CLI.
+
+    Call `start()`/`close()` yourself only if you need resources open before
+    handing the server off to something else that will also trigger `lifespan`.
+    Both are idempotent.
     """
 
     def __init__(self, config: MCPConfig | None = None) -> None:
@@ -373,7 +375,7 @@ class MCPApp(NamedComponent):
 
     def run(self, **transport_kwargs: typing.Any) -> None:
         """
-        Synchronous convenience wrapper around `MCPApp.run_async`, for simple entry points.
+        Synchronous wrapper around `MCPApp.run_async`, for simple entry points.
 
         :param transport_kwargs: Forwarded to `fastmcp.FastMCP.run_async`.
         """

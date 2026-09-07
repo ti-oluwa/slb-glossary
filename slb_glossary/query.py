@@ -1,7 +1,6 @@
 """
-Source-aware query API containing a set of functions that can read the local
-database, the live glossary, or both, without the caller having to specify what
-source to use, and what order to use them every time.
+Source-aware query API. Can read the local database, the live glossary, or both, without the caller
+having to specify what source to use, and what order to use them every time.
 
 ```python
 import slb_glossary as slb
@@ -28,11 +27,6 @@ in what order) is controlled by `source`:
 
 When only one of `db`/`session` is given, `Source.AUTO` simply
 behaves like whichever of `Source.LOCAL`/`Source.LIVE` that one supports.
-
-Every function here returns or yields `QueryResult`s, so a caller can always
-know which source actually answered a query (and, where relevant, how confident
-the match was) without threading that information through separately.
-Unwrap with `.value`.
 """
 
 import asyncio
@@ -132,11 +126,7 @@ class QueryResult(typing.Generic[T]):
 @dataclasses.dataclass(slots=True, kw_only=True, frozen=True)
 class SimilarResult:
     """
-    The outcome of a `with_similar=True` term lookup: an exact match, plus alternatives.
-
-    Returned by `get_term` (wrapped in a `QueryResult` itself) in place
-    of a bare `SearchResult | None` when the caller opted into also
-    seeing similarly-named results.
+    The outcome of a `with_similar=True` term lookup. Contains an exact match, plus alternatives.
     """
 
     exact: QueryResult[SearchResult] | None
@@ -182,13 +172,11 @@ async def resolve_source(db: Database | None, session: Session | None, source: S
     resolves to whichever one that is.
 
     When both are given, this defers back to `Source.AUTO` (returns it
-    unchanged) so the caller's own local-first, live-fallback logic can
-    decide, *unless* `constants.check_internet_before_live` is set and
-    `slb_glossary.connectivity.has_internet_connection` reports no
-    connectivity, in which case this resolves straight to `Source.LOCAL`
-    instead, logging a warning. Attempting live with no internet would
-    just mean opening a browser and waiting out a full navigation
-    timeout to reach the same conclusion.
+    unchanged), unless `constants.check_internet_before_live` is set and
+    the connectivity check reports no connectivity, in which case this
+    resolves straight to `Source.LOCAL` instead, and logging a warning.
+    Attempting live with no internet would just mean opening a browser and
+    waiting out a full navigation timeout to reach the same conclusion.
 
     :param db: An open local `Database`, or `None`.
     :param session: An open live `Session`, or `None`.
@@ -203,7 +191,7 @@ async def resolve_source(db: Database | None, session: Session | None, source: S
     if db is not None and session is not None:
         if constants.check_internet_before_live and not await has_internet_connection():
             logger.warning(
-                "No internet connection detected; serving this query from the "
+                "No internet connection detected. Serving this query from the "
                 "local database only instead of attempting a live fetch. Set "
                 "`constants.check_internet_before_live = False` (or "
                 "`SLB_GLOSSARY_CHECK_INTERNET_BEFORE_LIVE=false`) to always "
@@ -219,7 +207,7 @@ def validate_language(session: Session | None, language: str | None) -> None:
     Validate that `language`, if given, matches `session`'s own language.
 
     A `Session` is bound to one glossary language edition for its whole
-    lifetime, set when it was opened. So a live fetch can not honor a
+    lifetime, set when it was opened. So a live fetch can not honour a
     row["url"] for different `language` on a per-call basis the way a
     local read can.
 
@@ -251,7 +239,7 @@ def _build_live_scorer(query: str, mode: SearchMode) -> typing.Callable[[SearchR
     they stream in, without waiting for the rest. `SearchMode.HYBRID`
     needs every result's rank relative to the others to fuse a ranking,
     which would mean collecting a live search's entire result set before
-    returning anything. Live search does not do that, so hybrid scoring
+    returning anything. Live search does not support that, so hybrid scoring
     is not available for it.
 
     :param query: The free-text query results are being scored against.
@@ -276,7 +264,7 @@ def _build_live_scorer(query: str, mode: SearchMode) -> typing.Callable[[SearchR
     return lambda result: live.score_result(query, result, mode=SearchMode.LEXICAL)
 
 
-async def _maybe_persist(
+async def persist_all(
     db: Database | None, results: typing.Sequence[SearchResult], *, persist: bool, language: str
 ) -> bool:
     """Upsert `results` into `db` in one shot."""
@@ -305,9 +293,6 @@ def persist_incrementally(
     """
     Wrap a live result stream, upserting into `db` in batches as results arrive.
 
-    A thin wrapper around `slb_glossary.local.upsert_results_incrementally`,
-    which does batching/flush-on-error work.
-
     :param db: The local database to write to. `results` is passed through
         unchanged (no persistence attempted) if this is `None`.
     :param results: The live result stream to wrap.
@@ -318,7 +303,7 @@ def persist_incrementally(
         in. Passed straight through to `slb_glossary.local.upsert_results_incrementally`.
     :param batch_size: Number of results to buffer before writing an
         incremental batch. Smaller values save progress more often at the
-        cost of more (smaller) database writes; larger values write less
+        cost of more (smaller) database writes, while larger values write less
         often but risk losing more unsaved results if something goes wrong
         before the next flush. `None` (the default) passes through
         unchanged to `slb_glossary.local.upsert_results_incrementally`,
@@ -367,15 +352,11 @@ async def search(
     """
     Search for `query`, reading from `db`/`session` according to `source`.
 
-    `query` is first passed through `slb_glossary.natural_language.clean_query`,
-    so a plain-English question like "what is water saturation" is searched
-    as "water saturation" against both `db` and `session`.
-
     With `source=Source.AUTO` (the default when both `db` and `session`
     are given), the local database is searched first and scored.
     If its best result meets `relevance_threshold`, those local results
     are served alone. Otherwise the live glossary is queried too, and
-    queried *first*, ahead of the (unconfident) local results, on the
+    queried first, ahead of the (unconfident) local results, on the
     theory that a live result is generally more trustworthy than a local
     match that was not confident enough to stand alone. Local results
     aren't thrown away, they still fill out any of `limit` that live
@@ -392,7 +373,7 @@ async def search(
     :param start_letter: Restrict results to terms starting with this letter.
     :param language: Restrict results to this glossary language edition
         (e.g. `"en"`/`"es"`). For a local read, this filters stored
-        results by their `.language`; `None` (the default) does not
+        results by their `.language`. `None` (the default) does not
         filter. For a live read, `session` is already bound to one
         language for its whole lifetime, so `language` here is only
         validated against it, not applied as a filter. See
@@ -402,8 +383,7 @@ async def search(
         live fetch happens. See `slb_glossary.live.search`.
     :param persist: If `True`, and a live fetch happens, write its results
         into `db` (if given) so the next matching call can be served
-        locally. Written incrementally as results arrive (see
-        `slb_glossary.local.upsert_results_incrementally`), and not all at
+        locally. Written incrementally as results arrive, and not all at
         once at the end.
     :param persist_batch_size: Number of live results to buffer before each
         incremental write to `db`. Only relevant when `persist=True` and a
@@ -421,7 +401,7 @@ async def search(
         `"semantic"`, or `"hybrid"`, or the matching
         `slb_glossary.types.SearchMode` member. `None` (the
         default) uses `constants.default_search_mode`. Affects both a
-        local read and a live one, with one restriction: a live read
+        local read and a live one, with one restriction; a live read
         (`Source.LIVE`, or `Source.AUTO`'s live fallback) can not be scored
         with `"hybrid"`, since that needs a whole result set's ranks up
         front and live results stream in one at a time. Use `"lexical"`
@@ -448,10 +428,9 @@ async def search(
     :yield: `QueryResult[SearchResult]`s, best match first.
     :param auto_initialize: If a live fetch happens and `session` is not
         initialized yet, initialize it automatically (the default) or
-        raise. See `slb_glossary.live.ensure_initialized`. Only ever
-        matters when a live fetch actually happens. For `Source.AUTO`,
-        that's never guaranteed, so passing `auto_initialize=False` with
-        an uninitialized `session` does not raise unless local results
+        raise. This only matters when a live fetch actually happens.
+        For `Source.AUTO`, that's never guaranteed, so passing `auto_initialize=False`
+        with an uninitialized `session` does not raise unless local results
         turn out to be needed.
     :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that was not given, or `language`
@@ -498,7 +477,7 @@ async def search(
 
     if resolved_source is Source.LIVE or source is not Source.AUTO:
         assert session is not None
-        score_live_result = _build_live_scorer(normalized_query, resolved_mode)
+        score_result = _build_live_scorer(normalized_query, resolved_mode)
         stream = live.search(
             session,
             normalized_query,
@@ -518,7 +497,7 @@ async def search(
             persist_on_error=persist_on_error,
         ):
             count += 1
-            score = score_live_result(result)
+            score = score_result(result)
             yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=score)
 
         logger.debug(
@@ -582,7 +561,7 @@ async def search(
     seen_urls: set[str] = set()
     seen_terms: set[str] = set()
     live_count = 0
-    score_live_result = _build_live_scorer(normalized_query, resolved_mode)
+    score_result = _build_live_scorer(normalized_query, resolved_mode)
     stream = live.search(
         session,
         normalized_query,
@@ -605,7 +584,7 @@ async def search(
         seen_terms.add((result.term or "").strip().lower())
         live_count += 1
         count += 1
-        score = score_live_result(result)
+        score = score_result(result)
         yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=score)
 
     remaining = None if limit is None else max(limit - live_count, 0)
@@ -683,7 +662,7 @@ async def get_terms_on(
         stored result's `.language`; `None` (the default) does not filter.
         For a live read, `session` is already bound to one language for
         its whole lifetime, so `language` here is only validated against
-        it, not applied as a filter. See `validate_language`.
+        it, not applied as a filter.
     :param limit: Maximum number of terms to yield. `None` for unlimited.
     :param concurrency: Concurrent term-page fetches, only relevant when a
         live fetch happens.
@@ -710,8 +689,7 @@ async def get_terms_on(
     :yield: `QueryResult[SearchResult]`s filed under `topic`. `.score` is always `None`,
         since result ordering here is not relevance-ranked the way `search`'s is.
     :param auto_initialize: If a live fetch happens and `session` is not
-        initialized yet, initialize it automatically (the default) or
-        raise. See `slb_glossary.live.ensure_initialized`.
+        initialized yet, initialize it automatically (the default) or raise.
     :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that was not given, or `language`
         does not match `session`'s own language.
@@ -852,10 +830,11 @@ async def get_terms_urls(
     Yield term detail-page URLs matching the given filters, reading from
     `db`/`session` according to `source`.
 
-    Lighter-weight than `search`/`get_terms_on`: only the URLs themselves
+    Lighter-weight than `search`/`get_terms_on` as only the URLs themselves
     are returned, no definitions are fetched or parsed so there's
-    nothing here to persist. Same local-first, live-fallback behavior as
-    `search` for `Source.AUTO`.
+    nothing here to persist.
+
+    Same local-first, live-fallback behavior as `search` for `Source.AUTO`.
 
     :param db: An open local `Database`.
     :param session: An open live `Session`.
@@ -869,7 +848,7 @@ async def get_terms_urls(
         stored result's `.language`; `None` (the default) does not filter.
         For a live read, `session` is already bound to one language for
         its whole lifetime, so `language` here is only validated against
-        it, not applied as a filter. See `validate_language`.
+        it, not applied as a filter.
     :param limit: Maximum number of URLs to yield. `None` for unlimited.
     :param fuzzy: If `True`, any local-database read tolerates minor
         misspellings/partial names in `topic`. Live reads already
@@ -880,13 +859,12 @@ async def get_terms_urls(
         how an entry is told apart as a URL vs. a term name); a local
         read's own filters already narrow to what's stored, so excluding
         from that same set besides is rarely useful, but it's still
-        honored there too for consistency. `None` (the default) excludes nothing.
+        honoured there too for consistency. `None` (the default) excludes nothing.
     :yield: `QueryResult[str]`s wrapping matching term detail-page URLs.
         `.persisted` is always `False` here, since there's nothing to persist,
         and `.score` is always `None`.
     :param auto_initialize: If a live fetch happens and `session` is not
-        initialized yet, initialize it automatically (the default) or
-        raise. See `slb_glossary.live.ensure_initialized`.
+        initialized yet, initialize it automatically (the default) or raise.
     :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that was not given, or `language`
         does not match `session`'s own language.
@@ -1092,23 +1070,20 @@ async def get_term(
         stored result's `.language`; `None` (the default) does not filter.
         For a live read, `session` is already bound to one language for
         its whole lifetime, so `language` here is only validated against
-        it, not applied as a filter. See `validate_language`.
+        it, not applied as a filter.
     :param topic: A term/URL can have several stored definitions (locally),
         or several definitions found on one live page (one per topic it's
-        filed under, or filed under) - `topic` picks a specific one (exact,
-        case-insensitive match locally; substring, case-insensitive match
-        for a live fetch). Without it, and more than one is found, which
-        one comes back is deterministic (by topic name) for a local read,
-        or just whichever came first on the page for a live one - neither
+        filed under). `topic` picks a specific one (exact, case-insensitive match
+        locally; substring, case-insensitive match for a live fetch). Without it,
+        whne more than one is found, which one comes back is deterministic (by topic name)
+        for a local read, or just whichever came first on the page for a live one. Neither
         is otherwise meaningful. Use `get_term_definitions` (local only)
         if you want every stored definition instead of just one.
     :param with_similar: If `True`, resolve to a `QueryResult[SimilarResult]`
-        instead: `SimilarResult.exact` holds what a plain call would have
+        instead. `SimilarResult.exact` holds what a plain call would have
         returned, and `SimilarResult.similar` holds up to `max_similar_terms`
         other results found for `term_or_url` along the way, best match
-        first, whether that's a local `search` pass or a live one.
-        Handy for a "did you mean" prompt when the exact match turns out
-        to be `None`.
+        first, whether it is a local `search` pass or a live one.
     :param similar_pool_size: Candidates pulled while looking for the
         exact match, and, with `with_similar=True`, to draw alternatives
         from. `None` (the default) uses `constants.similar_terms_pool_size`,
@@ -1122,8 +1097,7 @@ async def get_term(
         found. Or, with `with_similar=True`, a `SimilarResult`, where each
         of `.exact`/`.similar` carries its own score.
     :param auto_initialize: If a live fetch happens and `session` is not
-        initialized yet, initialize it automatically (the default) or
-        raise. See `slb_glossary.live.ensure_initialized`.
+        initialized yet, initialize it automatically (the default) or raise.
     :raises QueryError: If neither `db` nor `session` is given,
         the requested `source` needs one that was not given, or `language`
         does not match `session`'s own language.
@@ -1135,7 +1109,7 @@ async def get_term(
     resolved_source = await resolve_source(db, session, source)
     if resolved_source is Source.LOCAL:
         assert db is not None
-        return await _lookup_local_term(
+        return await lookup_local_term(
             db,
             term_or_url,
             language=language,
@@ -1147,7 +1121,7 @@ async def get_term(
 
     if resolved_source is Source.LIVE or source is not Source.AUTO:
         assert session is not None
-        result = await _lookup_live_term(
+        result = await lookup_live_term(
             session,
             term_or_url,
             topic=topic,
@@ -1161,7 +1135,7 @@ async def get_term(
         )
 
     assert db is not None
-    result = await _lookup_local_term(
+    result = await lookup_local_term(
         db,
         term_or_url,
         language=language,
@@ -1181,7 +1155,7 @@ async def get_term(
     if session is None:
         return result
 
-    result = await _lookup_live_term(
+    result = await lookup_live_term(
         session,
         term_or_url,
         topic=topic,
@@ -1195,7 +1169,7 @@ async def get_term(
     )
 
 
-async def _lookup_local_term(
+async def lookup_local_term(
     db: Database,
     term_or_url: str,
     *,
@@ -1249,55 +1223,8 @@ async def _lookup_local_term(
     )
 
 
-async def _finalize_live_term_lookup(
-    db: Database | None,
-    session: Session,
-    fetched: QueryResult[SearchResult] | SimilarResult | None,
-    *,
-    with_similar: bool,
-    persist: bool,
-) -> QueryResult:
-    """
-    Persist `_lookup_live_term`'s result if requested, then build
-    `get_term`'s return value from it.
-
-    Shared by `get_term`'s `Source.LIVE` branch and its `Source.AUTO`
-    live-fallback branch, since both do the same persist-then-wrap work
-    once they have a `fetched` value from `_lookup_live_term`.
-    """
-    persisted = await _maybe_persist(
-        db,
-        results=_flatten_results(fetched, with_similar=with_similar),
-        persist=persist,
-        language=session.language.value,
-    )
-    if with_similar:
-        assert isinstance(fetched, SimilarResult)
-        return QueryResult(value=fetched, source=Source.LIVE, persisted=persisted)
-
-    assert not isinstance(fetched, SimilarResult)
-    if fetched is None:
-        return QueryResult(value=None, source=Source.LIVE, persisted=persisted)
-    return QueryResult(
-        value=fetched.value, source=Source.LIVE, persisted=persisted, score=fetched.score
-    )
-
-
-def _flatten_results(
-    fetched: QueryResult[SearchResult] | SimilarResult | None, *, with_similar: bool
-) -> list[SearchResult]:
-    """Flatten a `_lookup_live_term` result into the `SearchResult`(s) `_maybe_persist` should cache."""
-    if not with_similar:
-        assert not isinstance(fetched, SimilarResult)
-        return [fetched.value] if fetched is not None else []
-
-    assert isinstance(fetched, SimilarResult)
-    exact = [fetched.exact.value] if fetched.exact is not None else []
-    return exact + [lookup.value for lookup in fetched.similar]
-
-
 @typing.overload
-async def _lookup_live_term(
+async def lookup_live_term(
     session: Session,
     term_or_url: str,
     *,
@@ -1308,7 +1235,7 @@ async def _lookup_live_term(
     auto_initialize: bool = True,
 ) -> QueryResult[SearchResult] | None: ...
 @typing.overload
-async def _lookup_live_term(
+async def lookup_live_term(
     session: Session,
     term_or_url: str,
     *,
@@ -1320,7 +1247,7 @@ async def _lookup_live_term(
 ) -> SimilarResult: ...
 
 
-async def _lookup_live_term(
+async def lookup_live_term(
     session: Session,
     term_or_url: str,
     *,
@@ -1467,6 +1394,53 @@ async def _lookup_live_term(
     return SimilarResult(exact=exact, similar=similar)
 
 
+def _flatten_results(
+    fetched: QueryResult[SearchResult] | SimilarResult | None, *, with_similar: bool
+) -> list[SearchResult]:
+    """Flatten a `lookup_live_term` result into the `SearchResult`(s) `persist` should cache."""
+    if not with_similar:
+        assert not isinstance(fetched, SimilarResult)
+        return [fetched.value] if fetched is not None else []
+
+    assert isinstance(fetched, SimilarResult)
+    exact = [fetched.exact.value] if fetched.exact is not None else []
+    return exact + [lookup.value for lookup in fetched.similar]
+
+
+async def _finalize_live_term_lookup(
+    db: Database | None,
+    session: Session,
+    fetched: QueryResult[SearchResult] | SimilarResult | None,
+    *,
+    with_similar: bool,
+    persist: bool,
+) -> QueryResult:
+    """
+    Persist `lookup_live_term`'s result if requested, then build
+    `get_term`'s return value from it.
+
+    Shared by `get_term`'s `Source.LIVE` branch and its `Source.AUTO`
+    live-fallback branch, since both do the same persist-then-wrap work
+    once they have a `fetched` value from `lookup_live_term`.
+    """
+    persisted = await persist_all(
+        db,
+        results=_flatten_results(fetched, with_similar=with_similar),
+        persist=persist,
+        language=session.language.value,
+    )
+    if with_similar:
+        assert isinstance(fetched, SimilarResult)
+        return QueryResult(value=fetched, source=Source.LIVE, persisted=persisted)
+
+    assert not isinstance(fetched, SimilarResult)
+    if fetched is None:
+        return QueryResult(value=None, source=Source.LIVE, persisted=persisted)
+    return QueryResult(
+        value=fetched.value, source=Source.LIVE, persisted=persisted, score=fetched.score
+    )
+
+
 async def related_terms(
     term_or_url: str,
     *,
@@ -1481,8 +1455,8 @@ async def related_terms(
     """
     Look up the related terms linked from a single term's definition.
 
-    A thin convenience wrapper around `get_term`. Fetches the term, then
-    returns just its `SearchResult.related` links.
+    A thin wrapper around `get_term`. Fetches the term, then returns just
+    its `SearchResult.related` links.
 
     :param term_or_url: An exact (case-insensitive) term name, or a
         glossary term detail-page URL.
@@ -1496,8 +1470,7 @@ async def related_terms(
     :param topic: Pick a specific stored definition for a term/URL with
         several. See `get_term`'s parameter of the same name.
     :param auto_initialize: If a live fetch happens and `session` is not
-        initialized yet, initialize it automatically (the default) or
-        raise. See `slb_glossary.live.ensure_initialized`.
+        initialized yet, initialize it automatically (the default) or raise.
     :return: A `QueryResult` wrapping the related terms found (empty if
         `term_or_url` was not found, or was found but links to nothing).
     :raises QueryError: If neither `db` nor `session` is given,
@@ -1541,9 +1514,9 @@ async def get_random_term(
     :param db: An open local `Database`.
     :param session: An open live `Session`.
     :param source: Which source(s) to read from.
-        `Source.AUTO` here means "pick locally if the local database
-        has anything (matching `topic`, if given), otherwise pick form the live site,
-        not "try local, then live" the way the streaming functions do,
+        `Source.AUTO` here means we pick locally if the local database
+        has anything (matching `topic`, if given), otherwise pick we from the live site,
+        and not that we try local, then live, the way the streaming functions do,
         since a local miss on one random draw says nothing about whether
         the local database is empty.
     :param topic: Restrict the pick to this topic, or several comma-separated topics.
@@ -1552,7 +1525,7 @@ async def get_random_term(
         stored result's `.language`; `None` (the default) does not filter.
         For a live read, `session` is already bound to one language for
         its whole lifetime, so `language` here is only validated against
-        it, not applied as a filter. See `validate_language`.
+        it, not applied as a filter.
     :param persist: If `True`, and a live pick happens, cache it into `db`.
         A single-value lookup, so batching does not apply.
     :param fuzzy: If `True`, a local pick tolerates minor misspellings/
@@ -1575,7 +1548,7 @@ async def get_random_term(
     if resolved_source is Source.LIVE or source is not Source.AUTO:
         assert session is not None
         result = await _fetch_random_term(session, topic=topic)
-        persisted = await _maybe_persist(
+        persisted = await persist_all(
             db,
             results=[result] if result else [],
             persist=persist,
@@ -1594,7 +1567,7 @@ async def get_random_term(
         return QueryResult(value=None, source=Source.LOCAL, persisted=False)
 
     result = await _fetch_random_term(session, topic=topic, sample_size=25)
-    persisted = await _maybe_persist(
+    persisted = await persist_all(
         db, results=[result] if result else [], persist=persist, language=session.language.value
     )
     return QueryResult(value=result, source=Source.LIVE, persisted=persisted)
@@ -1690,15 +1663,9 @@ async def compare(
     with_similar: bool = False,
 ) -> dict[str, QueryResult[typing.Any]]:
     """
-    Look up several terms at once, for side-by-side comparison.
+    Look up several terms at once, for a side-by-side comparison.
 
-    Terms are looked up concurrently via `asyncio.gather`, up to
-    `concurrency` at a time, bounded by a semaphore. Each lookup that
-    actually reaches the live glossary checks out its own page from
-    `session.pages` for the duration of its own fetch, so concurrent
-    lookups never race over a single shared page. `session.max_pages`
-    should comfortably cover `concurrency`. A local-only lookup never
-    touches a page at all.
+    Terms are looked up concurrently, up to `concurrency` at a time.
 
     :param terms: Term names (or detail-page URLs) to look up. Order is
         preserved in the returned dict, regardless of which order lookups

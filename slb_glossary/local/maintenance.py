@@ -16,13 +16,12 @@ async def flush(db: Database) -> None:
 
     Use this to clear stale data while keeping `metadata.json`'s sync
     timestamps intact e.g. right before a fresh `slb_glossary.local.sync_all`.
+
     Use `reset` instead to also forget the local database's sync history.
 
-    Also checkpoints and truncates the database's `-wal` file (see
-    `slb_glossary.local.open_db`'s docstring on why it has one) as part of
+    Also checkpoints and truncates the database's `-wal` file as part of
     the `VACUUM`, so a freshly flushed database is left with little or
-    nothing outstanding in `-wal`/`-shm`. Handy if you are about to copy
-    or back up `db.db_path` right after.
+    nothing outstanding in `-wal`/`-shm`.
 
     :param db: The local database to clear.
     """

@@ -29,14 +29,14 @@ def resolve_metadata_path(
 
 async def enable_wal(connection: aiosqlite.Connection) -> str:
     """
-    Switch `connection` to WAL journaling and return the mode SQLite actually applied.
+    Switch `connection` to WAL journaling and return the mode SQLite
+    actually applied.
 
     WAL keeps a database usable by readers while a write is in progress
     (readers no longer block on writers), at the cost of two sidecar files
     living next to the main database file for as long as it's in active
-    use: `<db>-wal` (the write-ahead log itself) and `<db>-shm` (the
-    shared-memory index into it). Both are ordinary SQLite bookkeeping
-    files, not optional extras. See `open_db`'s docstring for what that
+    use. `<db>-wal` (the write-ahead log itself) and `<db>-shm` (the
+    shared-memory index into it). See `open_db`'s docstring for what that
     means for backing up or moving a database.
 
     :param connection: An open `aiosqlite` connection, not yet used for
@@ -86,7 +86,7 @@ def reset_incompatible_schema(db_path: pathlib.Path, metadata_path: pathlib.Path
 
     The local database is a disposable cache of glossary content, so we just
     discard it and let it get recreated fresh, to avoid outright failure.
-    Its sync history is lost along with it; run a sync again afterward to
+    Its sync history is lost along with it. Run a sync again afterward to
     repopulate it.
 
     :param db_path: Path to the database file.

@@ -163,7 +163,7 @@ class Constant(typing.Generic[T]):
         Takes effect immediately and for every subsequent read regardless
         of this `Constant`'s `cache` setting . `cache` only governs how a
         non-overridden value resolves from the environment, not whether
-        an explicit override is honored.
+        an explicit override is honoured.
 
         Call `reset()` to remove the override and go back to reading `default`/the environment.
         """
@@ -341,119 +341,56 @@ class Constants:
         env_var="SLB_GLOSSARY_CONTENT_MATCH_SCORE_CAP",
         validator=lambda v: 0.0 <= v <= 1.0,
     )
-    """
-    Upper bound on a result's score when it only matched by content
-    (definition/topic text), and not the term name, kept below
-    `relevance_threshold` so that kind of match never reads as confident
-    as an actual name match. 
-    
-    Used by `slb_glossary.local.lexical_search` and `slb_glossary.live.relevance`'s 
-    lexical scoring. Not applied to semantic or hybrid scoring, which have their own natural scale.
-    """
+    """Upper bound on a result's score when it only matched by content (definition/topic), not the term name."""
 
     contains_match_score = Constant(
         0.75,
         env_var="SLB_GLOSSARY_CONTAINS_MATCH_SCORE",
         validator=lambda v: 0.0 <= v <= 1.0,
     )
-    """
-    Score for a term name that contains the whole query as a
-    whitespace-bounded phrase (or vice-versa: the term name is itself
-    a whitespace-bounded phrase inside a longer query), without being
-    an exact match or a prefix. E.g. query "lift" against term "Gas
-    Lift", or query "gas lift valve system" against term "Gas Lift
-    Valve".
-
-    Ranked below `prefix_match_score` (a term *starting with* the
-    query is stronger evidence than merely containing it somewhere)
-    and above `all_tokens_match_score`. See
-    `slb_glossary.scoring.classify_name_match`.
-    """
+    """Score for a term name that contains the query as a whole phrase (or vice-versa). See `scoring.classify_name_match`."""
 
     all_tokens_match_score = Constant(
         0.65,
         env_var="SLB_GLOSSARY_ALL_TOKENS_MATCH_SCORE",
         validator=lambda v: 0.0 <= v <= 1.0,
     )
-    """
-    Score for a term name where every query token is present (as a
-    whole token, or the start of one, tolerating a trailing typo/
-    truncation), but not contiguously as a phrase, e.g. a reordered or
-    interleaved multi-word query. See
-    `slb_glossary.scoring.classify_name_match`.
-    """
+    """Score when every query token is present in the term name, but not contiguously. See `scoring.classify_name_match`."""
 
     token_overlap_score_cap = Constant(
         0.55,
         env_var="SLB_GLOSSARY_TOKEN_OVERLAP_SCORE_CAP",
         validator=lambda v: 0.0 <= v <= 1.0,
     )
-    """
-    Upper bound on a term name's score when only *some*, not all, of
-    the query's tokens are present in it. The actual score is this cap
-    scaled by the fraction of query tokens covered. Kept below
-    `all_tokens_match_score` (a partial token match is weaker evidence
-    than a complete one) and above `fuzzy_match_score_cap`/
-    `content_match_score_cap`. See `slb_glossary.scoring.classify_name_match`.
-    """
+    """Upper bound when only some query tokens are present, scaled by the fraction covered. See `scoring.classify_name_match`."""
 
     fuzzy_match_score_cap = Constant(
         0.50,
         env_var="SLB_GLOSSARY_FUZZY_MATCH_SCORE_CAP",
         validator=lambda v: 0.0 <= v <= 1.0,
     )
-    """
-    Upper bound on a result's score when it was only found by
-    `slb_glossary.local.lexical.lexical_search`'s misspelling-tolerant
-    fallback (a real term name recovered via fuzzy string matching,
-    not a literal match against the query as typed). Kept below every
-    literal-match tier (`prefix_match_score`, `contains_match_score`,
-    `all_tokens_match_score`, `token_overlap_score_cap`) so a
-    typo-recovered guess never outranks a genuine literal match, but
-    above `relevance_threshold`, since a fuzzy match that clears
-    `fuzzy_match_cutoff` has, in practice, recovered a real term name
-    rather than merely overlapping its content.
-    """
+    """Upper bound on a result found only via `lexical_search`'s fuzzy-typo fallback."""
 
     fuzzy_match_cutoff = Constant(
         0.72,
         env_var="SLB_GLOSSARY_FUZZY_MATCH_CUTOFF",
         validator=lambda v: 0.0 <= v <= 1.0,
     )
-    """
-    Minimum `difflib` similarity ratio for a stored term name to count
-    as a fuzzy-typo match of the query, in
-    `slb_glossary.local.lexical_search`'s misspelling fallback. Lower
-    tolerates more distant typos at the risk of false positives.
-    """
+    """Minimum `difflib` similarity ratio for a term name to count as a fuzzy-typo match."""
 
     fuzzy_candidate_limit = Constant(
         5,
         env_var="SLB_GLOSSARY_FUZZY_CANDIDATE_LIMIT",
         validator=lambda v: v >= 1,
     )
-    """
-    Max number of fuzzy-typo term-name candidates
-    `slb_glossary.local.lexical_search` considers per query. Keeps the
-    fallback's `difflib` pass and the follow-up row lookup bounded
-    regardless of how many stored terms loosely resemble the query.
-    """
+    """Max fuzzy-typo term-name candidates `lexical_search` considers per query."""
 
     lexical_candidate_cap = Constant(
         500,
         env_var="SLB_GLOSSARY_LEXICAL_CANDIDATE_CAP",
         validator=lambda v: v >= 1,
     )
-    """
-    Max rows `slb_glossary.local.lexical_search` pulls from FTS5 before
-    ranking/tiering in Python, regardless of the caller's own `limit`.
-    Ranking (exact/prefix/contains/token-overlap/bm25 tiering) happens
-    in Python after this fetch, so it needs more candidates than the
-    final `limit` to avoid a well-ranked result being cut off by a
-    naive bm25-only pre-sort; this cap just bounds that fetch for a
-    query whose tokens are common enough to match a large fraction of
-    the corpus.
-    """
+    """Max rows `lexical_search` pulls from FTS5 before ranking in Python."""
 
     embedding_model = Constant(
         "minishlab/potion-retrieval-32M",
@@ -482,31 +419,7 @@ class Constants:
         env_var="SLB_GLOSSARY_SEMANTIC_SIMILARITY_FLOOR",
         validator=lambda v: -1.0 <= v <= 1.0,
     )
-    """
-    Suggested `min_similarity` for `slb_glossary.local.vector_search`
-    when standalone semantic results need to read as confident, not
-    merely "nearest available".
-
-    **Not applied automatically anywhere** - `vector_search`'s own
-    `min_similarity` defaults to `None` (no filtering at all), and
-    `slb_glossary.local.hybrid_search` always searches with filtering
-    disabled, since RRF fusion only needs *relative* rank, and
-    excluding a candidate outright before fusion would remove
-    otherwise-useful weak-but-present semantic evidence.
-
-    `0.35` is a reasonable starting point for typical `model2vec`
-    static-embedding cosine similarities (short, real, topically
-    related text pairs commonly land above roughly `0.4`; unrelated
-    pairs commonly sit below roughly `0.2-0.3`), **not a value measured
-    against this package's own embedding model** - this sandbox has no
-    network access to download it. Calibrate this for real before
-    relying on it, against your own corpus's actual similarity
-    distribution: embed a range of related and unrelated
-    query/term pairs and look at where the two distributions actually
-    separate, or sweep candidate values through
-    `scripts/relevance_bench.py --semantic` and compare `Recall@k`
-    before and after.
-    """
+    """Suggested `min_similarity` for `vector_search`. Not applied automatically anywhere; uncalibrated default."""
 
     rrf_k = Constant(
         60,
@@ -530,7 +443,7 @@ class Constants:
     """Weight given to the bm25 ranking in `slb_glossary.local.hybrid_search`'s RRF combination."""
 
     semantic_weight = Constant(
-        1.0,
+        1.5,
         env_var="SLB_GLOSSARY_SEMANTIC_WEIGHT",
         validator=lambda v: v >= 0.0,
     )
