@@ -15,7 +15,7 @@ class TuiUnavailableError(RuntimeError):
     """Raised when `--tui` is used but `trogon` (or `textual`) is not installed."""
 
 
-def _prefill_schema(command_schema: typing.Any, ctx: click.Context) -> None:
+def prefill_schema(command_schema: typing.Any, ctx: click.Context) -> None:
     """
     Overwrite `command_schema`'s option/argument defaults with `ctx.params`.
 
@@ -96,7 +96,7 @@ def _prefill_schema(command_schema: typing.Any, ctx: click.Context) -> None:
         schema.default = MultiValueParamData.process_cli_option(value)
 
 
-def _find_node(node: typing.Any, path: typing.Sequence[str]) -> typing.Any:
+def find_node(node: typing.Any, path: typing.Sequence[str]) -> typing.Any:
     """
     Walk `node`'s children by `CommandSchema.name`, following `path` one segment at a time.
 
@@ -112,11 +112,11 @@ def _find_node(node: typing.Any, path: typing.Sequence[str]) -> typing.Any:
     for child in node.children:
         data = getattr(child, "data", None)
         if data is not None and str(data.name) == head:
-            return _find_node(child, rest) if rest else child
+            return find_node(child, rest) if rest else child
     return None
 
 
-def _find_tree_start_node(tree_root: typing.Any) -> typing.Any:
+def find_tree_start_node(tree_root: typing.Any) -> typing.Any:
     """
     Resolve where `command_path` should start being matched from.
 
@@ -139,7 +139,7 @@ def _find_tree_start_node(tree_root: typing.Any) -> typing.Any:
     return tree_root
 
 
-def _prefilling_screen_factory(
+def prefilling_screen_factory(
     command_builder_cls: type,
     command_tree_cls: type,
     command_path: tuple[str, ...],
@@ -167,13 +167,13 @@ def _prefilling_screen_factory(
 
     class _PrefillingCommandBuilder(command_builder_cls):  # type: ignore[valid-type,misc]
         def on_mount(self) -> None:
-            self.call_after_refresh(self._preselect_and_prefill)
+            self.call_after_refresh(self.preselect_and_prefill)
 
-        def _preselect_and_prefill(self) -> None:
+        def preselect_and_prefill(self) -> None:
             try:
                 tree = self.queryone(command_tree_cls)
-                start = _find_tree_start_node(tree.root)
-                target = _find_node(start, command_path)
+                start = find_tree_start_node(tree.root)
+                target = find_node(start, command_path)
                 if target is None or target.data is None:
                     logger.debug(
                         "No command-tree node found for %r; opening the TUI "
@@ -181,7 +181,7 @@ def _prefilling_screen_factory(
                         command_path,
                     )
                     return
-                _prefill_schema(target.data, ctx)
+                prefill_schema(target.data, ctx)
                 tree.select_node(target)
             except Exception:
                 logger.debug(
@@ -235,7 +235,7 @@ def launch_tui(ctx: click.Context, *, command_path: typing.Sequence[str] = ()) -
 
     if command_path:
         try:
-            screen_cls = _prefilling_screen_factory(
+            screen_cls = prefilling_screen_factory(
                 CommandBuilder, CommandTree, tuple(command_path), ctx
             )
             app.get_default_screen = lambda: screen_cls(  # type: ignore[method-assign]

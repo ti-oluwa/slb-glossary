@@ -76,7 +76,7 @@ def list_topics(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
     List every topic (discipline) the glossary is organized under, with term counts.
 
     Reads from the local database, the live glossary, or both, depending on
-    --local/--live/--auto (--auto is the default): with a
+    --local/--live/--auto (--auto is the default). With a
     local database available, its topics are listed first (only the topics
     actually cached so far) and the live site is only visited if the local
     database has none.

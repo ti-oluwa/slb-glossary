@@ -142,7 +142,7 @@ def run_driver(
             )
 
         if attempt < policy.attempts:
-            delay = policy.delay_for_attempt(attempt)
+            delay = policy.get_delay(attempt)
             logger.warning(
                 "Attempt %d/%d failed (%s); retrying in %.1fs",
                 attempt,

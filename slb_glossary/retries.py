@@ -63,7 +63,7 @@ class RetryPolicy:
     jitter: bool = True
     """Randomize each delay by up to +/-50% to avoid retry storms."""
 
-    def delay_for_attempt(self, attempt: int) -> float:
+    def get_delay(self, attempt: int) -> float:
         """
         Compute the delay to wait after the given attempt number.
 
@@ -173,7 +173,7 @@ async def retry(
             )
 
         if attempt < policy.attempts:
-            delay = policy.delay_for_attempt(attempt) / 1000
+            delay = policy.get_delay(attempt) / 1000
             total_delay += delay
             logger.debug(
                 "Attempt %d/%d failed, retrying in %.2fs (%.3fs elapsed so far)",

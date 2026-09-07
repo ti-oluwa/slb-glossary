@@ -46,7 +46,7 @@ def _validate_query(
     return value
 
 
-def _should_annotate(annotate: str, source: Source) -> bool:
+def should_annotate(annotate: str, source: Source) -> bool:
     """
     Resolve `--annotate`'s tri-state value against the resolved `source`.
 
@@ -64,7 +64,7 @@ def _should_annotate(annotate: str, source: Source) -> bool:
     return source is Source.AUTO
 
 
-async def auto_searchstream(
+async def auto_search(
     ctx: click.Context,
     params: typing.Mapping[str, typing.Any],
     db: Database | None,
@@ -298,15 +298,14 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
     Search the glossary for QUERY and print (or save) the matching definitions.
 
     QUERY can be a plain term ("porosity") or a plain-English question
-    ("what is porosity", "define porosity", "tell me about porosity") -
-    the latter is reduced to the term it's actually about before matching.
+    ("what is porosity", "define porosity", "tell me about porosity").
 
     A matched term can carry several definitions (one per topic it's filed
     under), so more results than --limit may be printed; --limit bounds the
     number of terms looked up, not the number of definitions returned.
 
     Reads from the local database, the live glossary, or both, depending on
-    --local/--live/--auto (--auto is the default): with a local database
+    --local/--live/--auto (--auto is the default). With a local database
     available, its results are ranked and scored, and used alone if the
     best of them meets --relevance-threshold; otherwise the live site is
     also searched and its results are added on rather than replacing the
@@ -356,7 +355,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
     async def run() -> int:
         async with open_configured_db(config, db_path_override=params["db_path"]) as db:
             if source is Source.AUTO:
-                lookups = auto_searchstream(
+                lookups = auto_search(
                     ctx,
                     params,
                     db,
@@ -397,7 +396,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
                     ),
                 )
 
-            annotate = _should_annotate(params["annotate"], source)
+            annotate = should_annotate(params["annotate"], source)
             stream = lookups if annotate else (lookup.value async for lookup in lookups)
             return await output_results(  # type: ignore
                 stream,  # type: ignore[arg-type]

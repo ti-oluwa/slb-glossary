@@ -104,7 +104,7 @@ def mcp() -> None:
 @click.option(
     "--allow-write",
     is_flag=True,
-    help="Allow local-database writes (glossary_sync, and read tools' `persist` argument).",
+    help="Allow local-database writes (`glossary_sync`, and read tools' `persist` argument).",
 )
 @click.option(
     "--timeout",

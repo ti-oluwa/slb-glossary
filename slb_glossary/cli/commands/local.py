@@ -389,7 +389,7 @@ def embed(**params: typing.Any) -> None:
     Compute and store embeddings for locally stored terms, for --mode semantic/hybrid search.
 
     Needs the [semantic] extra installed. Run this after `local import`
-    or `sync` before searching with --mode semantic/hybrid - those modes
+    or `sync` before searching with --mode semantic/hybrid. Those modes
     only ever search terms that already have a stored embedding, so a
     term imported or synced but never embedded is invisible to them
     (`local search`/`search --mode lexical` see it regardless).

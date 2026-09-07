@@ -124,13 +124,13 @@ def terms(ctx: click.Context, topic: str, use_tui: bool, **params: typing.Any) -
     term: the definition filed under TOPIC itself.
 
     Reads from the local database, the live glossary, or both, depending on
-    --local/--live/--auto (--auto is the default): with a
+    --local/--live/--auto (--auto is the default). With a
     local database available, cached results are used first and the live
     site is only visited if the local database has nothing for TOPIC.
 
     With --cache (the default), live results are saved to the local
     database as they arrive, --cache-batch-size at a time, rather than all
-    at once at the end - so a long-running fetch that gets interrupted
+    at once at the end, so a long-running fetch that gets interrupted
     still keeps whatever it already fetched (see --cache-on-error).
 
     Use --exclude to leave specific URLs or term names out of the

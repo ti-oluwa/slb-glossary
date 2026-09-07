@@ -27,7 +27,7 @@ from slb_glossary.local.sync import SyncSummary
 __all__ = ["sync"]
 
 
-def _ensure_browser(browser_type: str, *, auto_install: bool, with_deps: bool) -> bool:
+def ensure_browser(browser_type: str, *, auto_install: bool, with_deps: bool) -> bool:
     """
     Make sure a `browser_type` build is installed, installing it if asked to.
 
@@ -96,7 +96,7 @@ def sync(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
     Checks whether the browser family --browser-type would launch (default
     chromium) is installed first, since a missing browser is the most
     common reason a fresh install's first search fails. If it's missing,
-    this reports that and tells you what to run - or installs it itself
+    this reports that and tells you what to run, or installs it itself
     with --install. Once a browser is available (or already was), this
     behaves exactly like `slb-glossary update` with the same
     --topic/--query/--start-letter/--all filters.
@@ -113,7 +113,7 @@ def sync(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
         return
 
     browser_type = params["browser_type"]
-    browser_ready = _ensure_browser(
+    browser_ready = ensure_browser(
         browser_type, auto_install=params["auto_install"], with_deps=params["with_deps"]
     )
 

@@ -21,7 +21,7 @@ from slb_glossary.errors import ConfigError
 __all__ = ["config"]
 
 
-def _load_config(path: str | None) -> tuple[Config, pathlib.Path]:
+def load_config(path: str | None) -> tuple[Config, pathlib.Path]:
     """Load a `Config` from `path` (or the default path) and return it with the resolved path."""
     resolved = pathlib.Path(path) if path else Config.default_path()
     if resolved.exists():
@@ -29,7 +29,7 @@ def _load_config(path: str | None) -> tuple[Config, pathlib.Path]:
     return Config(), resolved
 
 
-def _resolve_path(ctx: click.Context, local_path: str | None) -> str | None:
+def resolve_path(ctx: click.Context, local_path: str | None) -> str | None:
     """
     Resolve which config path a subcommand should use.
 
@@ -55,15 +55,13 @@ path_option = click.option(
 )
 
 
-def _iter_leaf_fields(
-    obj: typing.Any, prefix: str = ""
-) -> typing.Iterator[tuple[str, typing.Any]]:
+def iter_leaf_fields(obj: typing.Any, prefix: str = "") -> typing.Iterator[tuple[str, typing.Any]]:
     """Yield `(dotted_key, value)` for every non-dataclass field reachable from `obj`."""
     for field in dataclasses.fields(obj):
         value = getattr(obj, field.name)
         path = f"{prefix}{field.name}"
         if dataclasses.is_dataclass(value):
-            yield from _iter_leaf_fields(value, prefix=f"{path}.")
+            yield from iter_leaf_fields(value, prefix=f"{path}.")
         else:
             yield path, value
 
@@ -119,7 +117,7 @@ def show_path(ctx: click.Context, config_path: str | None) -> None:
     Examples:
       slb-glossary config path
     """
-    path = _resolve_path(ctx, config_path)
+    path = resolve_path(ctx, config_path)
     resolved = pathlib.Path(path) if path else Config.default_path()
     exists = "exists" if resolved.exists() else "does not exist yet"
     click.echo(f"{resolved} ({exists})")
@@ -147,7 +145,7 @@ def show(ctx: click.Context, config_path: str | None, output_format: str) -> Non
       slb-glossary config show --format json
       slb-glossary config show --path ~/my-config.toml
     """
-    config, _ = _load_config(_resolve_path(ctx, config_path))
+    config, _ = load_config(resolve_path(ctx, config_path))
     data = config.to_dict()
 
     if output_format == "json":
@@ -188,7 +186,7 @@ def get(ctx: click.Context, key: str, config_path: str | None) -> None:
       slb-glossary config get local.prefer_local
       slb-glossary config get session.headless --path ~/my-config.toml
     """
-    config, _ = _load_config(_resolve_path(ctx, config_path))
+    config, _ = load_config(resolve_path(ctx, config_path))
     try:
         value = config.get(key)
     except ConfigError as exc:
@@ -221,8 +219,8 @@ def set_(
       slb-glossary config set local.sync_max_age_days 3.5
       slb-glossary config set session.headless false --path ~/my-config.toml
     """
-    resolved_path = _resolve_path(ctx, config_path)
-    config, resolved = _load_config(resolved_path)
+    resolved_path = resolve_path(ctx, config_path)
+    config, resolved = load_config(resolved_path)
     try:
         config.set(key, value)
     except ConfigError as exc:
@@ -255,7 +253,7 @@ def init(
       slb-glossary config init --format json --force
       slb-glossary config init --path ~/my-config.toml
     """
-    resolved_path = _resolve_path(ctx, config_path)
+    resolved_path = resolve_path(ctx, config_path)
     resolved = pathlib.Path(resolved_path) if resolved_path else Config.default_path()
     if resolved.exists() and not force:
         raise click.ClickException(f"{resolved} already exists. Use --force to overwrite it.")
@@ -276,7 +274,7 @@ def edit(ctx: click.Context, config_path: str | None) -> None:
       slb-glossary config edit
       slb-glossary config edit --path ~/my-config.toml
     """
-    resolved_path = _resolve_path(ctx, config_path)
+    resolved_path = resolve_path(ctx, config_path)
     resolved = pathlib.Path(resolved_path) if resolved_path else Config.default_path()
     if not resolved.exists():
         Config().to_file(resolved)
@@ -320,8 +318,8 @@ def wizard(ctx: click.Context, config_path: str | None) -> None:
       slb-glossary config          # same thing, the group's default action
       slb-glossary config wizard --path ~/my-config.toml
     """
-    resolved_path = _resolve_path(ctx, config_path)
-    config, resolved = _load_config(resolved_path)
+    resolved_path = resolve_path(ctx, config_path)
+    config, resolved = load_config(resolved_path)
     console = Console()
 
     console.print(
@@ -341,7 +339,7 @@ def wizard(ctx: click.Context, config_path: str | None) -> None:
         if not dataclasses.is_dataclass(section_value):
             continue
 
-        leaves = list(_iter_leaf_fields(section_value, prefix=f"{field.name}."))
+        leaves = list(iter_leaf_fields(section_value, prefix=f"{field.name}."))
         table = Table(
             title=SECTION_TITLES.get(field.name, field.name),
             box=box.SIMPLE,

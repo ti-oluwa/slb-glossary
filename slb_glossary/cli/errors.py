@@ -67,7 +67,7 @@ produce, so scripts calling this CLI can distinguish failure causes:
 """
 
 
-def _describe(exc: BaseException) -> str:
+def describe_exception(exc: BaseException) -> str:
     """Return a one-line, user-facing description of `exc`."""
     message = str(exc).strip()
     return message or exc.__class__.__name__
@@ -106,7 +106,7 @@ def cli_command(func: typing.Callable[P, R]) -> typing.Callable[P, R]:
                 if isinstance(exc, exc_type):
                     exit_code = code
                     break
-            click.secho(f"Error: {_describe(exc)}", fg="red", err=True)
+            click.secho(f"Error: {describe_exception(exc)}", fg="red", err=True)
             raise SystemExit(exit_code) from None
 
     return wrapper

@@ -340,7 +340,7 @@ async def resolve_lookup(
 
     For `Source.AUTO`, `local_call` is tried first (no browser
     launched); a live session is opened via `live_call` only if that came
-    back empty (`QueryResult.value` falsy) - and even then, only if
+    back empty (`QueryResult.value` falsy), and even then, only if
     `constants.check_internet_before_live` does not find a reason not to
     (see `slb_glossary.query.resolve_source`). No internet logs a
     warning and returns local's (empty) result rather than opening a

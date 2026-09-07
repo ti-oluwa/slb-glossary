@@ -73,7 +73,7 @@ def _validate_browsers(
     help=(
         "Wait this long per browser-build download before giving up "
         "(sets `PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT` for this run). "
-        "Raise this - e.g. --timeout 120000 - if installs keep timing out "
+        "Raise this, e.g. --timeout 120000, if installs keep timing out "
         "on a slow connection; patchright's own default is around 30000 (30s)."
     ),
 )
@@ -126,7 +126,7 @@ def install(
     every installed browser.
 
     Browser builds are large downloads from a single CDN, so a slow or
-    congested connection can time out partway through - if that's what
+    congested connection can time out partway through. If that's what
     you are hitting, --timeout raises how long a download gets before
     patchright gives up on it, --download-host points at a mirror/proxy if
     the default CDN itself is the problem, and --retries controls how many

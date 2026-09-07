@@ -77,7 +77,7 @@ def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> st
     default=None,
     metavar="N",
     help="Candidates pulled while looking for the exact match, and to draw "
-    "--suggest alternatives from. Defaults to constants.similar_terms_pool_size.",
+    "--suggest alternatives from. Defaults to `constants.similar_terms_pool_size`.",
 )
 @click.option(
     "--max-similar",
@@ -85,7 +85,7 @@ def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> st
     type=click.IntRange(min=1),
     default=None,
     metavar="N",
-    help="Max --suggest alternatives offered. Defaults to constants.max_similar_terms.",
+    help="Max --suggest alternatives offered. Defaults to `constants.max_similar_terms`.",
 )
 @config_option
 @session_options
@@ -103,7 +103,7 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
     Look up TERM (an exact term name, or a term detail-page URL) and print its definition.
 
     Reads from the local database, the live glossary, or both, depending on
-    --local/--live/--auto (--auto is the default): with a
+    --local/--live/--auto (--auto is the default). With a
     local database available, the local copy is used first and the live
     site is only visited if TERM is not cached yet.
 

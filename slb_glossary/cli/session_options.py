@@ -63,7 +63,7 @@ SESSION_PARAM_TO_CONFIG_KEY: dict[str, str] = {
 F = typing.TypeVar("F", bound=typing.Callable[..., typing.Any])
 
 
-def _parse_viewport(
+def parse_viewport(
     ctx: click.Context, param: click.Parameter, value: str | None
 ) -> dict[str, int] | None:
     """Parse a `--viewport WIDTHxHEIGHT` option value into a Playwright viewport dict."""
@@ -78,7 +78,7 @@ def _parse_viewport(
         ) from exc
 
 
-def _parse_proxy(
+def parse_proxy(
     ctx: click.Context, param: click.Parameter, value: str | None
 ) -> dict[str, str] | None:
     """Parse a `--proxy SERVER[,username=U][,password=P]` option value into a Playwright proxy dict."""
@@ -100,7 +100,7 @@ def _parse_proxy(
     return proxy
 
 
-def _apply_log_level(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
+def apply_log_level(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
     """
     Eager `--log-level` callback: apply the override immediately if given.
 
@@ -146,7 +146,7 @@ def log_level_option(func: F) -> F:
         default=None,
         is_eager=True,
         expose_value=True,
-        callback=_apply_log_level,
+        callback=apply_log_level,
         help=(
             "Verbosity of the package's own logging output, for this "
             "command only. Overrides the root --log-level (or its "
@@ -263,14 +263,14 @@ def session_options(func: F) -> F:
         ),
         click.option(
             "--proxy",
-            callback=_parse_proxy,
+            callback=parse_proxy,
             default=None,
             metavar="SERVER[,username=U][,password=P]",
             help="Proxy server for the browser to use, e.g. 'http://myproxy:3128'.",
         ),
         click.option(
             "--viewport",
-            callback=_parse_viewport,
+            callback=parse_viewport,
             default=None,
             metavar="WIDTHxHEIGHT",
             help="Browser viewport size, e.g. '1920x1080'. Defaults to full-screen.",

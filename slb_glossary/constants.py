@@ -231,7 +231,7 @@ class Constants:
     """
     Default for `slb_glossary.query`'s `persist` parameter (`search`,
     `get_term`, `terms`, and friends) when a caller does not pass one
-    explicitly. `False` out of the box and writing to the local database is
+    explicitly. `False` by default and writing to the local database is
     a side effect a library caller should opt into. 
     
     Set `SLB_GLOSSARY_PERSIST_BY_DEFAULT=true`, or

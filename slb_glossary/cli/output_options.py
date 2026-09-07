@@ -172,7 +172,7 @@ async def output_results(
     """
     started_at = time.monotonic()
     async with contextlib.aclosing(results) as results:  # type: ignore[type-var]
-        count = await _collect_and_output(
+        count = await collect_and_output(
             results,  # type: ignore[arg-type]
             title=title,
             save_paths=save_paths,
@@ -197,7 +197,7 @@ async def output_results(
     return count
 
 
-async def _collect_and_output(
+async def collect_and_output(
     results: typing.AsyncIterator[typing.Any],
     *,
     title: str | None,
