@@ -231,11 +231,21 @@ def persist_kwargs(params: typing.Mapping[str, typing.Any]) -> dict[str, typing.
 
 def database_option(func: F) -> F:
     """
-    Attach `--db-path` to a command that may open the local search database.
+    Attach `--db-path`/`--metadata-path` to a command that may open the local search database.
 
-    :param func: The click command callback to attach the option to.
-    :return: `func`, with `--db-path` attached.
+    :param func: The click command callback to attach the options to.
+    :return: `func`, with `--db-path`/`--metadata-path` attached.
     """
+    func = click.option(
+        "--metadata-path",
+        "metadata_path",
+        type=click.Path(dir_okay=False, path_type=pathlib.Path),
+        default=None,
+        help=(
+            "Path to the local database's metadata.json. Defaults to "
+            "metadata.json next to the resolved --db-path."
+        ),
+    )(func)
     return click.option(
         "--db-path",
         "db_path",
@@ -247,6 +257,22 @@ def database_option(func: F) -> F:
             "`slb-glossary local path`)."
         ),
     )(func)
+
+
+def resolve_metadata_path(config: Config, override: pathlib.Path | None) -> pathlib.Path:
+    """
+    Resolve the local database's metadata.json path for this run.
+
+    :param config: The loaded `Config`.
+    :param override: An explicit `--metadata-path` value, if given. Takes precedence over `config`.
+    :return: The resolved metadata.json path, honoring `config.local.data_dir`
+        the same way `resolve_db_path` does, rather than the OS default
+        (`open_db`'s own fallback only applies when no `path` is passed to
+        it at all, which the CLI never does).
+    """
+    if override is not None:
+        return pathlib.Path(override)
+    return get_data_dir(config.local.data_dir) / "metadata.json"
 
 
 def resolve_db_path(config: Config, override: pathlib.Path | None) -> pathlib.Path:

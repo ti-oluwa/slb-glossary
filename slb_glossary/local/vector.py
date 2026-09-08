@@ -13,6 +13,7 @@ Install the `semantic` extra to use anything here:
 ```
 """
 
+import hashlib
 import logging
 import time
 import typing
@@ -30,6 +31,17 @@ logger = logging.getLogger(__name__)
 __all__ = ["delete_embeddings", "embed_terms", "vector_search"]
 
 VECTOR_TABLE = "terms_vec"
+VECTOR_META_TABLE = "terms_vec_meta"
+"""
+Plain (non-`vec0`) table tracking what each `VECTOR_TABLE` row's vector
+was actually computed from, `(rowid, content_hash, model)`. `rowid`
+alone can't tell a stored vector apart from a stale one, a term's
+`(term, definition, topic)` can change (e.g. a re-sync updates an
+existing row via `ON CONFLICT DO UPDATE`, keeping its `rowid`) without
+`rowid`'s mere presence in `VECTOR_TABLE` changing at all. This table
+is what `embed_terms`'s `only_missing=True` checks against instead, to
+tell an already embedded term apart from an embedded term, but for different content".
+"""
 
 
 async def load_extension(db: Database) -> typing.Any:
@@ -74,7 +86,8 @@ async def check_table_exists(db: Database) -> bool:
 
 async def ensure_table(db: Database) -> None:
     """
-    Load `sqlite-vec` and create the local vector table if missing.
+    Load `sqlite-vec` and create the local vector table (and its
+    content-hash tracking table) if missing.
 
     Also resolves `embedding_dim()`, which loads the embedding model, so
     only call this where a term or query is actually about to be embedded.
@@ -91,17 +104,29 @@ async def ensure_table(db: Database) -> None:
     # several definitions (one per topic) shares one `url` across several
     # `terms` rows, so `url` alone can not identify which row's embedding
     # this is. `vec0` (like every SQLite table) already has an implicit
-    # `rowid`, no separate PK column needed to use it as the join key.
+    # `rowid`, so no separate PK column needed to use it as the join key.
     await db.connection.execute(
         f"CREATE VIRTUAL TABLE IF NOT EXISTS {VECTOR_TABLE} USING vec0("
         f"embedding FLOAT[{dim}] distance_metric=cosine)"
     )
+    await db.connection.execute(
+        f"CREATE TABLE IF NOT EXISTS {VECTOR_META_TABLE} ("
+        f"rowid INTEGER PRIMARY KEY, content_hash TEXT NOT NULL, model TEXT NOT NULL)"
+    )
     await db.connection.commit()
+
+
+async def ensure_meta_table(db: Database) -> None:
+    """Create `VECTOR_META_TABLE` if missing, without touching `VECTOR_TABLE` or loading the embedding model."""
+    await db.connection.execute(
+        f"CREATE TABLE IF NOT EXISTS {VECTOR_META_TABLE} ("
+        f"rowid INTEGER PRIMARY KEY, content_hash TEXT NOT NULL, model TEXT NOT NULL)"
+    )
 
 
 async def clear(db: Database) -> None:
     """
-    Delete every stored embedding, if the vector table exists at all.
+    Delete every stored embedding (and its tracked content hash), if the vector table exists at all.
 
     :param db: The local database to clear.
     """
@@ -116,8 +141,26 @@ async def clear(db: Database) -> None:
         )
         return
 
+    await ensure_meta_table(db)
     await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
+    await db.connection.execute(f"DELETE FROM {VECTOR_META_TABLE}")
     await db.connection.commit()
+
+
+def compute_content_hash(text: str) -> str:
+    """
+    Hash of the exact text that would be embedded for a term.
+
+    Hashing the constructed embed text itself, rather than the raw
+    `(term, definition, topic)` fields separately, means a future change
+    to `build_embed_text` (e.g. a different field representation)
+    invalidates every stored vector automatically too, not just a
+    change to the underlying data. Which is what we want.
+
+    :param text: The text `build_embed_text` produced for a row.
+    :return: A hex digest identifying that exact text.
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 async def embed_terms(
@@ -151,10 +194,15 @@ async def embed_terms(
         stored locally (tolerating minor misspellings/partial names),
         the same as `slb_glossary.local.search`'s own `fuzzy`. Has no
         effect if `topic` is not given.
-    :param only_missing: If `True` (the default), skip a row that
-        already has a stored embedding, so a repeat call after a sync
-        only pays for what's newly added. Pass `False` to re-embed
-        everything in scope, e.g. after switching `constants.embedding_model`.
+    :param only_missing: If `True` (the default), skip a row whose
+        current `(term, definition, topic)` content already matches
+        what its stored vector was computed from (tracked in
+        `VECTOR_META_TABLE`, not just whether a vector merely exists for
+        its `rowid`), so a repeat call after a sync only pays for what's
+        newly added or changed, including a changed
+        `constants.embedding_model`, which invalidates every row's
+        tracked content hash at once. Pass `False` to unconditionally
+        re-embed everything in scope regardless.
     :param batch_size: Rows embedded per model call. `None` (the
         default) uses `constants.embed_batch_size`.
     :return: Number of rows newly embedded.
@@ -165,8 +213,14 @@ async def embed_terms(
     """
     await ensure_table(db)
     resolved_batch_size = batch_size if batch_size is not None else constants.embed_batch_size
+    model = constants.embedding_model
 
-    sql = "SELECT terms.rowid AS rowid, terms.term, terms.definition, terms.topic FROM terms"
+    sql = (
+        "SELECT terms.rowid AS rowid, terms.term, terms.definition, terms.topic, "
+        f"meta.content_hash AS stored_hash, meta.model AS stored_model "
+        "FROM terms "
+        f"LEFT JOIN {VECTOR_META_TABLE} AS meta ON meta.rowid = terms.rowid"
+    )
     params: list[typing.Any] = []
     conditions: list[str] = []
     if urls:
@@ -187,27 +241,47 @@ async def embed_terms(
             # `topic` was given but resolved to nothing (e.g. `fuzzy=True`
             # with no close-enough stored topic) so we match no rows, rather
             # than silently ignoring the filter and embedding everything.
-            logger.debug("embed_terms: topic %r resolved to nothing; embedding no rows", topic)
+            logger.debug("`embed_terms`: topic %r resolved to nothing; embedding no rows", topic)
             return 0
 
-    if only_missing:
-        conditions.append(f"terms.rowid NOT IN (SELECT rowid FROM {VECTOR_TABLE})")
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)
 
     async with db.connection.execute(sql, params) as cursor:
-        rows = tuple(await cursor.fetchall())
+        candidates = tuple(await cursor.fetchall())
+
+    if not candidates:
+        logger.debug("`embed_terms`: nothing to embed")
+        return 0
+
+    # `only_missing` means "missing or stale", not just "no vector
+    # exists at all". A row's stored content hash/model has to match
+    # what's about to be embedded for it to actually be skipped.
+    rows: list[typing.Any] = []
+    texts: list[str] = []
+    for row in candidates:
+        text = build_embed_text(row["term"], row["definition"], row["topic"])
+        if (
+            only_missing
+            and row["stored_hash"] == compute_content_hash(text)
+            and row["stored_model"] == model
+        ):
+            continue
+        rows.append(row)
+        texts.append(text)
 
     if not rows:
-        logger.debug("`embed_terms`: nothing to embed")
+        logger.debug(
+            "`embed_terms`: nothing to embed (%d row(s) already up to date)", len(candidates)
+        )
         return 0
 
     started_at = time.monotonic()
     embedded = 0
     for start in range(0, len(rows), resolved_batch_size):
         batch = rows[start : start + resolved_batch_size]
-        texts = [build_embed_text(row["term"], row["definition"], row["topic"]) for row in batch]
-        vectors = embed(texts)
+        batch_texts = texts[start : start + resolved_batch_size]
+        vectors = embed(batch_texts)
         rowids = [row["rowid"] for row in batch]
         # `vec0` does not support `ON CONFLICT`/`INSERT OR REPLACE` as an
         # upsert. We need to delete first so a re-embedded row does not just
@@ -221,6 +295,14 @@ async def embed_terms(
             [
                 (row["rowid"], vector.astype("float32").tobytes())
                 for row, vector in zip(batch, vectors, strict=True)
+            ],
+        )
+        await db.connection.executemany(
+            f"INSERT INTO {VECTOR_META_TABLE}(rowid, content_hash, model) VALUES (?, ?, ?) "
+            "ON CONFLICT(rowid) DO UPDATE SET content_hash=excluded.content_hash, model=excluded.model",
+            [
+                (row["rowid"], compute_content_hash(text), model)
+                for row, text in zip(batch, batch_texts, strict=True)
             ],
         )
         await db.connection.commit()
@@ -248,6 +330,7 @@ async def delete_embeddings(db: Database, *, urls: Collection[str] | None = None
     await load_extension(db)
     if not await check_table_exists(db):
         return
+    await ensure_meta_table(db)
 
     if urls:
         placeholders = ", ".join("?" for _ in urls)
@@ -259,8 +342,17 @@ async def delete_embeddings(db: Database, *, urls: Collection[str] | None = None
             """,
             list(urls),
         )
+        await db.connection.execute(
+            f"""
+            DELETE FROM {VECTOR_META_TABLE} WHERE rowid IN (
+                SELECT rowid FROM terms WHERE url IN ({placeholders})
+            )
+            """,
+            list(urls),
+        )
     else:
         await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
+        await db.connection.execute(f"DELETE FROM {VECTOR_META_TABLE}")
     await db.connection.commit()
 
 
@@ -321,7 +413,7 @@ async def vector_search(
     await ensure_table(db)
     started_at = time.monotonic()
 
-    from slb_glossary.local.api import _apply_sql_exclude, resolve_topic, row_to_result
+    from slb_glossary.local.api import apply_sql_exclude, resolve_topic, row_to_result
 
     normalized_query = clean_query(query)
     query_vector = embed([normalized_query])[0].astype("float32").tobytes()
@@ -357,9 +449,7 @@ async def vector_search(
         sql += " AND terms.language = ?"
         params.append(language)
 
-    sql = _apply_sql_exclude(
-        sql, params, exclude, url_column="terms.url", term_column="terms.term"
-    )
+    sql = apply_sql_exclude(sql, params, exclude, url_column="terms.url", term_column="terms.term")
 
     sql += " ORDER BY matches.distance ASC"
 

@@ -291,7 +291,7 @@ async def upsert_results_incrementally(
             stats["batches"] = batches_written
 
 
-def _apply_sql_exclude(
+def apply_sql_exclude(
     sql: str,
     params: list[typing.Any],
     exclude: Collection[str] | None,
@@ -611,7 +611,7 @@ async def get_terms_on(
     if language:
         sql += " AND language = ?"
         params.append(language)
-    sql = _apply_sql_exclude(sql, params, exclude)
+    sql = apply_sql_exclude(sql, params, exclude)
 
     sql += " ORDER BY term"
     if limit:
@@ -691,7 +691,7 @@ async def iter_terms(
     if language:
         sql += " AND language = ?"
         params.append(language)
-    sql = _apply_sql_exclude(sql, params, exclude)
+    sql = apply_sql_exclude(sql, params, exclude)
 
     sql += " ORDER BY term"
     if limit:
@@ -1018,7 +1018,7 @@ async def get_terms_urls(
         sql += " AND language = ?"
         params.append(language)
 
-    sql = _apply_sql_exclude(sql, params, exclude)
+    sql = apply_sql_exclude(sql, params, exclude)
 
     sql += " ORDER BY term"
     if limit:

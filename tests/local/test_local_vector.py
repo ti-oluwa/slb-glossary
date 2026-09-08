@@ -6,6 +6,7 @@ import typing
 
 import pytest
 
+from slb_glossary.constants import constants
 from slb_glossary.errors import DatabaseError
 from slb_glossary.local.api import upsert_results
 from slb_glossary.local.types import Database
@@ -140,6 +141,66 @@ class TestEmbedTerms:
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
         await embed_terms(db)
         second_call = await embed_terms(db, only_missing=False)
+        assert second_call == 1
+
+    async def test_only_missing_reembeds_a_row_whose_content_changed(
+        self, db: Database, mock_embeddings: MockEmbeddings
+    ) -> None:
+        """
+        A row whose `(term, definition, topic)` changed since it was last
+        embedded (e.g. a re-sync updating it in place, same rowid) is not
+        skipped by `only_missing=True`, even though a vector already
+        exists for that rowid.
+        """
+        await upsert_results(
+            db,
+            [
+                make_search_result(
+                    url="https://x.com/a", term="Porosity", definition="Old definition."
+                )
+            ],
+        )
+        await embed_terms(db)
+
+        await upsert_results(
+            db,
+            [
+                make_search_result(
+                    url="https://x.com/a", term="Porosity", definition="New definition."
+                )
+            ],
+        )
+        second_call = await embed_terms(db)
+        assert second_call == 1
+
+    async def test_only_missing_skips_a_row_whose_content_is_unchanged(
+        self, db: Database, mock_embeddings: MockEmbeddings
+    ) -> None:
+        """A row re-upserted with identical content is still skipped by `only_missing=True`."""
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Porosity", definition="Same.")]
+        )
+        await embed_terms(db)
+
+        await upsert_results(
+            db, [make_search_result(url="https://x.com/a", term="Porosity", definition="Same.")]
+        )
+        second_call = await embed_terms(db)
+        assert second_call == 0
+
+    async def test_only_missing_reembeds_everything_after_a_model_change(
+        self, db: Database, mock_embeddings: MockEmbeddings
+    ) -> None:
+        """Changing `constants.embedding_model` invalidates every row's tracked content hash."""
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
+        await embed_terms(db)
+
+        original_model = constants.embedding_model
+        try:
+            constants.embedding_model = "a-different-model"
+            second_call = await embed_terms(db)
+        finally:
+            constants.embedding_model = original_model
         assert second_call == 1
 
     async def test_urls_filter_restricts_which_rows_are_embedded(

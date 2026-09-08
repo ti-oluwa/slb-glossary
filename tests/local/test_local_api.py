@@ -6,7 +6,7 @@ import pytest
 
 from slb_glossary.local import api
 from slb_glossary.local.api import (
-    _apply_sql_exclude,
+    apply_sql_exclude,
     count,
     dump_related,
     fuzzy_match_topics,
@@ -54,28 +54,28 @@ class TestApplyExclude:
     def test_no_clause_added_when_exclude_is_none(self) -> None:
         """`exclude=None` leaves `sql`/`params` untouched."""
         sql, params = "SELECT * FROM terms WHERE 1=1", []
-        result_sql = _apply_sql_exclude(sql, params, None)
+        result_sql = apply_sql_exclude(sql, params, None)
         assert result_sql == sql
         assert params == []
 
     def test_adds_url_not_in_clause(self) -> None:
         """A URL entry adds a `NOT IN` clause against `url_column`."""
         params: list = []
-        sql = _apply_sql_exclude("SELECT * FROM terms", params, ["https://example.com/porosity"])
+        sql = apply_sql_exclude("SELECT * FROM terms", params, ["https://example.com/porosity"])
         assert "url NOT IN" in sql
         assert params == ["https://example.com/porosity"]
 
     def test_adds_term_name_not_in_clause_normalized(self) -> None:
         """A term-name entry adds a case/whitespace-normalized `NOT IN` clause."""
         params: list = []
-        sql = _apply_sql_exclude("SELECT * FROM terms", params, ["  Porosity  "])
+        sql = apply_sql_exclude("SELECT * FROM terms", params, ["  Porosity  "])
         assert "LOWER(TRIM(term)) NOT IN" in sql
         assert params == ["porosity"]
 
     def test_respects_custom_column_names(self) -> None:
         """Custom `url_column`/`term_column` are used in the generated clauses."""
         params: list = []
-        sql = _apply_sql_exclude(
+        sql = apply_sql_exclude(
             "SELECT * FROM terms",
             params,
             ["https://example.com/x", "Porosity"],

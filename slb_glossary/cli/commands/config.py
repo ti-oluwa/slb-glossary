@@ -296,7 +296,7 @@ def edit(ctx: click.Context, config_path: str | None) -> None:
 
 SECTION_TITLES: dict[str, str] = {
     "session": "Browser session",
-    "Database": "Local search database",
+    "local": "Local search database",
     "output": "Output formatting",
 }
 

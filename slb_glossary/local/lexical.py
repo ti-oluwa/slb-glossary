@@ -38,7 +38,7 @@ def build_fts_query_or(query: str) -> str:
     return " OR ".join('"' + token.replace('"', '""') + '"*' for token in tokens)
 
 
-async def _run_fts_query(
+async def run_fts_query(
     db: Database,
     match_expression: str,
     *,
@@ -48,7 +48,7 @@ async def _run_fts_query(
     exclude: Collection[str] | None,
 ) -> list[typing.Any]:
     """Run one FTS5 `MATCH` query with the given filters applied."""
-    from slb_glossary.local.api import _apply_sql_exclude
+    from slb_glossary.local.api import apply_sql_exclude
 
     weights = ", ".join(str(weight) for weight in FTS_COLUMN_WEIGHTS)
     sql = f"""
@@ -74,9 +74,7 @@ async def _run_fts_query(
         sql += " AND terms.language = ?"
         params.append(language)
 
-    sql = _apply_sql_exclude(
-        sql, params, exclude, url_column="terms.url", term_column="terms.term"
-    )
+    sql = apply_sql_exclude(sql, params, exclude, url_column="terms.url", term_column="terms.term")
 
     sql += " ORDER BY bm25_score ASC LIMIT ?"
     params.append(constants.lexical_candidate_cap)
@@ -112,10 +110,10 @@ async def _find_candidates(
         "exclude": exclude,
     }
 
-    rows = await _run_fts_query(db, build_fts_query(query), **filters)
+    rows = await run_fts_query(db, build_fts_query(query), **filters)
     if rows or len(query.split()) <= 1:
         return rows
-    return await _run_fts_query(db, build_fts_query_or(query), **filters)
+    return await run_fts_query(db, build_fts_query_or(query), **filters)
 
 
 def rank_candidates(query: str, rows: list[typing.Any]) -> list[tuple[SearchResult, float]]:
@@ -168,7 +166,7 @@ async def _fuzzy_find_candidates(
     Bounded to the distinct term-name list, not a full-table scan.
     Every result is capped at `constants.fuzzy_match_score_cap`.
     """
-    from slb_glossary.local.api import _apply_sql_exclude, row_to_result
+    from slb_glossary.local.api import apply_sql_exclude, row_to_result
 
     query_norm = normalize_text(query)
     if not query_norm:
@@ -209,9 +207,7 @@ async def _fuzzy_find_candidates(
     if language:
         sql += " AND terms.language = ?"
         params.append(language)
-    sql = _apply_sql_exclude(
-        sql, params, exclude, url_column="terms.url", term_column="terms.term"
-    )
+    sql = apply_sql_exclude(sql, params, exclude, url_column="terms.url", term_column="terms.term")
 
     async with db.connection.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
