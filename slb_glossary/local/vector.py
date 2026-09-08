@@ -160,7 +160,7 @@ def compute_content_hash(text: str) -> str:
     :param text: The text `build_embed_text` produced for a row.
     :return: A hex digest identifying that exact text.
     """
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.md5(text.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 async def embed_terms(
