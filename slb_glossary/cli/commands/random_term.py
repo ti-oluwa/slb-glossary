@@ -6,7 +6,13 @@ import click
 
 from slb_glossary import query
 from slb_glossary.cli.errors import cli_command
-from slb_glossary.cli.output_options import output_options, output_results
+from slb_glossary.cli.output_options import (
+    annotate_option,
+    output_options,
+    output_results,
+    should_annotate,
+    show_options,
+)
 from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
@@ -19,7 +25,7 @@ from slb_glossary.cli.source_options import (
     source_options,
 )
 from slb_glossary.cli.tui import launch_tui
-from slb_glossary.query import Source
+from slb_glossary.query import QueryResult, Source
 from slb_glossary.types import SearchResult
 
 __all__ = ["random_term"]
@@ -42,13 +48,8 @@ __all__ = ["random_term"]
 )
 @source_options
 @database_option
-@click.option(
-    "--show-related/--hide-related",
-    "show_related",
-    default=False,
-    show_default=True,
-    help="Show/hide the related-terms column.",
-)
+@annotate_option
+@show_options()
 @config_option
 @session_options
 @output_options
@@ -83,10 +84,15 @@ def random_term(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
     config = load_config(params)
     topic = params["topic"]
     count = max(params["count"] or 1, 1)
+    annotate = should_annotate(params["annotate"], source)
     title = f"Random Term(s) - topic: {topic}" if topic else "Random Term(s)"
 
-    async def stream() -> typing.AsyncIterator[SearchResult]:
-        async with open_configured_db(config, db_path_override=params["db_path"]) as db:
+    async def stream() -> typing.AsyncIterator[SearchResult | QueryResult[SearchResult | None]]:
+        async with open_configured_db(
+            config,
+            db_path_override=params["db_path"],
+            metadata_path_override=params["metadata_path"],
+        ) as db:
             for _ in range(count):
                 lookup = await resolve_lookup(
                     ctx,
@@ -106,17 +112,22 @@ def random_term(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
                 )
                 if lookup.value is not None:
                     sources_seen.add(lookup.source.value)
-                    yield lookup.value
+                    yield lookup if annotate else lookup.value
 
     async def run() -> int:
-        return await output_results(
-            stream(),
+        return await output_results(  # type: ignore[arg-type]
+            stream(),  # type: ignore[arg-type]
             title=title,
             save_paths=params["save_paths"],
             format=params["format"],
             quiet=params["quiet"],
             json_output=params["json_output"],
+            show_url=params["show_url"],
+            show_topic=params["show_topic"],
+            show_grammar=params["show_grammar"],
+            show_image=params["show_image"],
             show_related=params["show_related"],
+            annotate=annotate,  # type: ignore[arg-type]
         )
 
     sources_seen: set[str] = set()

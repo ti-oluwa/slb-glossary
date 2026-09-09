@@ -22,7 +22,8 @@ F = typing.TypeVar("F", bound=typing.Callable[..., typing.Any])
 
 def sync_filter_options(func: F) -> F:
     """
-    Attach `--topic`/`--query`/`--start-letter`/`--all`/`--limit`/`--concurrency`/`--yes`.
+    Attach `--topic`/`--query`/`--start-letter`/`--all`/`--limit`/`--concurrency`/`--yes`,
+    plus `--force`/`--batch-size`/`--no-persist-on-error`.
 
     Shared between `slb-glossary update` and `slb-glossary sync`, so both
     narrow a live fetch the same way.
@@ -30,6 +31,35 @@ def sync_filter_options(func: F) -> F:
     :param func: The click command callback to attach options to.
     :return: `func`, with the update-filter options attached.
     """
+    func = click.option(
+        "--persist-on-error/--no-persist-on-error",
+        "persist_on_error",
+        default=True,
+        show_default=True,
+        help="On a fetch error partway through, save whatever was already "
+        "fetched before the error (--persist-on-error, the default) or "
+        "discard it (--no-persist-on-error). Either way, batches already "
+        "flushed earlier in the same run are kept.",
+    )(func)
+    func = click.option(
+        "--batch-size",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Terms buffered before an incremental write to the local "
+        "database. Smaller saves progress more often at the cost of more, "
+        "smaller writes. Defaults to `constants.persist_batch_size`.",
+    )(func)
+    func = click.option(
+        "--force/--no-force",
+        "force",
+        default=False,
+        show_default=True,
+        help="Re-fetch and overwrite a term already stored locally too, "
+        "instead of only fetching what's missing. Use this to refresh "
+        "definitions that may have changed on the live site since they "
+        "were last synced.",
+    )(func)
     func = click.option(
         "--yes",
         "-y",
@@ -115,9 +145,19 @@ async def run_configured_sync(
     start_letter = params["start_letter"]
     limit = params["limit"] or None
     concurrency = params["concurrency"] or 1
+    skip_existing = not params["force"]
+    batch_size = params["batch_size"]
+    persist_on_error = params["persist_on_error"]
 
     if params["sync_everything"]:
-        return await local.sync_all(db, session, concurrency=concurrency)
+        return await local.sync_all(
+            db,
+            session,
+            concurrency=concurrency,
+            batch_size=batch_size,
+            persist_on_error=persist_on_error,
+            skip_existing=skip_existing,
+        )
     if query:
         return await local.sync_query(
             db,
@@ -127,13 +167,33 @@ async def run_configured_sync(
             start_letter=start_letter,
             limit=limit,
             concurrency=concurrency,
+            batch_size=batch_size,
+            persist_on_error=persist_on_error,
+            skip_existing=skip_existing,
         )
     if start_letter:
         return await local.sync_letter(
-            db, session, start_letter, topic=topic, limit=limit, concurrency=concurrency
+            db,
+            session,
+            start_letter,
+            topic=topic,
+            limit=limit,
+            concurrency=concurrency,
+            batch_size=batch_size,
+            persist_on_error=persist_on_error,
+            skip_existing=skip_existing,
         )
     if topic:
-        return await local.sync_topic(db, session, topic, limit=limit, concurrency=concurrency)
+        return await local.sync_topic(
+            db,
+            session,
+            topic,
+            limit=limit,
+            concurrency=concurrency,
+            batch_size=batch_size,
+            persist_on_error=persist_on_error,
+            skip_existing=skip_existing,
+        )
     return await local.sync_topics(db, session)
 
 

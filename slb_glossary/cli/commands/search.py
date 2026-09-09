@@ -7,7 +7,13 @@ import click
 
 from slb_glossary import query as query_api
 from slb_glossary.cli.errors import cli_command
-from slb_glossary.cli.output_options import output_options, output_results
+from slb_glossary.cli.output_options import (
+    annotate_option,
+    output_options,
+    output_results,
+    should_annotate,
+    show_options,
+)
 from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
@@ -44,24 +50,6 @@ def _validate_query(
             "Missing search query. Provide a query string to look up in the glossary."
         )
     return value
-
-
-def should_annotate(annotate: str, source: Source) -> bool:
-    """
-    Resolve `--annotate`'s tri-state value against the resolved `source`.
-
-    :param annotate: The raw `--annotate` choice: `"always"`, `"never"`, or `"auto"`.
-    :param source: The command's resolved `Source` (after `--local`/`--live`/`--auto`).
-    :return: Whether to show each result's origin/score. `"auto"` shows
-        them only for `Source.AUTO`. A search pinned to one source with
-        `--local`/`--live` is already unambiguous about where results
-        came from, so `"auto"` leaves those unannotated.
-    """
-    if annotate == "always":
-        return True
-    if annotate == "never":
-        return False
-    return source is Source.AUTO
 
 
 async def auto_search(
@@ -198,58 +186,8 @@ async def auto_search(
         "it to augment with live results more often."
     ),
 )
-@click.option(
-    "--annotate",
-    "annotate",
-    type=click.Choice(["auto", "always", "never"], case_sensitive=False),
-    default="auto",
-    show_default=True,
-    help=(
-        "Show each result's origin (local/live) and relevance score, as "
-        "extra table columns or, with --json, extra JSON keys. 'auto' "
-        "shows them only for an --auto search, where results can "
-        "genuinely come from either source, or be content-only matches "
-        "worth a second look. A search pinned to --local/--live is "
-        "already unambiguous about its source, so 'auto' leaves those "
-        "unannotated. Has no effect on --save output, whose file formats "
-        "have fixed columns."
-    ),
-)
-@click.option(
-    "--url/--no-url",
-    "show_url",
-    default=True,
-    show_default=True,
-    help="Show/hide the source URL column.",
-)
-@click.option(
-    "--show-topic/--hide-topic",
-    "show_topic",
-    default=True,
-    show_default=True,
-    help="Show/hide the topic column.",
-)
-@click.option(
-    "--show-grammar/--hide-grammar",
-    "show_grammar",
-    default=True,
-    show_default=True,
-    help="Show/hide the grammatical label column.",
-)
-@click.option(
-    "--show-image/--hide-image",
-    "show_image",
-    default=False,
-    show_default=True,
-    help="Show/hide the illustrative image URL column.",
-)
-@click.option(
-    "--show-related/--hide-related",
-    "show_related",
-    default=False,
-    show_default=True,
-    help="Show/hide the related-terms column.",
-)
+@annotate_option
+@show_options()
 @click.option(
     "--concurrency",
     "concurrency",
@@ -353,7 +291,11 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
         title += f" (topic: {params['topic']})"
 
     async def run() -> int:
-        async with open_configured_db(config, db_path_override=params["db_path"]) as db:
+        async with open_configured_db(
+            config,
+            db_path_override=params["db_path"],
+            metadata_path_override=params["metadata_path"],
+        ) as db:
             if source is Source.AUTO:
                 lookups = auto_search(
                     ctx,

@@ -7,7 +7,7 @@ import click
 
 from slb_glossary import query
 from slb_glossary.cli.errors import cli_command
-from slb_glossary.cli.output_options import output_options, output_results
+from slb_glossary.cli.output_options import output_options, output_results, show_options
 from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
@@ -45,20 +45,7 @@ def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> st
     "locally (one per topic it's filed under). Only affects a local "
     "read; a live read always returns whatever the site itself serves.",
 )
-@click.option(
-    "--show-related/--hide-related",
-    "show_related",
-    default=True,
-    show_default=True,
-    help="Show/hide the related-terms column.",
-)
-@click.option(
-    "--show-image/--hide-image",
-    "show_image",
-    default=False,
-    show_default=True,
-    help="Show/hide the illustrative image URL column.",
-)
+@show_options(default_related=True)
 @click.option(
     "--suggest/--no-suggest",
     "suggest_similar",
@@ -125,7 +112,11 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
     suggest_similar = params["suggest_similar"]
 
     async def run() -> tuple[int, tuple[QueryResult[SearchResult], ...]]:
-        async with open_configured_db(config, db_path_override=params["db_path"]) as db:
+        async with open_configured_db(
+            config,
+            db_path_override=params["db_path"],
+            metadata_path_override=params["metadata_path"],
+        ) as db:
             lookup = await resolve_lookup(
                 ctx,
                 params,
@@ -181,6 +172,9 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
             format=params["format"],
             quiet=params["quiet"],
             json_output=params["json_output"],
+            show_url=params["show_url"],
+            show_topic=params["show_topic"],
+            show_grammar=params["show_grammar"],
             show_related=params["show_related"],
             show_image=params["show_image"],
         )

@@ -9,17 +9,134 @@ import typing
 
 import click
 
+from slb_glossary.query import Source
 from slb_glossary.types import RecordLike
 from slb_glossary.utils import Lookup, print_async_records
 from slb_glossary.writers import records_to_dicts, save
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["output_options", "output_results"]
+__all__ = [
+    "annotate_option",
+    "output_options",
+    "output_results",
+    "should_annotate",
+    "show_options",
+]
 
 
 F = typing.TypeVar("F", bound=typing.Callable[..., typing.Any])
 RecordT = typing.TypeVar("RecordT", bound=RecordLike)
+
+
+def show_options(
+    *,
+    default_url: bool = True,
+    default_topic: bool = True,
+    default_grammar: bool = True,
+    default_image: bool = False,
+    default_related: bool = False,
+) -> typing.Callable[[F], F]:
+    """
+    Attach `--url`/`--show-topic`/`--show-grammar`/`--show-image`/`--show-related`
+    to a command whose results are rendered as a `SearchResult` table.
+
+    Stack the returned decorator directly above a command's `def`. The
+    decorated callback receives `show_url`, `show_topic`, `show_grammar`,
+    `show_image`, and `show_related` - pass these through to `output_results`.
+
+    :param default_url: Default for `--url/--no-url`.
+    :param default_topic: Default for `--show-topic/--hide-topic`.
+    :param default_grammar: Default for `--show-grammar/--hide-grammar`.
+    :param default_image: Default for `--show-image/--hide-image`.
+    :param default_related: Default for `--show-related/--hide-related`.
+    :return: A decorator attaching the five options, with the given defaults.
+    """
+
+    def decorator(func: F) -> F:
+        func = click.option(
+            "--show-related/--hide-related",
+            "show_related",
+            default=default_related,
+            show_default=True,
+            help="Show/hide the related-terms column.",
+        )(func)
+        func = click.option(
+            "--show-image/--hide-image",
+            "show_image",
+            default=default_image,
+            show_default=True,
+            help="Show/hide the illustrative image URL column.",
+        )(func)
+        func = click.option(
+            "--show-grammar/--hide-grammar",
+            "show_grammar",
+            default=default_grammar,
+            show_default=True,
+            help="Show/hide the grammatical label column.",
+        )(func)
+        func = click.option(
+            "--show-topic/--hide-topic",
+            "show_topic",
+            default=default_topic,
+            show_default=True,
+            help="Show/hide the topic column.",
+        )(func)
+        func = click.option(
+            "--url/--no-url",
+            "show_url",
+            default=default_url,
+            show_default=True,
+            help="Show/hide the source URL column.",
+        )(func)
+        return func
+
+    return decorator
+
+
+def annotate_option(func: F) -> F:
+    """
+    Attach `--annotate` to a command whose results may come from either
+    local or live search, ambiguously, per result.
+
+    :param func: The click command callback to attach the option to.
+    :return: `func`, with `--annotate` attached.
+    """
+    return click.option(
+        "--annotate",
+        "annotate",
+        type=click.Choice(["auto", "always", "never"], case_sensitive=False),
+        default="auto",
+        show_default=True,
+        help=(
+            "Show each result's origin (local/live) and relevance score, as "
+            "extra table columns or, with --json, extra JSON keys. 'auto' "
+            "shows them only for an --auto search, where results can "
+            "genuinely come from either source, or be content-only matches "
+            "worth a second look. A search pinned to --local/--live is "
+            "already unambiguous about its source, so 'auto' leaves those "
+            "unannotated. Has no effect on --save output, whose file formats "
+            "have fixed columns."
+        ),
+    )(func)
+
+
+def should_annotate(annotate: str, source: Source) -> bool:
+    """
+    Resolve `--annotate`'s tri-state value against the resolved `source`.
+
+    :param annotate: The raw `--annotate` choice: `"always"`, `"never"`, or `"auto"`.
+    :param source: The command's resolved `Source` (after `--local`/`--live`/`--auto`).
+    :return: Whether to show each result's origin/score. `"auto"` shows
+        them only for `Source.AUTO`. A search pinned to one source with
+        `--local`/`--live` is already unambiguous about where results
+        came from, so `"auto"` leaves those unannotated.
+    """
+    if annotate == "always":
+        return True
+    if annotate == "never":
+        return False
+    return source is Source.AUTO
 
 
 def output_options(func: F) -> F:

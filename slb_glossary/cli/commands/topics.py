@@ -105,7 +105,11 @@ def list_topics(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
             yield record
 
     async def run() -> int:
-        async with open_configured_db(config, db_path_override=params["db_path"]) as db:
+        async with open_configured_db(
+            config,
+            db_path_override=params["db_path"],
+            metadata_path_override=params["metadata_path"],
+        ) as db:
             records = resolve_stream(
                 ctx,
                 params,

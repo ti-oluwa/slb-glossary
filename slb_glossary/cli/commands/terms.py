@@ -6,7 +6,7 @@ import click
 
 from slb_glossary import query as query
 from slb_glossary.cli.errors import cli_command
-from slb_glossary.cli.output_options import output_options, output_results
+from slb_glossary.cli.output_options import output_options, output_results, show_options
 from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
@@ -51,41 +51,7 @@ def _validate_topic(
     show_default=False,
     help="Maximum number of terms to fetch. Defaults to every term under the topic.",
 )
-@click.option(
-    "--url/--no-url",
-    "show_url",
-    default=True,
-    show_default=True,
-    help="Show/hide the source URL column.",
-)
-@click.option(
-    "--show-topic/--hide-topic",
-    "show_topic",
-    default=True,
-    show_default=True,
-    help="Show/hide the topic column.",
-)
-@click.option(
-    "--show-grammar/--hide-grammar",
-    "show_grammar",
-    default=True,
-    show_default=True,
-    help="Show/hide the grammatical label column.",
-)
-@click.option(
-    "--show-image/--hide-image",
-    "show_image",
-    default=False,
-    show_default=True,
-    help="Show/hide the illustrative image URL column.",
-)
-@click.option(
-    "--show-related/--hide-related",
-    "show_related",
-    default=False,
-    show_default=True,
-    help="Show/hide the related-terms column.",
-)
+@show_options()
 @click.option(
     "--concurrency",
     "concurrency",
@@ -164,7 +130,11 @@ def terms(ctx: click.Context, topic: str, use_tui: bool, **params: typing.Any) -
         title += f" starting with {start_letter!r}"
 
     async def run() -> int:
-        async with open_configured_db(config, db_path_override=params["db_path"]) as db:
+        async with open_configured_db(
+            config,
+            db_path_override=params["db_path"],
+            metadata_path_override=params["metadata_path"],
+        ) as db:
             results = resolve_stream(
                 ctx,
                 params,

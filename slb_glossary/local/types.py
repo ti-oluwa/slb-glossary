@@ -1,9 +1,12 @@
 """Data structures for the local search database."""
 
+import contextlib
 import dataclasses
 import json
+import os
 import pathlib
 import sys
+import tempfile
 
 import aiosqlite
 
@@ -73,10 +76,25 @@ class Metadata:
 
     def save(self, path: pathlib.Path) -> None:
         """
-        Write this metadata to `path` as JSON.
+        Write this metadata to `path` as JSON, atomically.
+
+        Written to a temporary file in the same directory first, then
+        moved into place with `os.replace`, atomic on both POSIX and
+        Windows. This is so a reader (or a process crash) never sees a partially
+        written, truncated `path`; it's always either the previous
+        complete content or the new complete content.
 
         :param path: Destination path. Its parent directory is created if
             it does not exist.
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(dataclasses.asdict(self), indent=2) + "\n", encoding="utf-8")
+        content = json.dumps(dataclasses.asdict(self), indent=2) + "\n"
+        fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+                tmp_file.write(content)
+            os.replace(tmp_path, path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.remove(tmp_path)
+            raise

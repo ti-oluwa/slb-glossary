@@ -13,7 +13,39 @@ from slb_glossary.paths import default_db_path, default_metadata_path
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["close_db", "database", "open_db"]
+__all__ = ["close_db", "database", "open_db", "transaction"]
+
+
+@contextlib.asynccontextmanager
+async def transaction(db: Database) -> typing.AsyncIterator[None]:
+    """
+    Run a block of writes as one atomic unit. Commits once, at the end,
+    only if the block completes; rolls back everything the block did
+    (then re-raises) if it raises.
+
+    Needed for any write that spans more than one statement/table where
+    a partial write (some statements applied, others not) would leave
+    the database inconsistent. Note, a single `execute`/`executemany`
+    followed by one `commit()` is already atomic on its own and doesn't
+    need this.
+
+    ```python
+    async with transaction(db):
+        await db.connection.execute("DELETE FROM a WHERE ...")
+        await db.connection.execute("INSERT INTO a ...")
+        await db.connection.execute("INSERT INTO b ...")
+    # committed together here, or none of it happened
+    ```
+
+    :param db: The local database whose connection to run the block against.
+    :yield: Nothing; run statements against `db.connection` inside the block.
+    """
+    try:
+        yield
+        await db.connection.commit()
+    except BaseException:
+        await db.connection.rollback()
+        raise
 
 
 def resolve_metadata_path(

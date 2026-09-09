@@ -94,7 +94,11 @@ def related(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) 
     config = load_config(params)
 
     async def run() -> int:
-        async with open_configured_db(config, db_path_override=params["db_path"]) as db:
+        async with open_configured_db(
+            config,
+            db_path_override=params["db_path"],
+            metadata_path_override=params["metadata_path"],
+        ) as db:
             lookup = await resolve_lookup(
                 ctx,
                 params,

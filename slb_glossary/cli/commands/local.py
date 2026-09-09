@@ -8,7 +8,7 @@ import click
 
 from slb_glossary import local as local_pkg
 from slb_glossary.cli.errors import cli_command
-from slb_glossary.cli.output_options import output_options, output_results
+from slb_glossary.cli.output_options import output_options, output_results, show_options
 from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, log_level_option
 from slb_glossary.cli.source_options import (
@@ -175,6 +175,16 @@ def stats(**params: typing.Any) -> None:
         "via `slb_glossary.local.embed_terms`)."
     ),
 )
+@click.option(
+    "--min-similarity",
+    type=click.FloatRange(min=-1.0, max=1.0),
+    default=None,
+    metavar="FLOAT",
+    help="With --mode semantic only (ignored otherwise). Drop a result whose "
+    "cosine similarity is below this. Unset by default (no floor - the "
+    "nearest embedded term always comes back). See "
+    "`constants.semantic_similarity_floor` for a starting point.",
+)
 @exclude_option
 @click.option(
     "--limit",
@@ -185,6 +195,7 @@ def stats(**params: typing.Any) -> None:
     help="Maximum number of results. Use 0 for unlimited.",
 )
 @database_option
+@show_options()
 @config_option
 @output_options
 @log_level_option
@@ -199,6 +210,7 @@ def local_search(query: str, **params: typing.Any) -> None:
       slb-glossary local search "drilling fluid" --topic Drilling
       slb-glossary local search viscosity --topic Petrophysic --fuzzy
       slb-glossary local search "reservoir rock" --mode hybrid
+      slb-glossary local search "reservoir rock" --mode semantic --min-similarity 0.35
     """
     if not query.strip():
         raise click.BadParameter("Missing search query.")
@@ -224,6 +236,7 @@ def local_search(query: str, **params: typing.Any) -> None:
                 fuzzy=params["fuzzy"],
                 mode=params["mode"],
                 exclude=exclude,
+                min_similarity=params["min_similarity"],
             )
             return await output_results(
                 as_async_iterator(results),
@@ -232,6 +245,11 @@ def local_search(query: str, **params: typing.Any) -> None:
                 format=params["format"],
                 quiet=params["quiet"],
                 json_output=params["json_output"],
+                show_url=params["show_url"],
+                show_topic=params["show_topic"],
+                show_grammar=params["show_grammar"],
+                show_image=params["show_image"],
+                show_related=params["show_related"],
             )
 
     count = run_async(run())
@@ -430,6 +448,57 @@ def embed(**params: typing.Any) -> None:
 
     embedded = run_async(run())
     click.echo(f"Embedded {embedded} row(s).")
+
+
+@local.command("delete-embeddings")
+@click.option(
+    "--urls",
+    default=None,
+    metavar="URL,URL,...",
+    help="Only delete embeddings for rows at these comma-separated URLs "
+    "(every stored definition at each URL, not just one). Omit to delete "
+    "every stored embedding.",
+)
+@database_option
+@config_option
+@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Don't ask for confirmation.")
+@log_level_option
+@cli_command
+def delete_embeddings(**params: typing.Any) -> None:
+    """
+    Delete stored embeddings, without touching the terms themselves.
+
+    Terms stay searchable via --mode lexical; only --mode semantic/hybrid
+    lose them until the next `local embed`. A no-op if no embeddings have
+    ever been stored.
+
+    \b
+    Examples:
+      slb-glossary local delete-embeddings --yes
+      slb-glossary local delete-embeddings --urls "https://glossary.slb.com/en/terms/p/porosity"
+    """
+    urls = (
+        [url.strip() for url in params["urls"].split(",") if url.strip()]
+        if params["urls"]
+        else None
+    )
+    if not params["assume_yes"]:
+        message = (
+            f"Delete embeddings for {len(urls)} URL(s)?"
+            if urls
+            else "Delete every stored embedding?"
+        )
+        click.confirm(message, abort=True)
+
+    async def run() -> None:
+        config = load_config(params)
+        db_path = resolve_db_path(config, params["db_path"])
+        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
+            await local_pkg.delete_embeddings(db, urls=urls)
+
+    run_async(run())
+    click.echo("Embeddings deleted.")
 
 
 def _field_or_empty(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
@@ -648,6 +717,15 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
     help="Ranking strategy when --query is given. Has no effect on a raw topic/full export.",
 )
 @click.option(
+    "--min-similarity",
+    type=click.FloatRange(min=-1.0, max=1.0),
+    default=None,
+    metavar="FLOAT",
+    help="With --query and --mode semantic only (ignored otherwise): drop a "
+    "result whose cosine similarity is below this. Unset by default (no "
+    "floor). See `constants.semantic_similarity_floor` for a starting point.",
+)
+@click.option(
     "--start-letter",
     default=None,
     metavar="LETTER",
@@ -677,6 +755,7 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
     help="Maximum number of results to export. Defaults to everything matching the given filters.",
 )
 @database_option
+@show_options()
 @config_option
 @output_options
 @log_level_option
@@ -737,6 +816,7 @@ def export(**params: typing.Any) -> None:
                     fuzzy=params["fuzzy"],
                     mode=params["mode"],
                     exclude=exclude,
+                    min_similarity=params["min_similarity"],
                 )
                 stream: typing.AsyncIterator[typing.Any] = as_async_iterator(results)
             else:
@@ -756,6 +836,11 @@ def export(**params: typing.Any) -> None:
                 format=params["format"],
                 quiet=params["quiet"],
                 json_output=params["json_output"],
+                show_url=params["show_url"],
+                show_topic=params["show_topic"],
+                show_grammar=params["show_grammar"],
+                show_image=params["show_image"],
+                show_related=params["show_related"],
             )
 
     count = run_async(run())

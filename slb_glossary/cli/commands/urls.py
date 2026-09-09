@@ -6,7 +6,7 @@ import click
 
 from slb_glossary import query
 from slb_glossary.cli.errors import cli_command
-from slb_glossary.cli.output_options import output_options, output_results
+from slb_glossary.cli.output_options import output_options, output_results, show_options
 from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, resolve_session_kwargs, session_options
 from slb_glossary.cli.source_options import (
@@ -140,7 +140,11 @@ def list_urls(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
     title = f"Term URLs ({', '.join(title_bits)})" if title_bits else "Term URLs"
 
     async def run() -> int:
-        async with open_configured_db(config, db_path_override=params["db_path"]) as db:
+        async with open_configured_db(
+            config,
+            db_path_override=params["db_path"],
+            metadata_path_override=params["metadata_path"],
+        ) as db:
             url_iter = resolve_stream(
                 ctx,
                 params,
@@ -202,41 +206,7 @@ def _validate_url(
     default=None,
     help="Resolve this topic (or comma-separated topics) against the page's definitions.",
 )
-@click.option(
-    "--url-column/--no-url-column",
-    "show_url",
-    default=True,
-    show_default=True,
-    help="Show/hide the source URL column.",
-)
-@click.option(
-    "--show-topic/--hide-topic",
-    "show_topic",
-    default=True,
-    show_default=True,
-    help="Show/hide the topic column.",
-)
-@click.option(
-    "--show-grammar/--hide-grammar",
-    "show_grammar",
-    default=True,
-    show_default=True,
-    help="Show/hide the grammatical label column.",
-)
-@click.option(
-    "--show-image/--hide-image",
-    "show_image",
-    default=False,
-    show_default=True,
-    help="Show/hide the illustrative image URL column.",
-)
-@click.option(
-    "--show-related/--hide-related",
-    "show_related",
-    default=False,
-    show_default=True,
-    help="Show/hide the related-terms column.",
-)
+@show_options()
 @config_option
 @session_options
 @output_options

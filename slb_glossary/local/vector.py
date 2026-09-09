@@ -22,6 +22,7 @@ from collections.abc import Collection
 from slb_glossary.constants import constants
 from slb_glossary.embeddings import build_embed_text, embed, embedding_dim
 from slb_glossary.errors import DatabaseError
+from slb_glossary.local.connection import transaction
 from slb_glossary.local.types import Database
 from slb_glossary.phrasing import clean_query
 from slb_glossary.types import SearchResult
@@ -142,9 +143,9 @@ async def clear(db: Database) -> None:
         return
 
     await ensure_meta_table(db)
-    await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
-    await db.connection.execute(f"DELETE FROM {VECTOR_META_TABLE}")
-    await db.connection.commit()
+    async with transaction(db):
+        await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
+        await db.connection.execute(f"DELETE FROM {VECTOR_META_TABLE}")
 
 
 def compute_content_hash(text: str) -> str:
@@ -287,25 +288,25 @@ async def embed_terms(
         # upsert. We need to delete first so a re-embedded row does not just
         # fail to insert on top of its old vector.
         placeholders = ", ".join("?" for _ in rowids)
-        await db.connection.execute(
-            f"DELETE FROM {VECTOR_TABLE} WHERE rowid IN ({placeholders})", rowids
-        )
-        await db.connection.executemany(
-            f"INSERT INTO {VECTOR_TABLE}(rowid, embedding) VALUES (?, ?)",
-            [
-                (row["rowid"], vector.astype("float32").tobytes())
-                for row, vector in zip(batch, vectors, strict=True)
-            ],
-        )
-        await db.connection.executemany(
-            f"INSERT INTO {VECTOR_META_TABLE}(rowid, content_hash, model) VALUES (?, ?, ?) "
-            "ON CONFLICT(rowid) DO UPDATE SET content_hash=excluded.content_hash, model=excluded.model",
-            [
-                (row["rowid"], compute_content_hash(text), model)
-                for row, text in zip(batch, batch_texts, strict=True)
-            ],
-        )
-        await db.connection.commit()
+        async with transaction(db):
+            await db.connection.execute(
+                f"DELETE FROM {VECTOR_TABLE} WHERE rowid IN ({placeholders})", rowids
+            )
+            await db.connection.executemany(
+                f"INSERT INTO {VECTOR_TABLE}(rowid, embedding) VALUES (?, ?)",
+                [
+                    (row["rowid"], vector.astype("float32").tobytes())
+                    for row, vector in zip(batch, vectors, strict=True)
+                ],
+            )
+            await db.connection.executemany(
+                f"INSERT INTO {VECTOR_META_TABLE}(rowid, content_hash, model) VALUES (?, ?, ?) "
+                "ON CONFLICT(rowid) DO UPDATE SET content_hash=excluded.content_hash, model=excluded.model",
+                [
+                    (row["rowid"], compute_content_hash(text), model)
+                    for row, text in zip(batch, batch_texts, strict=True)
+                ],
+            )
         embedded += len(batch)
 
     elapsed = time.monotonic() - started_at
@@ -334,26 +335,27 @@ async def delete_embeddings(db: Database, *, urls: Collection[str] | None = None
 
     if urls:
         placeholders = ", ".join("?" for _ in urls)
-        await db.connection.execute(
-            f"""
-            DELETE FROM {VECTOR_TABLE} WHERE rowid IN (
-                SELECT rowid FROM terms WHERE url IN ({placeholders})
+        async with transaction(db):
+            await db.connection.execute(
+                f"""
+                DELETE FROM {VECTOR_TABLE} WHERE rowid IN (
+                    SELECT rowid FROM terms WHERE url IN ({placeholders})
+                )
+                """,
+                list(urls),
             )
-            """,
-            list(urls),
-        )
-        await db.connection.execute(
-            f"""
-            DELETE FROM {VECTOR_META_TABLE} WHERE rowid IN (
-                SELECT rowid FROM terms WHERE url IN ({placeholders})
+            await db.connection.execute(
+                f"""
+                DELETE FROM {VECTOR_META_TABLE} WHERE rowid IN (
+                    SELECT rowid FROM terms WHERE url IN ({placeholders})
+                )
+                """,
+                list(urls),
             )
-            """,
-            list(urls),
-        )
     else:
-        await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
-        await db.connection.execute(f"DELETE FROM {VECTOR_META_TABLE}")
-    await db.connection.commit()
+        async with transaction(db):
+            await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
+            await db.connection.execute(f"DELETE FROM {VECTOR_META_TABLE}")
 
 
 async def vector_search(

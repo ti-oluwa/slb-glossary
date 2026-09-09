@@ -125,6 +125,43 @@ class TestEmbedTerms:
         """Returns `0` (no error) when there are no rows to embed."""
         assert await embed_terms(db) == 0
 
+    async def test_a_failed_batch_rolls_back_rather_than_orphaning_a_deleted_vector(
+        self, db: Database, mock_embeddings: MockEmbeddings, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        A batch's `DELETE` (re-embedding an already-embedded row) and its
+        replacement `INSERT`s are one atomic unit: if the `INSERT` that
+        restores the vector fails, the `DELETE` is rolled back too,
+        rather than leaving that row's old vector deleted with nothing
+        to replace it.
+        """
+        await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
+        await embed_terms(db)  # a real vector now exists for this row
+
+        original_executemany = db.connection.executemany
+        call_count = 0
+
+        async def flaky_executemany(sql: str, params: typing.Any) -> typing.Any:
+            nonlocal call_count
+            call_count += 1
+            # Fail on the first `executemany` of the batch - the actual
+            # vector re-insert, right after the `DELETE` already ran.
+            if call_count == 1:
+                raise RuntimeError("simulated failure")
+            return await original_executemany(sql, params)
+
+        monkeypatch.setattr(db.connection, "executemany", flaky_executemany)
+
+        with pytest.raises(RuntimeError, match="simulated failure"):
+            await embed_terms(db, only_missing=False)
+
+        monkeypatch.undo()
+        async with db.connection.execute(f"SELECT COUNT(*) AS n FROM {VECTOR_TABLE}") as cursor:
+            row = await cursor.fetchone()
+
+        assert row is not None
+        assert row["n"] == 1  # the old vector is still there, not deleted-and-orphaned
+
     async def test_only_missing_skips_already_embedded_rows(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:

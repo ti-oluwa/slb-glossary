@@ -304,7 +304,10 @@ def local_storage_enabled(config: Config, *, db_path_override: pathlib.Path | No
 
 @contextlib.asynccontextmanager
 async def open_configured_db(
-    config: Config, *, db_path_override: pathlib.Path | None
+    config: Config,
+    *,
+    db_path_override: pathlib.Path | None,
+    metadata_path_override: pathlib.Path | None = None,
 ) -> typing.AsyncIterator[Database | None]:
     """
     Open the configured local database for the duration of an `async with` block.
@@ -314,12 +317,15 @@ async def open_configured_db(
 
     :param config: The loaded `Config`.
     :param db_path_override: An explicit `--db-path` value, if given.
+    :param metadata_path_override: An explicit `--metadata-path` value, if given.
     :yield: An open `Database`, or `None` if local storage is disabled.
     """
     if not local_storage_enabled(config, db_path_override=db_path_override):
         yield None
         return
-    async with database(resolve_db_path(config, db_path_override)) as db:
+    db_path = resolve_db_path(config, db_path_override)
+    metadata_path = resolve_metadata_path(config, metadata_path_override)
+    async with database(db_path, metadata_path=metadata_path) as db:
         yield db
 
 

@@ -28,7 +28,7 @@ from slb_glossary.local.api import (
     search,
     upsert_results,
 )
-from slb_glossary.local.connection import close_db, database, open_db
+from slb_glossary.local.connection import close_db, database, open_db, transaction
 from slb_glossary.local.hybrid import hybrid_search
 from slb_glossary.local.lexical import lexical_search
 from slb_glossary.local.load import load_file
@@ -76,6 +76,7 @@ __all__ = [
     "sync_query",
     "sync_topic",
     "sync_topics",
+    "transaction",
     "upsert_results",
     "vector_search",
 ]

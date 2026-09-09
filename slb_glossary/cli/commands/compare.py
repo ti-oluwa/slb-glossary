@@ -7,7 +7,13 @@ import click
 
 from slb_glossary import query
 from slb_glossary.cli.errors import cli_command
-from slb_glossary.cli.output_options import output_options, output_results
+from slb_glossary.cli.output_options import (
+    annotate_option,
+    output_options,
+    output_results,
+    should_annotate,
+    show_options,
+)
 from slb_glossary.cli.runner import run_async
 from slb_glossary.cli.session_options import config_option, session_options
 from slb_glossary.cli.source_options import (
@@ -65,13 +71,8 @@ async def _gather(
     "several locally (one per topic it's filed under). Only affects a "
     "local read; a live read always returns whatever the site serves.",
 )
-@click.option(
-    "--show-related/--hide-related",
-    "show_related",
-    default=False,
-    show_default=True,
-    help="Show/hide the related-terms column.",
-)
+@annotate_option
+@show_options()
 @click.option(
     "--concurrency",
     type=click.IntRange(min=1),
@@ -121,6 +122,7 @@ def compare(
     concurrency = params["concurrency"]
     language = params["language"]
     topic = params["topic"]
+    annotate = should_annotate(params["annotate"], source)
     sources_seen: set[str] = set()
 
     def get_local_term(
@@ -143,7 +145,11 @@ def compare(
         )
 
     async def run() -> int:
-        async with open_configured_db(config, db_path_override=params["db_path"]) as db:
+        async with open_configured_db(
+            config,
+            db_path_override=params["db_path"],
+            metadata_path_override=params["metadata_path"],
+        ) as db:
             if source is Source.LOCAL:
                 assert db is not None
                 results = await _gather([get_local_term(db, term) for term in terms], concurrency)
@@ -178,22 +184,29 @@ def compare(
                     for (index, _), result in zip(missing, live_results, strict=True):
                         results[index] = result  # type: ignore[arg-type]
 
-            async def stream() -> typing.AsyncIterator[SearchResult]:
+            async def stream() -> typing.AsyncIterator[
+                SearchResult | QueryResult[SearchResult | None]
+            ]:
                 for term, result in zip(terms, results, strict=True):
                     if result is not None and result.value is not None:
                         sources_seen.add(result.source.value)
-                        yield result.value
+                        yield result if annotate else result.value
                     elif not params["quiet"]:
                         click.secho(f"Not found: {term!r}", fg="yellow", err=True)
 
-            return await output_results(
-                stream(),
+            return await output_results(  # type: ignore[arg-type]
+                stream(),  # type: ignore[arg-type]
                 title=title,
                 save_paths=params["save_paths"],
                 format=params["format"],
                 quiet=params["quiet"],
                 json_output=params["json_output"],
+                show_url=params["show_url"],
+                show_topic=params["show_topic"],
+                show_grammar=params["show_grammar"],
+                show_image=params["show_image"],
                 show_related=params["show_related"],
+                annotate=annotate,  # type: ignore[arg-type]
             )
 
     count = run_async(run())
