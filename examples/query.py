@@ -49,11 +49,11 @@ async def save_batch(db: slb.local.Database, session: slb.live.Session) -> None:
     results = [
         lookup.value
         async for lookup in slb.get_terms_on(
-            "Reservoir Engineering", db=db, session=session, limit=10, persist=True
+            "Reservoir Engineering", db=db, session=session, limit=10, persist=True, fuzzy=True
         )
         if lookup.value is not None
     ]
-    out_path = pathlib.Path(__file__).parent / "reservoir_engineering_terms.json"
+    out_path = pathlib.Path(__file__).parent / "reservoir_terms.json"
     await slb.save(results, out_path)
     print(f"Saved {len(results)} term(s) to {out_path}")
 

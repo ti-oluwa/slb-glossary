@@ -154,7 +154,7 @@ class Runtime(NamedComponent):
                 f"[{self.name}] Unknown language {language!r}. Expected one of: {choices}."
             ) from exc
 
-    async def get_pool(self, language: Language) -> SessionPool:
+    async def get_session_pool(self, language: Language) -> SessionPool:
         """
         Return the `SessionPool` for `language`, creating it on first request.
 
@@ -213,7 +213,7 @@ class Runtime(NamedComponent):
             if pool.size == 0:
                 async with self._pools_lock:
                     # Only drop it if it's still the exact same, still-empty
-                    # pool. A concurrent `get_pool`/`acquire` could have
+                    # pool. A concurrent `get_session_pool`/`acquire` could have
                     # reopened (or already replaced) it since the check above.
                     if self._pools.get(language) is pool and pool.size == 0:
                         del self._pools[language]
@@ -241,7 +241,7 @@ class Runtime(NamedComponent):
         """
         if self._closed:
             raise MCPError(f"[{self.name}] Runtime is closed.")
-        pool = await self.get_pool(self.resolve_language(language))
+        pool = await self.get_session_pool(self.resolve_language(language))
         return await pool.open()
 
     @contextlib.asynccontextmanager
@@ -257,7 +257,7 @@ class Runtime(NamedComponent):
 
         Honours `SessionMode`. For `EAGER`/`LAZY`, `language` (the
         configured default if omitted) selects which language's
-        `SessionPool` this call is routed to (see `get_pool`); a session
+        `SessionPool` this call is routed to (see `get_session_pool`); a session
         is checked out from that pool for the duration of the caller's
         `async with` block (see `SessionPool.acquire`).
 
@@ -367,7 +367,7 @@ class Runtime(NamedComponent):
                     )
             return
 
-        pool = await self.get_pool(resolved_language)
+        pool = await self.get_session_pool(resolved_language)
         session = await pool.acquire(capacity)
         try:
             yield db, session

@@ -13,54 +13,58 @@ python scripts/embedding_variant_bench.py
 import asyncio
 import sys
 import tempfile
+import typing
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from slb_glossary.local.connection import database
 from slb_glossary.local.types import Database
+from slb_glossary.local.vector import vector_search
 from tests.relevance.harness import evaluate, seed_corpus
 
 
-def variant_baseline(term: str, definition: str | None, topic: str | None) -> str:
+def baseline(term: str, definition: str | None, topic: str | None) -> str:
     """Current production `build_embed_text`: `"term. definition. topic"`."""
     parts = [part for part in (term, definition, topic) if part]
     return ". ".join(parts)
 
 
-def variant_term_emphasized(term: str, definition: str | None, topic: str | None) -> str:
+def term_emphasized(term: str, definition: str | None, topic: str | None) -> str:
     """Term repeated, to weight it more heavily in the pooled embedding."""
     parts = [part for part in (definition, topic) if part]
     return f"{term}. {term}: " + ". ".join(parts) if parts else term
 
 
-def variant_no_topic(term: str, definition: str | None, topic: str | None) -> str:
+def no_topic(term: str, definition: str | None, topic: str | None) -> str:
     """Drop `topic` (shared across many unrelated terms, may dilute distinctiveness)."""
     parts = [part for part in (term, definition) if part]
     return ". ".join(parts)
 
 
-def variant_definition_only(term: str, definition: str | None, topic: str | None) -> str:
+def definition_only(term: str, definition: str | None, topic: str | None) -> str:
     """Drop `term` entirely - isolates how much the term name itself matters."""
     parts = [part for part in (definition, topic) if part]
     return ". ".join(parts) if parts else term
 
 
-def variant_term_only(term: str, definition: str | None, topic: str | None) -> str:
+def term_only(term: str, definition: str | None, topic: str | None) -> str:
     """Drop `definition`/`topic` entirely - isolates the definition's marginal contribution."""
     return term
 
 
 VARIANTS = {
-    "baseline": variant_baseline,
-    "term_emphasized": variant_term_emphasized,
-    "no_topic": variant_no_topic,
-    "definition_only": variant_definition_only,
-    "term_only": variant_term_only,
+    "baseline": baseline,
+    "term_emphasized": term_emphasized,
+    "no_topic": no_topic,
+    "definition_only": definition_only,
+    "term_only": term_only,
 }
 
 
-async def embed_with_variant(db: Database, build_text) -> None:
+async def embed_with_variant(
+    db: Database, build_text: typing.Callable[[str, str | None, str | None], str]
+) -> None:
     """Embed every term in `db` using `build_text` instead of the production `build_embed_text`."""
     from slb_glossary.local import vector as vector_module
 
@@ -73,8 +77,6 @@ async def embed_with_variant(db: Database, build_text) -> None:
 
 
 async def main() -> None:
-    from slb_glossary.local.vector import vector_search
-
     summaries = []
     with tempfile.TemporaryDirectory() as tmp_dir:
         for name, build_text in VARIANTS.items():

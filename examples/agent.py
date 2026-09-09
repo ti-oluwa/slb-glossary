@@ -2,7 +2,7 @@
 A Pydantic AI agent that can look glossary terms up itself, via the glossary
 MCP server as a tool.
 
-Needs the `examples` dependency group. Instal with `uv sync --group examples --inexact`,
+Needs the `examples` dependency group. Install with `uv sync --group examples --inexact`,
 or `uv add "pydantic-ai-slim[mcp]"` directly. Also needs an API key for whichever model
 you point `Agent(...)` at - Anthropic's, by default here (`ANTHROPIC_API_KEY` in your environment).
 

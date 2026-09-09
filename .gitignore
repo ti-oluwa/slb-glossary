@@ -16,5 +16,7 @@ CLAUDE.md
 site/
 .pytest_cache/
 .cache
-*.log
+*.log*
 *.patch
+*.db*
+*.json

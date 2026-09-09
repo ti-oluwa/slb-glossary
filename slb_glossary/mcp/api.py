@@ -106,7 +106,7 @@ def get_rate_limit_key(scope: RateLimitScope, principal: Principal, tool_name: s
     return f"{principal.id}:{tool_name}"
 
 
-def _build_rate_limit_middleware(config: RateLimit) -> Middleware | None:
+def build_rate_limit_middleware(config: RateLimit) -> Middleware | None:
     """Build the FastMCP rate-limiting middleware `config` describes, or `None` if disabled."""
     if not config.enabled:
         return None
@@ -131,7 +131,7 @@ def _build_rate_limit_middleware(config: RateLimit) -> Middleware | None:
     )
 
 
-def _build_authorization_middleware(config: Auth) -> Middleware | None:
+def build_authorization_middleware(config: Auth) -> Middleware | None:
     """Build FastMCP's scope-based authorization middleware for `config.required_scopes`, if any."""
     if not config.required_scopes:
         return None
@@ -191,7 +191,7 @@ class MCPApp(NamedComponent):
         from slb_glossary import __version__
 
         middleware: list[Middleware] = [MCPMiddleware(self.config)]
-        authorization_middleware = _build_authorization_middleware(self.config.auth)
+        authorization_middleware = build_authorization_middleware(self.config.auth)
         if authorization_middleware is not None:
             middleware.append(authorization_middleware)
             logger.info(
@@ -200,7 +200,7 @@ class MCPApp(NamedComponent):
                 sorted(self.config.auth.required_scopes),
             )
 
-        rate_limit_middleware = _build_rate_limit_middleware(self.config.rate_limit)
+        rate_limit_middleware = build_rate_limit_middleware(self.config.rate_limit)
         if rate_limit_middleware is not None:
             middleware.append(rate_limit_middleware)
             logger.info(

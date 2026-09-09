@@ -1,17 +1,4 @@
-"""
-Caller identity authentication for `slb_glossary.mcp`, derived from FastMCP's own auth layer.
-
-```python
-from slb_glossary.mcp.auth import StaticTokenVerifier
-
-provider = StaticTokenVerifier(
-    {
-        "sk-alice-...": {"client_id": "alice", "scopes": ["read", "write"]},
-        "sk-bot-...": {"client_id": "readonly-bot"},
-    }
-)
-```
-"""
+"""Tool caller identity authentication for `slb_glossary.mcp`, derived from FastMCP's own auth layer."""
 
 import importlib
 import time

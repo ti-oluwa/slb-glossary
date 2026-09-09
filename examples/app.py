@@ -16,7 +16,7 @@ config = slb_mcp.MCPConfig(
     # rather than at startup. `max_pages` caps concurrent operations
     # (page tabs) within one session; `max_sessions` caps how many
     # browser instances may be open at once, across every language
-    # combined - the pool opens an extra one for a language only once its
+    # combined. The pool opens an extra one for a language only once its
     # existing session(s) are already full.
     session=slb_mcp.SessionAccess(
         enabled=True,
@@ -28,8 +28,8 @@ config = slb_mcp.MCPConfig(
             log_sink=slb.log.FileSink("./example.mcp.browser.log"),
         ),
     ),
-    # Lets an agent trigger `glossary_sync`, which writes to the local
-    # database. Leave this `False` for a read-only deployment.
+    # Lets an agent trigger `glossary_sync` or persist search results, which writes 
+    # to the local database. Leave this `False` for a read-only deployment.
     local=slb_mcp.LocalAccess(allow_write=True),
     tools=slb_mcp.Tool.ALL,
     # Tool-call progress notifications are opt-in per call by default;

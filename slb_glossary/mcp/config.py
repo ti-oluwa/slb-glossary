@@ -8,10 +8,6 @@ config = MCPConfig.default().update(
     local=LocalAccess(enabled=True, allow_write=True),
 )
 ```
-
-Every nested config is a frozen, `slots=True`, keyword-only dataclass, so
-instances are hashable by value where possible, cannot be mutated out
-from under a running server, and are cheap to copy with `.update(...)`.
 """
 
 import dataclasses
@@ -57,7 +53,7 @@ class Tool(enum.Flag):
     """
     Which `slb_glossary.query` operations the MCP application/server exposes as tools.
 
-    A flag set: combine members with `|` to build up a set of tools
+    This is a flag set so you can combine members with `|` to build up a set of tools
     (`Tool.SEARCH | Tool.GET_TERM`), and test membership with `in`/`&`.
 
     Pass a `Tool` combination, or any iterable of tool-name strings (see
@@ -240,22 +236,22 @@ class SessionAccess(Updatable):
 
     capacity_tolerance: int = 1
     """
-    For `EAGER`/`LAZY` mode: how much of a shortfall in an existing
+    For `EAGER`/`LAZY` mode, this is how much of a shortfall in an existing
     session's free page capacity a call's own requested `capacity` (see
     `slb_glossary.mcp.runtime.Runtime.acquire`) will tolerate before the
     pool opens a new browser instead of reusing that session. E.g. with
     the default of `1`, a call asking for `capacity=3` still reuses a
     session with only 2 free page slots rather than paying for a whole
-    new session over a shortfall of one - there's a decent chance a slot
+    new session over a shortfall of one, there's also a decent chance a slot
     frees up in time, and running most of the request concurrently on
     the existing session is usually better than growing for the sake of
-    one slot. Only matters when a call actually specifies a `capacity`;
-    has no effect otherwise. See `SessionPool`'s own docstring.
+    one slot. Only matters when a call actually specifies a `capacity`. 
+    This has no effect otherwise. See `SessionPool`'s own docstring.
     """
 
     max_request_concurrency: int | None = None
     """
-    Upper bound this server clamps a tool's own requested concurrency
+    The upper bound this server clamps a tool's own requested concurrency
     to. Protects against one call claiming an outsized
     share of a language's page pool (or single-handedly forcing pool
     growth) by asking for far more concurrency than it needs. `None`
@@ -372,8 +368,8 @@ class Auth(Updatable):
     A FastMCP `fastmcp.server.auth.AuthProvider`, forwarded straight to
     `fastmcp.FastMCP(auth=...)`. This secures the transport itself: an
     unauthenticated (or invalidly authenticated) request never reaches a
-    tool call at all. `None` (the default) disables auth entirely - every
-    caller is anonymous, and `required_scopes` must be empty.
+    tool call at all. `None` (the default) disables auth entirely and every
+    caller is treated as anonymous, and `required_scopes` must be empty.
     """
 
     required_scopes: tuple[str, ...] = ()
@@ -381,7 +377,7 @@ class Auth(Updatable):
     If non-empty, every tool call must carry all of these OAuth scopes,
     enforced by FastMCP's own scope-based authorization middleware
     (`fastmcp.server.middleware.AuthMiddleware`) ahead of the call ever
-    reaching a tool body. Requires `provider` to be set - there's nothing
+    reaching a tool body. Requires `provider` to be set, else there's nothing
     to check scopes against otherwise.
     """
 
@@ -654,7 +650,7 @@ class MCPConfig(Updatable):
                 dataclasses.replace(self.source_policy, allowed=frozenset(computed)),
             )
             allowed = self.source_policy.allowed
-            assert allowed is not None  # mypy can't see that object.__setattr__ changed it
+            assert allowed is not None
         else:
             if not allowed:
                 raise MCPConfigError(
