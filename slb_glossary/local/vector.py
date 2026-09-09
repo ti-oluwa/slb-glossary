@@ -125,27 +125,41 @@ async def ensure_meta_table(db: Database) -> None:
     )
 
 
-async def clear(db: Database) -> None:
+async def clear_pending(db: Database) -> bool:
     """
-    Delete every stored embedding (and its tracked content hash), if the vector table exists at all.
+    Issue the `DELETE` statements to clear every stored embedding, without committing.
 
-    :param db: The local database to clear.
+    :param db: The local database to issue the deletes against.
+    :return: `False` (issued nothing) if the vector table does not exist,
+        or `sqlite-vec` could not be loaded to check/prepare it; `True`
+        otherwise. Callers that need to know whether there was anything
+        to clear at all can check this.
     """
     try:
         if not await check_table_exists(db):
-            return
+            return False
         await load_extension(db)
     except DatabaseError:
         logger.warning(
             "Local vector table exists but `sqlite-vec` could not be "
             "loaded to clear it; leaving it as-is."
         )
-        return
+        return False
 
     await ensure_meta_table(db)
+    await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
+    await db.connection.execute(f"DELETE FROM {VECTOR_META_TABLE}")
+    return True
+
+
+async def clear(db: Database) -> None:
+    """
+    Delete every stored embedding (and its tracked content hash), if the vector table exists at all.
+
+    :param db: The local database to clear.
+    """
     async with transaction(db):
-        await db.connection.execute(f"DELETE FROM {VECTOR_TABLE}")
-        await db.connection.execute(f"DELETE FROM {VECTOR_META_TABLE}")
+        await clear_pending(db)
 
 
 def compute_content_hash(text: str) -> str:

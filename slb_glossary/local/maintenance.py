@@ -3,6 +3,7 @@
 import logging
 
 from slb_glossary.local import vector
+from slb_glossary.local.connection import transaction
 from slb_glossary.local.types import Database, Metadata
 
 logger = logging.getLogger(__name__)
@@ -19,15 +20,20 @@ async def flush(db: Database) -> None:
 
     Use `reset` instead to also forget the local database's sync history.
 
+    Clearing the vectors and the terms happens as one atomic unit (see
+    `slb_glossary.local.connection.transaction`) so a crash partway through
+    can not leave one cleared and not the other.
+
     Also checkpoints and truncates the database's `-wal` file as part of
     the `VACUUM`, so a freshly flushed database is left with little or
-    nothing outstanding in `-wal`/`-shm`.
+    nothing outstanding in `-wal`/`-shm`. This happens after the atomic
+    clear above, since `VACUUM` can not itself run inside a transaction.
 
     :param db: The local database to clear.
     """
-    await vector.clear(db)
-    await db.connection.execute("DELETE FROM terms")
-    await db.connection.commit()
+    async with transaction(db):
+        await vector.clear_pending(db)
+        await db.connection.execute("DELETE FROM terms")
     await db.connection.execute("VACUUM")
     await db.connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     logger.info("Flushed local glossary database at %s", db.db_path)
