@@ -18,6 +18,7 @@ from slb_glossary.live.urls import get_glossary_base_url
 from slb_glossary.logging import LogSink, configure_logging, resolve_sink
 from slb_glossary.retries import DEFAULT_RETRY_POLICY, RetryPolicy
 from slb_glossary.types import Language
+from slb_glossary.utils import safe_close
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +362,7 @@ async def open_session(
     session_started_at = time.monotonic()
     logger.info("Creating a %r glossary search session using %s", language.value, browser_type)
     playwright = await async_playwright().start()
+    browser: Browser | None = None
     try:
         browser = await launch_browser(
             playwright,
@@ -431,14 +433,18 @@ async def open_session(
             "Could not reach the glossary at startup (after %.3fs)",
             time.monotonic() - session_started_at,
         )
-        await playwright.stop()
+        if browser is not None:
+            await safe_close(browser.close(), "browser")
+        await safe_close(playwright.stop(), "playwright driver")
         raise
     except Exception as exc:
         logger.exception(
             "Failed to launch the glossary browser session (after %.3fs)",
             time.monotonic() - session_started_at,
         )
-        await playwright.stop()
+        if browser is not None:
+            await safe_close(browser.close(), "browser")
+        await safe_close(playwright.stop(), "playwright driver")
         raise BrowserError("Failed to launch the glossary browser session") from exc
 
 
@@ -452,14 +458,11 @@ async def close_session(session: Session) -> None:
     """
     closed_started_at = time.monotonic()
     logger.info("Closing glossary search session")
-    with contextlib.suppress(Exception):
-        # Closes every page still checked out of `session.pages`, then
-        # `session.context` itself.
-        await session.close()
-    with contextlib.suppress(Exception):
-        await session.browser.close()
-    with contextlib.suppress(Exception):
-        await session.playwright.stop()
+    # Closes every page still checked out of `session.pages`, then
+    # `session.context` itself.
+    await safe_close(session.close(), "session")
+    await safe_close(session.browser.close(), "browser")
+    await safe_close(session.playwright.stop(), "playwright driver")
     logger.debug("Session closed in %.3fs", time.monotonic() - closed_started_at)
 
 

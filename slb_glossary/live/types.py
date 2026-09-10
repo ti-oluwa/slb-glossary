@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import dataclasses
 import enum
 import logging
@@ -11,6 +10,7 @@ from patchright.async_api import Browser, BrowserContext, Page, Playwright
 from slb_glossary.errors import BrowserError, NetworkError
 from slb_glossary.retries import RetryPolicy
 from slb_glossary.types import Language
+from slb_glossary.utils import safe_close
 
 logger = logging.getLogger(__name__)
 
@@ -90,10 +90,8 @@ class PageHandle:
         return self.page
 
     async def __aexit__(self, *exc_info: object) -> None:
-        if not self.page.is_closed():
-            with contextlib.suppress(Exception):
-                await self.page.close()
-                logger.debug(f"Closed page via {type(self).__name__} context manager")
+        if not self.page.is_closed() and await safe_close(self.page.close(), "page"):
+            logger.debug(f"Closed page via {type(self).__name__} context manager")
 
 
 @dataclasses.dataclass(slots=True, kw_only=True)
@@ -190,13 +188,14 @@ class Pages:
         self._closed = True
         started_at = time.monotonic()
         count = self.size
+        failed = 0
         for page in list(self._pages):
-            if not page.is_closed():
-                with contextlib.suppress(Exception):
-                    await page.close()
+            if not page.is_closed() and not await safe_close(page.close(), "pool page"):
+                failed += 1
         logger.debug(
-            "Closed page pool (%d page(s) still open) in %.3fs",
+            "Closed page pool (%d page(s) still open, %d failed to close) in %.3fs",
             count,
+            failed,
             time.monotonic() - started_at,
         )
 
@@ -386,7 +385,7 @@ class Session:
             raise NetworkError(f"Could not reach the glossary at {self.base_url}") from exc
         finally:
             if not hold_page:
-                await page.close()
+                await safe_close(page.close(), "page")
 
         logger.info(
             "Initialized session for %s: %d topic(s), %d term(s) total, in %.3fs",
@@ -422,8 +421,6 @@ class Session:
         teardown of a session opened with `open_session`.
         """
         started_at = time.monotonic()
-        with contextlib.suppress(Exception):
-            await self.pages.close()
-        with contextlib.suppress(Exception):
-            await self.context.close()
+        await safe_close(self.pages.close(), "page pool")
+        await safe_close(self.context.close(), "browser context")
         logger.info("Closed session for %s in %.3fs", self.base_url, time.monotonic() - started_at)

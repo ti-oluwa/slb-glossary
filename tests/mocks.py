@@ -74,12 +74,14 @@ class MockPage:
     """Stands in for `patchright.async_api.Page`: DOM extraction
     (`locator`/`eval_on_selector_all`) plus navigation (`goto`/`close`/`is_closed`)."""
 
-    def __init__(self, url: str = "https://x.com/porosity") -> None:
+    def __init__(self, url: str = "https://x.com/porosity", *, fail_close: bool = False) -> None:
         self.url = url
         self.locators: dict[str, MockLocator] = {}
         self.eval_results: dict[str, object] = {}
         self.eval_should_raise: set[str] = set()
         self._closed = False
+        self._fail_close = fail_close
+        self._close_listeners: list[typing.Callable[[MockPage], None]] = []
 
     def locator(self, selector: str) -> MockLocator:
         return self.locators.get(selector, MockLocator(text=None))
@@ -92,8 +94,19 @@ class MockPage:
     async def goto(self, url: str, *, timeout: float | None = None, wait_until: str = "") -> None:
         pass
 
+    def on(self, event: str, callback: typing.Callable[["MockPage"], None]) -> None:
+        """Register `callback` for `event` - only `"close"` is meaningful here."""
+        if event == "close":
+            self._close_listeners.append(callback)
+
     async def close(self) -> None:
+        if self._fail_close:
+            raise RuntimeError("simulated page close failure")
+        if self._closed:
+            return
         self._closed = True
+        for callback in self._close_listeners:
+            callback(self)
 
     def is_closed(self) -> bool:
         return self._closed

@@ -28,7 +28,7 @@ config = slb_mcp.MCPConfig(
             log_sink=slb.log.FileSink("./example.mcp.browser.log"),
         ),
     ),
-    # Lets an agent trigger `glossary_sync` or persist search results, which writes 
+    # Lets an agent trigger `glossary_sync` or persist search results, which writes
     # to the local database. Leave this `False` for a read-only deployment.
     local=slb_mcp.LocalAccess(allow_write=True),
     tools=slb_mcp.Tool.ALL,

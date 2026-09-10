@@ -24,6 +24,7 @@ __all__ = [
     "parse_int",
     "print_async_records",
     "print_records",
+    "safe_close",
     "split_exclude",
 ]
 
@@ -94,6 +95,26 @@ def env(
             f"Environment variable {name}={raw!r} is not a valid value."
         )
     return typing.cast(T, value)
+
+
+async def safe_close(coro: typing.Awaitable[typing.Any], /, description: str) -> bool:
+    """
+    Await a close/stop call, logging a warning instead of raising if it fails.
+
+    :param coro: The close/stop call to await, e.g. `page.close()`.
+    :param description: What `coro` was closing, for the warning message,
+        e.g. `"page"`, `"browser context"`.
+    :return: `True` if `coro` completed without raising, `False` if it
+        raised (already logged as a warning in that case).
+    """
+    try:
+        await coro
+    except Exception:
+        logger.warning(
+            "Failed to close %s cleanly; it may still be running", description, exc_info=True
+        )
+        return False
+    return True
 
 
 def parse_int(text: str) -> int:
@@ -244,7 +265,7 @@ def as_async_iterator(
 ) -> typing.AsyncIterator[T]:
     """Normalize a sync or async iterable of items `T` into an async iterator."""
 
-    async def _wrap_sync(
+    async def wrap_sync(
         sync_results: typing.Iterable[T],
     ) -> typing.AsyncIterator[T]:
         for result in sync_results:
@@ -252,7 +273,7 @@ def as_async_iterator(
 
     if isinstance(results, typing.AsyncIterable):
         return results.__aiter__()
-    return _wrap_sync(results)
+    return wrap_sync(results)
 
 
 def _format_cell(value: typing.Any, *, max_related_shown: int = 6) -> str:

@@ -25,7 +25,13 @@ from slb_glossary.live.topics import fetch_topics
 from slb_glossary.live.urls import build_pager_query, build_search_url
 from slb_glossary.retries import retry
 from slb_glossary.types import RelatedTerm, SearchResult
-from slb_glossary.utils import as_async_iterator, get_topic_match, log_timed_yields, split_exclude
+from slb_glossary.utils import (
+    as_async_iterator,
+    get_topic_match,
+    log_timed_yields,
+    safe_close,
+    split_exclude,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -343,7 +349,7 @@ async def get_terms_urls(
             tab += 1
     finally:
         if owns_page and page is not None:
-            await page.close()
+            await safe_close(page.close(), "page")
         else:
             session.base_page_in_use = False
         elapsed = time.monotonic() - started_at
@@ -508,7 +514,7 @@ async def get_results_from_url(
         )
     finally:
         if owns_page:
-            await current_page.close()
+            await safe_close(current_page.close(), "page")
 
 
 async def get_results_from_urls(
@@ -604,7 +610,7 @@ async def get_results_from_urls(
                     if first_only:
                         break
         finally:
-            await page.close()
+            await safe_close(page.close(), "page")
             elapsed = time.monotonic() - started_at
             logger.debug(
                 "`get_results_from_urls` (sequential) done: %d result(s), %d skipped "
@@ -688,7 +694,7 @@ async def get_results_from_urls(
 
         await asyncio.gather(producer_task, *worker_tasks, return_exceptions=True)
         for worker_page in worker_pages:
-            await worker_page.close()
+            await safe_close(worker_page.close(), "worker page")
 
         elapsed = time.monotonic() - started_at
         logger.debug(

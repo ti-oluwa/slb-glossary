@@ -125,13 +125,15 @@ async def run_rrf_sweep(db: Database) -> None:
                     constants.semantic_weight = semantic_weight
                     constants.rrf_k = rrf_k
                     report = await evaluate(db, hybrid_search, mode_label="hybrid")
-                    rows.append((
-                        lexical_weight,
-                        semantic_weight,
-                        rrf_k,
-                        report.overall.ndcg_at_5,
-                        report.overall.recall_at_5,
-                    ))
+                    rows.append(
+                        (
+                            lexical_weight,
+                            semantic_weight,
+                            rrf_k,
+                            report.overall.ndcg_at_5,
+                            report.overall.recall_at_5,
+                        )
+                    )
                     if best is None or report.overall.ndcg_at_5 > best[0]:
                         best = (report.overall.ndcg_at_5, (lexical_weight, semantic_weight, rrf_k))
     finally:
