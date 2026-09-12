@@ -282,7 +282,7 @@ class Constants:
     """Default max number of alternatives returned in `SimilarResult.similar`."""
 
     log_format = Constant(
-        "%(levelname)s  %(asctime)s  [%(name)s.%(funcName)s:%(lineno)d]:  %(message)s",
+        "%(levelname)s  %(asctime)s  [%(name)s:%(funcName)s:%(lineno)d]:  %(message)s",
         env_var="SLB_GLOSSARY_LOG_FORMAT",
     )
     """Default `logging.Formatter` format string used for every sink."""

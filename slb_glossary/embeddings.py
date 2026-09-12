@@ -42,7 +42,7 @@ def load_model() -> typing.Any:
     # module too, so it inherits whatever handler `configure_logging`
     # attached higher up the logger tree) and, independently, prints its
     # own tqdm progress bars on stderr regardless of our logging config.
-    # Both fire on *every* call, not just the first, because of the
+    # Both fire on every call, not just the first, because of the
     # `force_download` default noted below so we quiet them here rather than
     # relying on the caller to have configured third-party loggers.
     for logger_name in ("httpx", "httpcore", "huggingface_hub", "filelock"):
@@ -55,7 +55,7 @@ def load_model() -> typing.Any:
         pass
 
     # `StaticModel.from_pretrained` defaults to `force_download=True`,
-    # which re-verifies and re-fetches every model file on *every single call*,
+    # which re-verifies and re-fetches every model file on every single call,
     # even when an identical, already-cached copy is sitting right there
     # in the local Hugging Face cache. `force_download=False` lets
     # `huggingface_hub`'s normal cache check take over instead, so a
