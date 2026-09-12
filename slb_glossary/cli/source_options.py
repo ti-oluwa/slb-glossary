@@ -259,19 +259,37 @@ def database_option(func: F) -> F:
     )(func)
 
 
-def resolve_metadata_path(config: Config, override: pathlib.Path | None) -> pathlib.Path:
+def resolve_metadata_path(
+    config: Config,
+    override: pathlib.Path | None,
+    *,
+    db_path: pathlib.Path,
+    db_path_overridden: bool,
+) -> pathlib.Path:
     """
     Resolve the local database's metadata.json path for this run.
 
+    Mirrors `slb_glossary.local.connection.resolve_metadata_path`'s own
+    logic exactly, since the CLI always passes a concrete `db_path` to
+    `database()` (even in the no-override case, where it's just the
+    resolved default), so that function's own "was a path given"
+    detection can't tell an explicit `--db-path` apart from a computed
+    default the way this function needs to.
+
     :param config: The loaded `Config`.
-    :param override: An explicit `--metadata-path` value, if given. Takes precedence over `config`.
-    :return: The resolved metadata.json path, honoring `config.local.data_dir`
-        the same way `resolve_db_path` does, rather than the OS default
-        (`open_db`'s own fallback only applies when no `path` is passed to
-        it at all, which the CLI never does).
+    :param override: An explicit `--metadata-path` value, if given. Takes precedence over everything else.
+    :param db_path: The already-`resolve_db_path`-resolved database file path for this run.
+    :param db_path_overridden: Whether `db_path` came from an explicit `--db-path`, not just the resolved default.
+    :return: The resolved metadata.json path: `override` if given; otherwise,
+        if `db_path` was itself explicitly given, a sibling of it
+        (`<db_path stem>.metadata.json`), so metadata follows a custom
+        `--db-path` the same way the Python API's own `database()` does;
+        otherwise the canonical default (`get_data_dir(...)/"metadata.json"`).
     """
     if override is not None:
         return pathlib.Path(override)
+    if db_path_overridden:
+        return db_path.with_name(db_path.stem + ".metadata.json")
     return get_data_dir(config.local.data_dir) / "metadata.json"
 
 
@@ -324,7 +342,12 @@ async def open_configured_db(
         yield None
         return
     db_path = resolve_db_path(config, db_path_override)
-    metadata_path = resolve_metadata_path(config, metadata_path_override)
+    metadata_path = resolve_metadata_path(
+        config,
+        metadata_path_override,
+        db_path=db_path,
+        db_path_overridden=db_path_override is not None,
+    )
     async with database(db_path, metadata_path=metadata_path) as db:
         yield db
 

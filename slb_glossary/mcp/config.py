@@ -759,6 +759,6 @@ class MCPConfig(Updatable):
 
         return config.update(
             session=config.session.update(
-                browser=config.session.options.update(language=language_value),
+                options=config.session.options.update(language=language_value),
             ),
         )

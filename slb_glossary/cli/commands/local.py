@@ -60,7 +60,12 @@ def show_path(**params: typing.Any) -> None:
     async def run() -> tuple[typing.Any, typing.Any]:
         config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
-        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        metadata_path = resolve_metadata_path(
+            config,
+            params["metadata_path"],
+            db_path=db_path,
+            db_path_overridden=params["db_path"] is not None,
+        )
         async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
             return db.db_path, db.metadata_path
 
@@ -98,7 +103,12 @@ def stats(**params: typing.Any) -> None:
     async def run() -> tuple[int, dict[str, int], Metadata]:
         config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
-        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        metadata_path = resolve_metadata_path(
+            config,
+            params["metadata_path"],
+            db_path=db_path,
+            db_path_overridden=params["db_path"] is not None,
+        )
         async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
             total = await local_pkg.count(db)
             topics = await local_pkg.get_topics(db)
@@ -224,7 +234,12 @@ def local_search(query: str, **params: typing.Any) -> None:
     async def run() -> int:
         config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
-        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        metadata_path = resolve_metadata_path(
+            config,
+            params["metadata_path"],
+            db_path=db_path,
+            db_path_overridden=params["db_path"] is not None,
+        )
         async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
             results = await local_pkg.search(
                 db,
@@ -322,7 +337,12 @@ def local_get(term_or_url: str, **params: typing.Any) -> None:
     async def run() -> int:
         config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
-        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        metadata_path = resolve_metadata_path(
+            config,
+            params["metadata_path"],
+            db_path=db_path,
+            db_path_overridden=params["db_path"] is not None,
+        )
         async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
             if suggest_similar:
                 result, similar = await local_pkg.get_term(
@@ -435,7 +455,12 @@ def embed(**params: typing.Any) -> None:
     async def run() -> int:
         config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
-        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        metadata_path = resolve_metadata_path(
+            config,
+            params["metadata_path"],
+            db_path=db_path,
+            db_path_overridden=params["db_path"] is not None,
+        )
         async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
             return await local_pkg.embed_terms(
                 db,
@@ -493,7 +518,12 @@ def delete_embeddings(**params: typing.Any) -> None:
     async def run() -> None:
         config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
-        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        metadata_path = resolve_metadata_path(
+            config,
+            params["metadata_path"],
+            db_path=db_path,
+            db_path_overridden=params["db_path"] is not None,
+        )
         async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
             await local_pkg.delete_embeddings(db, urls=urls)
 
@@ -669,7 +699,12 @@ def import_(path: pathlib.Path, **params: typing.Any) -> None:
     async def run() -> int:
         config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
-        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        metadata_path = resolve_metadata_path(
+            config,
+            params["metadata_path"],
+            db_path=db_path,
+            db_path_overridden=params["db_path"] is not None,
+        )
         async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
             return await local_pkg.load_file(
                 db,
@@ -803,7 +838,12 @@ def export(**params: typing.Any) -> None:
     async def run() -> int:
         config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
-        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        metadata_path = resolve_metadata_path(
+            config,
+            params["metadata_path"],
+            db_path=db_path,
+            db_path_overridden=params["db_path"] is not None,
+        )
         async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
             if query_text:
                 results = await local_pkg.search(
@@ -868,7 +908,12 @@ def flush(**params: typing.Any) -> None:
     async def run() -> None:
         config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
-        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        metadata_path = resolve_metadata_path(
+            config,
+            params["metadata_path"],
+            db_path=db_path,
+            db_path_overridden=params["db_path"] is not None,
+        )
         async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
             await local_pkg.flush(db)
 
@@ -898,7 +943,12 @@ def reset(**params: typing.Any) -> None:
     async def run() -> None:
         config = load_config(params)
         db_path = resolve_db_path(config, params["db_path"])
-        metadata_path = resolve_metadata_path(config, params["metadata_path"])
+        metadata_path = resolve_metadata_path(
+            config,
+            params["metadata_path"],
+            db_path=db_path,
+            db_path_overridden=params["db_path"] is not None,
+        )
         async with local_pkg.database(db_path, metadata_path=metadata_path) as db:
             await local_pkg.reset(db)
 

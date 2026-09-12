@@ -130,7 +130,12 @@ def sync(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None:
     validate_sync_filters(params)
     config = load_config(params)
     db_path = resolve_db_path(config, params["db_path"])
-    metadata_path = resolve_metadata_path(config, params["metadata_path"])
+    metadata_path = resolve_metadata_path(
+        config,
+        params["metadata_path"],
+        db_path=db_path,
+        db_path_overridden=params["db_path"] is not None,
+    )
 
     async def run() -> SyncSummary:
         async with local.database(db_path, metadata_path=metadata_path) as db:
