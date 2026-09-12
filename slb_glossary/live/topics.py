@@ -4,13 +4,13 @@ import asyncio
 import logging
 import time
 
-from patchright.async_api import Page
+from patchright.async_api import Locator, Page
 from patchright.async_api import TimeoutError as PWTimeoutError
 
 from slb_glossary.live.browser import Session
 from slb_glossary.live.parsers import (
-    FACET_EXPAND_SELECTOR,
     FACET_HEADER_SELECTOR,
+    FACET_MORE_SELECTOR,
     get_element_text,
     get_facet_topics,
     get_glossary_size,
@@ -49,6 +49,21 @@ async def resolve_cookie_modal(page: Page, *, settle_delay: float | None = None)
         return
     logger.debug("Found no cookie consent modal in %.3fs", time.monotonic() - started_at)
     return None
+
+
+async def is_facet_expanded(more_button: Locator, *, timeout: float | None = None) -> bool:
+    return await more_button.evaluate(
+        """
+        (element) => {
+            collapseButton = element.parentElement.querySelector('.coveo-facet-less');
+            if (collapseButton == null || collapseButton.disabled){
+                return false;
+            };
+            return collapseButton.classList.contains('coveo-active');
+        };
+        """,
+        timeout=timeout,
+    )
 
 
 async def fetch_topics(
@@ -95,17 +110,25 @@ async def fetch_topics(
         )
         return {}, 0
 
-    expand_button = page.locator(FACET_EXPAND_SELECTOR).first
-    if await expand_button.count():
+    more_button = page.locator(FACET_MORE_SELECTOR).first
+    if await more_button.count():
         try:
             expand_started_at = time.monotonic()
-            await expand_button.scroll_into_view_if_needed(timeout=readiness_delay)
-            await expand_button.click(timeout=readiness_delay, delay=readiness_delay * 0.1)
+            await more_button.scroll_into_view_if_needed(timeout=readiness_delay)
+            await more_button.click(timeout=readiness_delay, delay=readiness_delay * 0.1)
         except PWTimeoutError:
             logger.warning("Could not expand the full topic list", exc_info=True)
         else:
-            logger.debug("Waiting for topics list to expand for %.3fs", settle_delay / 1000)
-            await asyncio.sleep(settle_delay / 1000)
+            logger.debug(
+                "Waiting for topics list to expand for %.3fs maximum", settle_delay / 1000
+            )
+            delay = min(300, settle_delay) / 1000
+            waited = 0
+            while waited < settle_delay:
+                if await is_facet_expanded(more_button, timeout=readiness_delay):
+                    break
+                await asyncio.sleep(delay)
+                waited += delay
             logger.debug("Expanded full topic list in %.3fs", time.monotonic() - expand_started_at)
 
     topics = await get_facet_topics(page)

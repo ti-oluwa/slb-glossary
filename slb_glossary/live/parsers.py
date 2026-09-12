@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    "FACET_EXPAND_SELECTOR",
     "FACET_HEADER_SELECTOR",
+    "FACET_MORE_SELECTOR",
     "RESULTS_HEADER_SELECTOR",
     "RESULT_LINK_SELECTOR",
     "TERM_DETAIL_SELECTOR",
@@ -44,7 +44,7 @@ __all__ = [
 FACET_HEADER_SELECTOR = ".CoveoFacet .coveo-facet-header"
 """Header of the discipline/topic facet panel; empty until facets have loaded."""
 
-FACET_EXPAND_SELECTOR = ".CoveoFacet .coveo-facet-footer .coveo-facet-more"
+FACET_MORE_SELECTOR = ".CoveoFacet .coveo-facet-footer .coveo-facet-more"
 """"Show more" button that reveals every topic in the facet panel."""
 
 TOPIC_VALUE_SELECTOR = "#discipline-facet .coveo-facet-value"
@@ -138,7 +138,7 @@ async def get_facet_topics(page: Page) -> dict[str, int]:
     """
     Read every topic and its term count out of the discipline facet panel.
 
-    Call `get_element_text(page, FACET_EXPAND_SELECTOR)` and click it first
+    Call `get_element_text(page, FACET_MORE_SELECTOR)` and click it first
     if you need every topic; otherwise only the topics visible by default
     are returned.
 

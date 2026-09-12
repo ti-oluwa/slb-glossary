@@ -382,6 +382,7 @@ class Session:
             self.size = size
             self._initialized = True
         except Exception as exc:
+            logger.exception("An error occurred while initializing session")
             raise NetworkError(f"Could not reach the glossary at {self.base_url}") from exc
         finally:
             if not hold_page:
