@@ -144,7 +144,7 @@ class SessionOptions(Updatable):
     until `Session.initialize()` is called.
     """
 
-    settle_timeout: float = 8000
+    settle_timeout: float = 3000
     """Milliseconds to wait for the results list to update after a search filter changes."""
 
     poll_interval: float = 300

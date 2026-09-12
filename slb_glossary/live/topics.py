@@ -25,15 +25,44 @@ logger = logging.getLogger(__name__)
 __all__ = ["fetch_topics", "refresh_topics"]
 
 
+COOKIE_SDK_BUTTON_SELECTOR = "#onetrust-banner-sdk #onetrust-button-group .banner-actions-container #onetrust-reject-all-handler"
+
+
+async def resolve_cookie_modal(page: Page, *, settle_delay: float | None = None) -> None:
+    """
+    Attends to the cookie consent modal, either accepting or rejecting it.
+
+    :param page: The page containing the cookie consent modal. Usually the base url page.
+    :param settle_delay: Milliseconds to wait after the consent modal first renders
+        to ensure that its buttons are clickable.
+    """
+    if settle_delay:
+        await asyncio.sleep(settle_delay / 1000)
+    started_at = time.monotonic()
+    cookie_button = page.locator(COOKIE_SDK_BUTTON_SELECTOR).first
+    if await cookie_button.count():
+        await cookie_button.scroll_into_view_if_needed(timeout=settle_delay)
+        await cookie_button.click(
+            timeout=settle_delay, delay=settle_delay * 0.1 if settle_delay else None
+        )
+        logger.debug("Resolve cookied consent modal in %.3fs", time.monotonic() - started_at)
+        return
+    logger.debug("Found no cookie consent modal in %.3fs", time.monotonic() - started_at)
+    return None
+
+
 async def fetch_topics(
     page: Page,
     *,
     base_url: str,
-    settle_delay: float = 8000,
+    settle_delay: float = 3000,
     retry: RetryPolicy = DEFAULT_RETRY_POLICY,
 ) -> tuple[dict[str, int], int]:
     """
     Load `base_url` and read the glossary's topic list and total term count.
+
+    Also, resolves the cookie consent modal that pops up when the base url is loaded
+    for the first time (which is everytime in our case).
 
     :param page: The page to load the glossary search screen on.
     :param base_url: Base search URL for the target glossary language, as
@@ -49,8 +78,12 @@ async def fetch_topics(
     started_at = time.monotonic()
     logger.info("Loading glossary topics from %s", base_url)
 
+    # Sorta like a element readiness for interaction delay. Unlike the element load/settle delay
+    readiness_delay = settle_delay / 2 if settle_delay >= 2000 else settle_delay
+
     async def get_facet_header() -> str:
         await page.goto(base_url, wait_until="domcontentloaded")
+        await resolve_cookie_modal(page, settle_delay=readiness_delay)
         return await get_element_text(page, FACET_HEADER_SELECTOR, timeout=settle_delay)
 
     header_text = await retry_func(get_facet_header, policy=retry, until=bool)
@@ -62,19 +95,18 @@ async def fetch_topics(
         )
         return {}, 0
 
-    # await asyncio.sleep(settle_delay / 1000)
-
     expand_button = page.locator(FACET_EXPAND_SELECTOR).first
     if await expand_button.count():
         try:
             expand_started_at = time.monotonic()
-            await expand_button.scroll_into_view_if_needed(timeout=2000)
-            await expand_button.click(timeout=2000, delay=300)
-            logger.debug("Expanded full topic list in %.3fs", time.monotonic() - expand_started_at)
+            await expand_button.scroll_into_view_if_needed(timeout=readiness_delay)
+            await expand_button.click(timeout=readiness_delay, delay=readiness_delay * 0.1)
         except PWTimeoutError:
             logger.warning("Could not expand the full topic list", exc_info=True)
         else:
+            logger.debug("Waiting for topics list to expand for %.3fs", settle_delay / 1000)
             await asyncio.sleep(settle_delay / 1000)
+            logger.debug("Expanded full topic list in %.3fs", time.monotonic() - expand_started_at)
 
     topics = await get_facet_topics(page)
     size = await get_glossary_size(page)

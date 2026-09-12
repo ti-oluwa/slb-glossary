@@ -265,7 +265,7 @@ class Session:
     timeout: float = 60_000
     """Milliseconds to wait for page/element load or lookups, and navigation before timeout"""
 
-    settle_timeout: float = 8000
+    settle_timeout: float = 3000
     """
     Milliseconds to wait for the results list to update after a search
     filter changes, since the glossary updates its results via JavaScript

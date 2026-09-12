@@ -285,7 +285,6 @@ async def get_terms_urls(
         # like every search returning the same (default) results.
         previous_links = await get_result_links(page)
         previous_header = await get_results_header_text(page)
-
         while True:
             pager_query = build_pager_query(tab_number=tab, terms_per_tab=session.terms_per_tab)
             url = build_search_url(
