@@ -235,7 +235,9 @@ async def launch_browser(
             CHROMIUM_LAUNCH_ARGS if not headless else [*CHROMIUM_LAUNCH_ARGS, "--disable-gpu"],
         )
 
-    logger.debug("Launching %s (headless=%s) with options %s", browser_type, headless, launch_kwargs)
+    logger.debug(
+        "Launching %s (headless=%s) with options %s", browser_type, headless, launch_kwargs
+    )
     launch_started_at = time.monotonic()
     launched = await launcher.launch(**launch_kwargs)
     logger.debug("Launched %s in %.3fs", browser_type, time.monotonic() - launch_started_at)
