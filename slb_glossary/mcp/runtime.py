@@ -32,7 +32,7 @@ def get_db_path(database_config: DatabaseOptions) -> str | None:
 
 class Runtime(NamedComponent):
     """
-    Owns and manages the shared resources (`Database` and/or `Sessions`) for
+    Owns and manages the shared resources (`Database` and/or `Session`s) for
     one running MCP application.
 
     Live sessions are pooled per language for `EAGER`/`LAZY` mode, since a `Session`
@@ -242,7 +242,7 @@ class Runtime(NamedComponent):
         if self._closed:
             raise MCPError(f"[{self.name}] Runtime is closed.")
         pool = await self.get_session_pool(self.resolve_language(language))
-        return await pool.open()
+        return await pool.warm()
 
     @contextlib.asynccontextmanager
     async def acquire(
@@ -345,6 +345,7 @@ class Runtime(NamedComponent):
                 kwargs["language"] = resolved_language
                 if capacity is not None:
                     kwargs["max_pages"] = max(kwargs.get("max_pages", 1), capacity)
+
                 # A session opened here is about to be used for this call's
                 # live fetch, so there's no reason to defer initialization further.
                 kwargs["initialize"] = True

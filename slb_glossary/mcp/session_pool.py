@@ -124,6 +124,9 @@ class SessionPool:
             request concurrently is usually better than paying for a
             whole new session. This has no effect when `capacity` isn't given.
         """
+        if capacity_tolerance < 0:
+            raise ValueError("`capacity_tolerance` must be non-negative")
+
         self.language = language
         self.options = options
         self._semaphore = semaphore
@@ -162,40 +165,43 @@ class SessionPool:
         """`True` once `close` has run. A closed pool refuses further `acquire`/`open` calls."""
         return self._closed
 
-    async def new(self) -> PooledSession:
-        """
-        Launch a genuinely new browser instance for this language.
-
-        Acquires one slot from the shared semaphore first. This is the
-        only place a slot is acquired, and it can block here if the
-        Runtime-wide budget is exhausted, until some pool's session
-        (this language's or another's) closes and frees one.
-        """
-        await self._semaphore.acquire()
+    async def _close_session(self, pooled: PooledSession) -> BaseException | None:
+        """Close one session and always return its semaphore slot."""
+        logger.info("Closing session for language=%s", self.language.value)
         try:
-            opened_at = time.monotonic()
-            kwargs = self.options.session_kwargs()
-            kwargs["language"] = self.language
-            # This pool only ever opens a session because a live call for
-            # `self.language` is imminent or already in flight, so there's
-            # no reason to defer the topics/size load further.
-            kwargs["initialize"] = True
-            session = await open_session(**kwargs)
-        except BaseException:
-            # The launch itself failed and this pool never got a browser
-            # instance, so it shouldn't hold onto the slot.
-            self._semaphore.release()
-            logger.warning(
-                "Failed to open a live session for language=%s", self.language.value, exc_info=True
-            )
+            await close_session(pooled.session)
+        except (KeyboardInterrupt, SystemExit, asyncio.CancelledError):
             raise
-        logger.info(
-            "Live session opened for language=%s in %.3fs (pool size now %d)",
-            self.language.value,
-            time.monotonic() - opened_at,
-            len(self._sessions) + 1,
+        except BaseException as exc:
+            logger.exception(
+                "Failed to close live session for language=%s",
+                self.language.value,
+            )
+            return exc
+        finally:
+            self._semaphore.release()
+            logger.info(
+                "Closed session for language=%s (pool size now %d)",
+                self.language.value,
+                len(self._sessions),
+            )
+        return None
+
+    async def _close_sessions(self, *sessions: PooledSession) -> None:
+        """Attempt to close every session, even if some closes fail."""
+        if not sessions:
+            return
+
+        results = await asyncio.gather(
+            *(self._close_session(pooled) for pooled in sessions),
+            return_exceptions=False,
         )
-        return PooledSession(session)
+        errors = [result for result in results if result is not None]
+        if errors:
+            raise RuntimeError(
+                f"Failed to close sessions for language={self.language.value!r}",
+                errors,
+            ) from errors[-1]
 
     async def _get_or_create(self, capacity: int | None = None) -> PooledSession:
         """
@@ -247,19 +253,77 @@ class SessionPool:
                 requested,
                 len(self._sessions),
             )
-            pooled = await self.new()
+            pooled = await self._new()
             async with self._lock:
                 if self._closed:
                     # Closed while we were opening. Don't hand out a
                     # session from (or add it to) a pool that's supposed
                     # to be dead. Close what we just opened instead.
-                    await close_session(pooled.session)
-                    self._semaphore.release()
+                    exc = await self._close_session(pooled)
                     raise RuntimeError(
                         f"Session pool for language={self.language.value!r} was closed while opening."
-                    )
+                    ) from exc
                 self._sessions.append(pooled)
             return pooled
+
+    async def _new(self) -> PooledSession:
+        """
+        Launch a genuinely new browser instance for this language.
+
+        Acquires one slot from the shared semaphore first. This is the
+        only place a slot is acquired, and it can block here if the
+        Runtime-wide budget is exhausted, until some pool's session
+        (this language's or another's) closes and frees one.
+        """
+        await self._semaphore.acquire()
+        try:
+            opened_at = time.monotonic()
+            kwargs = self.options.session_kwargs()
+            kwargs["language"] = self.language
+            # This pool only ever opens a session because a live call for
+            # `self.language` is imminent or already in flight, so there's
+            # no reason to defer the topics/size load further.
+            kwargs["initialize"] = True
+            session = await open_session(**kwargs)
+        except BaseException:
+            # The launch itself failed and this pool never got a browser
+            # instance, so it shouldn't hold onto the slot.
+            self._semaphore.release()
+            logger.warning(
+                "Failed to open a live session for language=%s", self.language.value, exc_info=True
+            )
+            raise
+        logger.info(
+            "Live session opened for language=%s in %.3fs (pool size now %d)",
+            self.language.value,
+            time.monotonic() - opened_at,
+            len(self._sessions) + 1,
+        )
+        return PooledSession(session)
+
+    async def new(self) -> PooledSession:
+        """
+        Open and register a new idle session in this pExceptionool.
+
+        This is an explicit-growth operation. The returned session
+        is owned by the pool and must not be closed directly.
+        """
+        async with self._lock:
+            if self._closed:
+                raise RuntimeError(f"Session pool for language={self.language.value!r} is closed.")
+
+        pooled = await self._new()
+
+        async with self._lock:
+            if not self._closed:
+                self._sessions.append(pooled)
+                return pooled
+
+        # The pool was closed while the browser was launching.
+        exc = await self._close_session(pooled)
+        raise RuntimeError(
+            f"Session pool for language={self.language.value!r} was closed while opening."
+        ) from exc
 
     async def acquire(self, capacity: int | None = None) -> Session:
         """
@@ -275,6 +339,9 @@ class SessionPool:
             the caller does its real work.
         :raises RuntimeError: If this pool is closed.
         """
+        if capacity is not None and capacity < 1:
+            raise ValueError("capacity must be at least 1")
+
         requested = capacity if capacity is not None else 1
         tolerance = self._tolerance if capacity is not None else 0
 
@@ -316,31 +383,38 @@ class SessionPool:
                 requested,
                 len(self._sessions),
             )
-            pooled = await self.new()
+            pooled = await self._new()
             async with self._lock:
                 if self._closed:
-                    # Closed while we were opening. Don't hand out a
-                    # session from (or add it to) a pool that's supposed
-                    # to be dead. Close what we just opened instead.
-                    await close_session(pooled.session)
-                    self._semaphore.release()
+                    exc = await self._close_session(pooled)
                     raise RuntimeError(
                         f"Session pool for language={self.language.value!r} was closed while opening."
-                    )
+                    ) from exc
                 pooled.users += 1
                 pooled.last_used = time.monotonic()
                 self._sessions.append(pooled)
             return pooled.session
 
-    async def open(self) -> Session:
+    async def warm(self) -> Session:
         """
-        Ensure at least one session is open in this pool, without
-        checking one out.
+        Ensure at least one session is open in this pool, without checking one out.
 
+        :returns: A session that is now open and ready for use.
         :raises RuntimeError: If this pool is closed.
         """
         pooled = await self._get_or_create()
         return pooled.session
+
+    async def open(self) -> Session:
+        """
+        Ensure at least one session is open in this pool, without checking one out.
+
+        Alias for `pool.warm()`
+
+        :returns: A session that is now open and ready for use.
+        :raises RuntimeError: If this pool is closed.
+        """
+        return await self.warm()
 
     async def release(self, session: Session) -> None:
         """
@@ -392,23 +466,21 @@ class SessionPool:
         now = time.monotonic()
         async with self._lock:
             keep: list[PooledSession] = []
-            to_close: list[PooledSession] = []
+            close: list[PooledSession] = []
             for pooled in self._sessions:
                 if pooled.in_use or (now - pooled.last_used) < idle_timeout:
                     keep.append(pooled)
                 else:
-                    to_close.append(pooled)
+                    close.append(pooled)
             self._sessions = keep
 
-        for pooled in to_close:
-            logger.info(
-                "Closing idle live session for language=%s (idle_timeout=%.1fs, pool size now %d)",
-                self.language.value,
-                idle_timeout,
-                len(self._sessions),
-            )
-            await close_session(pooled.session)
-            self._semaphore.release()
+        logger.info(
+            "Closing idle live sessions for language=%s (idle_timeout=%.1fs, pool size now %d)",
+            self.language.value,
+            idle_timeout,
+            len(self._sessions),
+        )
+        await self._close_sessions(*close)
 
     async def close(self) -> None:
         """
@@ -424,12 +496,11 @@ class SessionPool:
             self._closed = True
             sessions = self._sessions
             self._sessions = []
+
         if sessions:
             logger.info(
                 "Closing session pool for language=%s (%d session(s))",
                 self.language.value,
                 len(sessions),
             )
-        for pooled in sessions:
-            await close_session(pooled.session)
-            self._semaphore.release()
+            await self._close_sessions(*sessions)
