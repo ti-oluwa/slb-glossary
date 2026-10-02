@@ -391,3 +391,36 @@ class TestOpen:
         pool = SessionPool(Language.SPANISH, SessionOptions(language="en"), asyncio.Semaphore(5))
         await pool.acquire()
         assert seen_kwargs["language"] is Language.SPANISH
+
+
+@pytest.mark.anyio
+class TestMaxSessions:
+    async def test_a_number_creates_the_limit_internally(self, monkeypatch: pytest.MonkeyPatch):
+        _, calls, _ = make_pool(monkeypatch)  # installs the mocked open/close
+        pool = SessionPool(Language.ENGLISH, SessionOptions(), 2, capacity_tolerance=0)
+        first = (await pool.new()).session
+        second = (await pool.new()).session
+        assert first is not second and calls == ["open", "open"]
+
+        third = asyncio.create_task(pool.new())
+        await asyncio.sleep(0.05)
+        assert not third.done(), "a third browser must wait while two are open"
+        await pool.close()
+        with pytest.raises(RuntimeError):
+            await third
+
+    async def test_default_is_one_session(self, monkeypatch: pytest.MonkeyPatch):
+        make_pool(monkeypatch)
+        pool = SessionPool(Language.ENGLISH, SessionOptions())
+        await pool.new()
+        task = asyncio.create_task(pool.new())
+        await asyncio.sleep(0.05)
+        assert not task.done()
+        await pool.close()
+        with pytest.raises(RuntimeError):
+            await task
+
+    @pytest.mark.parametrize("bad", [0, -1])
+    def test_rejects_a_non_positive_number(self, bad: int):
+        with pytest.raises(ValueError, match="max_sessions"):
+            SessionPool(Language.ENGLISH, SessionOptions(), bad)

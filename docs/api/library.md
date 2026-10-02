@@ -71,7 +71,7 @@ See [Managing Sessions in Your App](../library/runtime.md).
 | Name | Kind | Notes |
 |---|---|---|
 | `Runtime(...)` | class | Owns the shared local `Database` and one `SessionPool` per language, under one `max_sessions` budget. Async context manager. `.acquire(source, language=, capacity=)`, `.session(language, capacity=)`, `.open_db()`, `.open_session(language)`, `.close_idle_sessions()`, `.stats()`, `.start()`, `.close()`. `Runtime.from_config(config, **overrides)`. |
-| `SessionPool(language, options, semaphore, ...)` | class | Elastic set of sessions for one language. `.acquire(capacity)` / `.release(session)`, `.checkout(capacity)` (async context manager), `.warm()`, `.new()`, `.close_idle(timeout)`, `.stats()`, `.close()`. |
+| `SessionPool(language, options, max_sessions=1, ...)` | class | Elastic set of sessions for one language. `.acquire(capacity)` / `.release(session)`, `.checkout(capacity)` (async context manager), `.warm()`, `.new()`, `.close_idle(timeout)`, `.stats()`, `.close()`. |
 | `SessionMode` | `Enum` | `EAGER`, `LAZY`, `PER_CALL`. |
 | `RuntimeStats` / `PoolStats` | `dataclass` | Snapshots returned by `Runtime.stats()` / `SessionPool.stats()`. |
 

@@ -205,8 +205,8 @@ class SessionPool:
     caller's requested capacity (see `acquire`'s `capacity` parameter),
     `acquire` opens an additional browser instance for this same
     language instead of queueing everyone behind the first one, but only
-    up to the shared `semaphore` passed in at construction, which is what
-    actually bounds total browser use, not this pool on its own.
+    up to `max_sessions` (a number, or a semaphore shared with other pools), which is what
+    actually bounds browser use.
 
     When that budget is spent, a caller shares the least-loaded session already in
     the pool rather than waiting (there is no benefit in blocking until some session
@@ -242,7 +242,7 @@ class SessionPool:
         self,
         language: Language,
         options: SessionOptions,
-        semaphore: asyncio.Semaphore,
+        max_sessions: int | asyncio.Semaphore = 1,
         *,
         capacity_tolerance: int = 1,
         reclaim: Callable[[], Awaitable[int]] | None = None,
@@ -254,10 +254,11 @@ class SessionPool:
         :param options: Session options to open with. The `language` on it is overridden
             with `language` above; everything else (browser type, headless, proxy,
             page-pool size, and so on) is shared across every session this pool opens.
-        :param semaphore: Semaphore bounding how many browser sessions may be open at
-            once. Share one across several pools (as `Runtime` does) to bound them
-            together. A slot is acquired only when this pool actually launches a new
-            browser, and released only when that specific session actually closes.
+        :param max_sessions: The most browser sessions this pool may have open at once; the
+            pool creates its own limit from it. To bound several pools together (as
+            `Runtime` does for its per-language pools), pass the same `asyncio.Semaphore`
+            to each instead. A slot is taken only when the pool actually launches a new
+            browser, and returned only when that specific session actually closes.
         :param capacity_tolerance: How much of a shortfall in an existing
             session's free page capacity `acquire` will accept before
             growing the pool instead, when a caller specifies a `capacity`. E.g. with
@@ -269,10 +270,16 @@ class SessionPool:
             slot and none is free, before waiting for one. It should close sessions that
             are idle elsewhere and return how many it closed (`Runtime` passes its own
             `close_idle_sessions`).
-        :raises ValueError: If `capacity_tolerance` is negative.
+        :raises ValueError: If `capacity_tolerance` is negative or `max_sessions` is below 1.
         """
         if capacity_tolerance < 0:
             raise ValueError("`capacity_tolerance` must be non-negative")
+        if isinstance(max_sessions, asyncio.Semaphore):
+            semaphore = max_sessions
+        else:
+            if max_sessions < 1:
+                raise ValueError("`max_sessions` must be at least 1")
+            semaphore = asyncio.Semaphore(max_sessions)
 
         self.language = language
         self.options = options

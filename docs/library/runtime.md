@@ -55,9 +55,9 @@ When the browser budget is spent, a call for a language that already has a sessi
 ## Inspecting and closing
 
 ```python
-runtime.stats()           # sessions open, busy, per-language checkouts
+runtime.stats()  # sessions open, busy, per-language checkouts
 await runtime.close_idle_sessions()  # run one reaping cycle now
-await runtime.close()     # or use `async with`
+await runtime.close()  # or use `async with`
 ```
 
 A browser that crashes is dropped and replaced rather than handed out again.
@@ -69,7 +69,7 @@ A browser that crashes is dropped and replaced rather than handed out again.
 `SessionPool` is the per-language building block, if you want it without the rest:
 
 ```python
-pool = slb.SessionPool(slb.Language.ENGLISH, slb.config.SessionOptions(), asyncio.Semaphore(2))
+pool = slb.SessionPool(slb.Language.ENGLISH, slb.config.SessionOptions(), max_sessions=2)
 async with pool.checkout(capacity=3) as session:
     ...
 await pool.close()
