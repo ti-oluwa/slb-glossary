@@ -6,7 +6,7 @@ from slb_glossary.constants import constants
 from slb_glossary.embeddings import build_embed_text, cosine_similarity, embed
 from slb_glossary.scoring import classify_name_match
 from slb_glossary.types import SearchMode, SearchResult
-from slb_glossary.utils import normalize_text
+from slb_glossary.utils import fold_text
 
 __all__ = ["score_content_overlap", "score_name_match", "score_result"]
 
@@ -43,11 +43,11 @@ def score_content_overlap(query: str, *texts: str) -> float:
         itself. Use `score_name_match` for that.
     :return: A score in `[0.0, constants.content_match_score_cap]`.
     """
-    query_tokens = normalize_text(query).split()
+    query_tokens = fold_text(query).split()
     if not query_tokens:
         return 0.0
 
-    haystack = " ".join(normalize_text(text) for text in texts if text)
+    haystack = " ".join(fold_text(text) for text in texts if text)
     if not haystack:
         return 0.0
 

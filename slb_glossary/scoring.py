@@ -5,13 +5,14 @@ import re
 import typing
 
 from slb_glossary.constants import constants
-from slb_glossary.utils import normalize_text
+from slb_glossary.utils import fold_text
 
 __all__ = [
     "NameMatch",
     "NameMatchTier",
     "classify_name_match",
     "score_name_match",
+    "token_forms",
     "token_overlap_ratio",
 ]
 
@@ -45,12 +46,34 @@ def _contains_as_phrase(haystack: str, needle: str) -> bool:
     return re.search(pattern, haystack) is not None
 
 
+def token_forms(token: str) -> frozenset[str]:
+    """
+    A token plus its likely singular forms, so `"pressures"` still covers `"pressure"`.
+
+    Deliberately crude (no real stemming): only trailing `ies`/`es`/`s` are considered,
+    and short tokens are left alone, so `"gas"` or `"bus"` are never mangled.
+    """
+    forms = {token}
+    if len(token) > 3:
+        if token.endswith("ies"):
+            forms.add(token[:-3] + "y")
+        if token.endswith("es"):
+            forms.add(token[:-2])
+        if token.endswith("s") and not token.endswith("ss"):
+            forms.add(token[:-1])
+    return frozenset(forms)
+
+
 def _token_is_covered(term_tokens: typing.Sequence[str], query_token: str) -> bool:
-    """Whether `query_token` equals or is a prefix of some token in `term_tokens`."""
-    return any(
-        term_token == query_token or term_token.startswith(query_token)
-        for term_token in term_tokens
-    )
+    """Whether `query_token` equals or is a prefix of some token in `term_tokens` (plural-insensitive)."""
+    query_forms = token_forms(query_token)
+    for term_token in term_tokens:
+        if term_token == query_token or term_token.startswith(query_token):
+            return True
+        for term_form in token_forms(term_token):
+            if any(term_form == form or term_form.startswith(form) for form in query_forms):
+                return True
+    return False
 
 
 def token_overlap_ratio(query_norm: str, term_norm: str) -> float:
@@ -64,9 +87,17 @@ def token_overlap_ratio(query_norm: str, term_norm: str) -> float:
 
 
 def classify_name_match(query: str, term: str) -> NameMatch | None:
-    """Classify how strongly `query` name-matches `term`, best tier first. `None` if no overlap at all."""
-    query_norm = normalize_text(query)
-    term_norm = normalize_text(term)
+    """
+    Classify how strongly `query` name-matches `term`, best tier first. `None` if no overlap at all.
+
+    Both sides are compared through `slb_glossary.utils.fold_text`, so case, accents and
+    punctuation never matter: `"capillary-pressure"`, `"Capillary pressure?"` and
+    `"capillary_pressure"` are all an `EXACT` match for the term `"Capillary pressure"`.
+    A query that only differs from the term by spacing (`"watercut"` vs `"Water-cut"`) is
+    scored as a `PREFIX` match, and plurals are tolerated when comparing tokens.
+    """
+    query_norm = fold_text(query)
+    term_norm = fold_text(term)
     if not query_norm or not term_norm:
         return None
 
@@ -74,6 +105,9 @@ def classify_name_match(query: str, term: str) -> NameMatch | None:
         return NameMatch(NameMatchTier.EXACT, constants.exact_match_score, 1.0)
 
     if term_norm.startswith(query_norm):
+        return NameMatch(NameMatchTier.PREFIX, constants.prefix_match_score, 1.0)
+
+    if term_norm.replace(" ", "") == query_norm.replace(" ", ""):
         return NameMatch(NameMatchTier.PREFIX, constants.prefix_match_score, 1.0)
 
     if _contains_as_phrase(term_norm, query_norm) or _contains_as_phrase(query_norm, term_norm):

@@ -9,13 +9,13 @@ from collections.abc import Collection
 from slb_glossary.constants import constants
 from slb_glossary.local.types import Database
 from slb_glossary.phrasing import clean_query
-from slb_glossary.scoring import classify_name_match
+from slb_glossary.scoring import classify_name_match, token_forms
 from slb_glossary.types import SearchResult
-from slb_glossary.utils import normalize_text
+from slb_glossary.utils import fold_text
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["build_fts_query", "build_fts_query_or", "lexical_search"]
+__all__ = ["build_fts_query", "build_fts_query_expanded", "build_fts_query_or", "lexical_search"]
 
 
 FTS_COLUMN_WEIGHTS: tuple[float, float, float] = (10.0, 1.5, 3.0)
@@ -36,6 +36,25 @@ def build_fts_query_or(query: str) -> str:
     if not tokens:
         return '""'
     return " OR ".join('"' + token.replace('"', '""') + '"*' for token in tokens)
+
+
+def build_fts_query_expanded(query: str) -> str:
+    """
+    Like `build_fts_query`, but each token also matches its singular form(s), so
+    `"capillary pressures"` still finds `"Capillary pressure"`.
+
+    Expects `query` to already be `fold_text`-folded (letters, digits and spaces only),
+    which is what `lexical_search` passes it; any other input is folded first.
+    """
+    tokens = fold_text(query).split()
+    if not tokens:
+        return '""'
+    clauses: list[str] = []
+    for token in tokens:
+        forms = sorted(token_forms(token), key=lambda form: (form != token, form))
+        alternatives = " OR ".join(f'"{form}"*' for form in forms)
+        clauses.append(f"({alternatives})" if len(forms) > 1 else alternatives)
+    return " AND ".join(clauses)
 
 
 async def run_fts_query(
@@ -96,24 +115,42 @@ async def _find_candidates(
     Run the FTS5 `MATCH` query and return every matching row (up to
     `constants.lexical_candidate_cap`), with its `bm25_score`.
 
-    Tries `build_fts_query` (AND) first; if that returns nothing and the
-    query has more than one token, retries with `build_fts_query_or`
-    (OR), so one unmatched token doesn't zero out an otherwise-good match.
+    `query` is folded first (`slb_glossary.utils.fold_text`), so stray punctuation
+    never reaches FTS5. Tries `build_fts_query` (AND) first; then
+    `build_fts_query_expanded` (AND, plural-tolerant); and finally, if the query has
+    more than one token, `build_fts_query_or` (OR), so one unmatched token doesn't
+    zero out an otherwise-good match.
     """
     from slb_glossary.local.api import resolve_topic
 
     resolved_topic = await resolve_topic(db, topic, False, language=language)
-    filters = {
+    filters: dict[str, typing.Any] = {
         "topic": resolved_topic,
         "start_letter": start_letter,
         "language": language,
         "exclude": exclude,
     }
 
-    rows = await run_fts_query(db, build_fts_query(query), **filters)
-    if rows or len(query.split()) <= 1:
+    folded = fold_text(query)
+    if not folded:
+        return []
+
+    # FTS5 already splits on punctuation, but quoting `"capillary-"` or `":rig"` as
+    # one token is needlessly fragile (and tokenizer-dependent), so ask FTS5 about
+    # the folded words instead: exactly what we compare against when ranking.
+    rows = await run_fts_query(db, build_fts_query(folded), **filters)
+    if rows:
         return rows
-    return await run_fts_query(db, build_fts_query_or(query), **filters)
+
+    expanded = build_fts_query_expanded(folded)
+    if expanded != build_fts_query(folded):
+        rows = await run_fts_query(db, expanded, **filters)
+        if rows:
+            return rows
+
+    if len(folded.split()) <= 1:
+        return []
+    return await run_fts_query(db, build_fts_query_or(folded), **filters)
 
 
 def rank_candidates(query: str, rows: list[typing.Any]) -> list[tuple[SearchResult, float]]:
@@ -168,7 +205,7 @@ async def _fuzzy_find_candidates(
     """
     from slb_glossary.local.api import apply_sql_exclude, row_to_result
 
-    query_norm = normalize_text(query)
+    query_norm = fold_text(query)
     if not query_norm:
         return []
 
@@ -180,7 +217,7 @@ async def _fuzzy_find_candidates(
 
     normalized_to_original: dict[str, str] = {}
     for term in known_terms:
-        normalized_to_original.setdefault(normalize_text(term), term)
+        normalized_to_original.setdefault(fold_text(term), term)
 
     close = difflib.get_close_matches(
         query_norm,
@@ -214,7 +251,12 @@ async def _fuzzy_find_candidates(
 
     scored: list[tuple[SearchResult, float]] = []
     for row in rows:
-        term_norm = normalize_text(row["term"])
+        term_norm = fold_text(row["term"])
+        if term_norm.replace(" ", "") == query_norm.replace(" ", ""):
+            # Same letters, only spaced differently ("watercut" vs "Water-cut"): not a
+            # typo at all, so it is scored as the name match it really is.
+            scored.append((row_to_result(row), constants.prefix_match_score))
+            continue
         ratio = difflib.SequenceMatcher(None, query_norm, term_norm).ratio()
         score = round(
             min(constants.fuzzy_match_score_cap, constants.fuzzy_match_score_cap * ratio), 4
@@ -284,6 +326,12 @@ async def lexical_search(
         len(exclude) if exclude else 0,
     )
     started_at = time.monotonic()
+
+    if not fold_text(normalized_query):
+        logger.debug(
+            "Local `lexical_search`: %r has no letters or digits; nothing to match", query
+        )
+        return []
 
     resolved_topic = await resolve_topic(db, topic, fuzzy, language=language)
 

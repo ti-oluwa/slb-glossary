@@ -4,9 +4,11 @@ import builtins
 import enum
 import logging
 import os
+import re
 import sys
 import time
 import typing
+import unicodedata
 from difflib import get_close_matches
 
 from rich import box
@@ -20,6 +22,7 @@ from slb_glossary.types import RecordLike, SearchResult
 __all__ = [
     "Lookup",
     "env",
+    "fold_text",
     "log_timed_yields",
     "parse_int",
     "print_async_records",
@@ -258,6 +261,38 @@ def split_exclude(
 def normalize_text(text: str) -> str:
     """Lowercase `text` and collapse its whitespace."""
     return " ".join(text.strip().lower().split())
+
+
+APOSTROPHES_RE = re.compile(r"['\u2018\u2019\u02bc`]")
+"""Apostrophe-likes, dropped outright by `fold_text` so \"hooke's\" folds to \"hookes\", not \"hooke s\"."""
+
+SYMBOLS_RE = re.compile(r"[\W_]+")
+"""Any run of non-word characters (punctuation, symbols, whitespace) and underscores."""
+
+
+def fold_text(text: str) -> str:
+    """
+    Fold `text` down to just its lowercase letters and digits, single-space separated, for
+    symbol-insensitive matching.
+
+    Unlike `normalize_text`, which only lowercases and collapses whitespace, this also:
+
+    * drops accents/diacritics (`"presión"` -> `"presion"`),
+    * drops apostrophes (`"Hooke's law"` -> `"hookes law"`),
+    * turns every other run of punctuation, symbols and underscores into one space
+      (`"capillary-pressure"`, `":capillary pressure?"` and `"Capillary_Pressure"` all
+      fold to `"capillary pressure"`).
+
+    Term names and queries are both folded before they are compared, so a stray
+    hyphen, colon or question mark on either side never makes a real match miss.
+
+    :param text: Any text, such as a query or a term name.
+    :return: The folded text. Empty if `text` has no letters or digits at all.
+    """
+    decomposed = unicodedata.normalize("NFKD", text)
+    unaccented = "".join(char for char in decomposed if not unicodedata.combining(char))
+    without_apostrophes = APOSTROPHES_RE.sub("", unaccented.casefold())
+    return " ".join(SYMBOLS_RE.sub(" ", without_apostrophes).split())
 
 
 def as_async_iterator(

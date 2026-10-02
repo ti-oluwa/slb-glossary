@@ -18,7 +18,13 @@ from slb_glossary.errors import EmbeddingError
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["build_embed_text", "cosine_similarity", "embed", "embedding_dim"]
+__all__ = [
+    "build_embed_text",
+    "cosine_similarity",
+    "embed",
+    "embedding_dim",
+    "merge_embeddings",
+]
 
 if typing.TYPE_CHECKING:
     import numpy as np  # type: ignore[import]
@@ -129,3 +135,26 @@ def cosine_similarity(a: "np.ndarray", b: "np.ndarray") -> float:
     if denominator == 0:
         return 0.0
     return float(np.dot(a, b) / denominator)
+
+
+def merge_embeddings(vectors: "np.ndarray") -> "np.ndarray":
+    """
+    Merge several embeddings of the *same* query (e.g. its `"water-cut"` and
+    `"water cut"` spellings, see `slb_glossary.phrasing.query_variants`) into one.
+
+    Each vector is unit-normalized before averaging, so no spelling outweighs another
+    just because of its magnitude, and the result is unit-normalized again.
+
+    :param vectors: A `(n, constants.embedding_dim)` array, `n >= 1`.
+    :return: One `(constants.embedding_dim,)` `float32` vector. For `n == 1`, that same
+        vector, untouched.
+    """
+    import numpy as np
+
+    if len(vectors) == 1:
+        return vectors[0]
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    merged = (vectors / norms).mean(axis=0)
+    norm = np.linalg.norm(merged)
+    return (merged / norm if norm else merged).astype("float32")

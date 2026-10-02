@@ -4,7 +4,7 @@ import enum
 
 import pytest
 
-from slb_glossary.utils import EnvironmentVariableError, env, parse_int, split_exclude
+from slb_glossary.utils import EnvironmentVariableError, env, fold_text, parse_int, split_exclude
 
 pytestmark = pytest.mark.unit
 
@@ -116,3 +116,22 @@ class TestSplitExclude:
         urls, names = split_exclude(["", "Porosity"])
         assert urls == frozenset()
         assert names == frozenset({"porosity"})
+
+
+class TestFoldText:
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("Capillary-Pressure", "capillary pressure"),
+            ("  capillary_pressure?? ", "capillary pressure"),
+            ("Presi\u00f3n", "presion"),
+            ("Hooke's law", "hookes law"),
+            ("Hooke\u2019s law", "hookes law"),
+            ("gas/oil (GOR)", "gas oil gor"),
+            ("H2S", "h2s"),
+            ("???", ""),
+            ("", ""),
+        ],
+    )
+    def test_folds_case_accents_apostrophes_and_symbols(self, text: str, expected: str) -> None:
+        assert fold_text(text) == expected

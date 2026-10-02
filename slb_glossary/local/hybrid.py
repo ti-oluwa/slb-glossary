@@ -10,7 +10,7 @@ from slb_glossary.local.types import Database
 from slb_glossary.local.vector import vector_search
 from slb_glossary.scoring import token_overlap_ratio
 from slb_glossary.types import SearchResult
-from slb_glossary.utils import normalize_text
+from slb_glossary.utils import fold_text
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +72,11 @@ def rerank_fused_tier(
     if not fused:
         return fused
 
-    query_norm = normalize_text(query)
+    query_norm = fold_text(query)
 
     def rerank_key(pair: tuple[SearchResult, float]) -> float:
         result, score = pair
-        overlap = token_overlap_ratio(query_norm, normalize_text(result.term or ""))
+        overlap = token_overlap_ratio(query_norm, fold_text(result.term or ""))
         return score + RERANK_TOKEN_OVERLAP_WEIGHT * overlap
 
     return sorted(fused, key=rerank_key, reverse=True)

@@ -20,11 +20,11 @@ import typing
 from collections.abc import Collection
 
 from slb_glossary.constants import constants
-from slb_glossary.embeddings import build_embed_text, embed, embedding_dim
+from slb_glossary.embeddings import build_embed_text, embed, embedding_dim, merge_embeddings
 from slb_glossary.errors import DatabaseError
 from slb_glossary.local.connection import transaction
 from slb_glossary.local.types import Database
-from slb_glossary.phrasing import clean_query
+from slb_glossary.phrasing import clean_query, query_variants
 from slb_glossary.types import SearchResult
 
 logger = logging.getLogger(__name__)
@@ -432,7 +432,14 @@ async def vector_search(
     from slb_glossary.local.api import apply_sql_exclude, resolve_topic, row_to_result
 
     normalized_query = clean_query(query)
-    query_vector = embed([normalized_query])[0].astype("float32").tobytes()
+    variants = query_variants(normalized_query)
+    if not variants:
+        logger.debug("Local `vector_search`: %r has no letters or digits; nothing to embed", query)
+        return []
+
+    # "water-cut" and "water cut" are one query to a person but different tokens to the
+    # embedding model, so embed every spelling and search with their merged vector.
+    query_vector = merge_embeddings(embed(list(variants))).astype("float32").tobytes()
     resolved_topic = await resolve_topic(db, topic, fuzzy, language=language)
 
     pool = limit if limit else constants.hybrid_candidate_pool

@@ -42,13 +42,14 @@ from collections.abc import Collection
 from slb_glossary import live
 from slb_glossary.connectivity import has_internet_connection
 from slb_glossary.constants import constants
-from slb_glossary.embeddings import embed
+from slb_glossary.embeddings import embed, merge_embeddings
 from slb_glossary.errors import QueryError
 from slb_glossary.live.browser import Session
 from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
-from slb_glossary.phrasing import clean_query
+from slb_glossary.phrasing import clean_query, query_variants
 from slb_glossary.types import RelatedTerm, SearchMode, SearchResult
+from slb_glossary.utils import fold_text
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +260,7 @@ def _build_live_scorer(query: str, mode: SearchMode) -> typing.Callable[[SearchR
             "`mode='lexical'` or `mode='semantic'` for live results instead."
         )
     if mode is SearchMode.SEMANTIC:
-        query_vector = embed([query])[0]
+        query_vector = merge_embeddings(embed(list(query_variants(query) or (query,))))
         return lambda result: live.score_result(query_vector, result, mode=SearchMode.SEMANTIC)
     return lambda result: live.score_result(query, result, mode=SearchMode.LEXICAL)
 
@@ -450,6 +451,14 @@ async def search(
     started_at = time.monotonic()
     resolved_source = await resolve_source(db, session, source)
     count = 0
+    if not fold_text(normalized_query):
+        # Only symbols/whitespace (e.g. "???"): there is nothing to match locally, and
+        # not worth a browser round trip to the live site either.
+        logger.debug(
+            "`query.search(%r)`: no letters or digits in the query; yielding nothing", query
+        )
+        return
+
     if resolved_source is Source.LOCAL:
         assert db is not None
         for result, score in await local.search(

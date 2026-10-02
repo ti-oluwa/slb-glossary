@@ -6,7 +6,12 @@ import typing
 
 import pytest
 
-from slb_glossary.embeddings import build_embed_text, cosine_similarity, load_model
+from slb_glossary.embeddings import (
+    build_embed_text,
+    cosine_similarity,
+    load_model,
+    merge_embeddings,
+)
 from slb_glossary.errors import EmbeddingError
 from tests.mocks import MockStaticModel
 
@@ -139,3 +144,25 @@ class TestCosineSimilarity:
         zero = np.array([0.0, 0.0], dtype="float32")
         other = np.array([1.0, 1.0], dtype="float32")
         assert cosine_similarity(zero, other) == 0
+
+
+class TestMergeEmbeddings:
+    def test_single_vector_is_returned_untouched(self) -> None:
+        import numpy as np
+
+        vectors = np.array([[3.0, 4.0, 0.0, 0.0]], dtype="float32")
+        assert np.array_equal(merge_embeddings(vectors), vectors[0])
+
+    def test_merged_vector_is_unit_length_and_between_the_inputs(self) -> None:
+        import numpy as np
+
+        merged = merge_embeddings(np.array([[10.0, 0.0], [0.0, 0.1]], dtype="float32"))
+        assert abs(float(np.linalg.norm(merged)) - 1.0) < 1e-6
+        # Magnitude must not let the long vector dominate: halfway between the two directions.
+        assert abs(float(merged[0]) - float(merged[1])) < 1e-6
+
+    def test_zero_vector_does_not_produce_nan(self) -> None:
+        import numpy as np
+
+        merged = merge_embeddings(np.array([[0.0, 0.0], [1.0, 0.0]], dtype="float32"))
+        assert not np.isnan(merged).any()

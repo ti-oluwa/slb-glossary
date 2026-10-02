@@ -4,7 +4,7 @@
 
 import pytest
 
-from slb_glossary.phrasing import clean_query
+from slb_glossary.phrasing import clean_query, query_variants, trim_symbols
 
 pytestmark = pytest.mark.unit
 
@@ -60,3 +60,53 @@ class TestCleanQuery:
         """An empty (or whitespace-only) query returns an empty string."""
         assert clean_query("") == ""
         assert clean_query("   ") == ""
+
+
+class TestTrimSymbols:
+    @pytest.mark.parametrize(
+        ("query", "expected"),
+        [
+            ("capillary-", "capillary"),
+            (":rig", "rig"),
+            ("porous?", "porous"),
+            ("(porosity)", "porosity"),
+            ("--  gas-oil ratio !!", "gas-oil ratio"),
+            ("'permeability'", "permeability"),
+        ],
+    )
+    def test_trims_edges_but_keeps_inner_symbols(self, query: str, expected: str) -> None:
+        assert trim_symbols(query) == expected
+
+    @pytest.mark.parametrize("query", ["???", "-", "()"])
+    def test_symbol_only_query_is_not_emptied(self, query: str) -> None:
+        """Nothing to keep, so it is returned (whitespace-trimmed) rather than blanked."""
+        assert trim_symbols(f"  {query}  ") == query
+
+
+class TestCleanQuerySymbols:
+    @pytest.mark.parametrize(
+        ("query", "expected"),
+        [
+            ("capillary-", "capillary"),
+            ("what is porosity?!", "porosity"),
+            ("define: water-cut!!", "water-cut"),
+            ("Explain: capillary-pressure", "capillary-pressure"),
+            ("what is :rig?", "rig"),
+        ],
+    )
+    def test_symbols_around_the_term_are_dropped(self, query: str, expected: str) -> None:
+        assert clean_query(query) == expected
+
+
+class TestQueryVariants:
+    def test_plain_query_has_a_single_variant(self) -> None:
+        assert query_variants("Porosity") == ("Porosity",)
+
+    def test_hyphenated_query_adds_its_spaced_form(self) -> None:
+        assert query_variants("capillary-pressure") == (
+            "capillary-pressure",
+            "capillary pressure",
+        )
+
+    def test_symbol_only_query_has_no_variants(self) -> None:
+        assert query_variants("???") == ()

@@ -235,15 +235,16 @@ class TestLexicalSearch:
 
     async def test_literal_double_quote_in_query_does_not_raise(self, db: Database) -> None:
         """
-        A literal `"` in the query text reaches SQLite as safely-quoted, not a syntax error.
-        The fuzzy fallback recovers "Porosity" from the mangled `poros"ity` anyway.
+        A literal `"` in the query text never reaches SQLite as a syntax error. It is
+        treated like any other symbol (a word separator), and "Porosity" is still
+        recovered from the mangled `poros"ity` via its `poros` token.
         """
         await upsert_results(db, [make_search_result(url="https://x.com/a", term="Porosity")])
         results = await lexical_search(db, 'poros"ity')
         assert isinstance(results, list)
-        if results:
-            assert results[0][0].term == "Porosity"
-            assert results[0][1] <= constants.fuzzy_match_score_cap
+        assert [r.term for r, _ in results] == ["Porosity"]
+        # "poros ity" only differs from "porosity" by spacing, so it is a prefix-tier match.
+        assert results[0][1] == constants.prefix_match_score
 
     @pytest.mark.parametrize("query", ["foo OR bar", "foo or bar"])
     async def test_or_in_query_is_literal_text_not_a_boolean_operator(
@@ -452,3 +453,104 @@ class TestLexicalSearchFuzzyFallback:
         results = await lexical_search(db, "porosoty", topic="Drilling")
         assert [r.term for r, _ in results] == ["Porosity"]
         assert all(r.topic == "Drilling" for r, _ in results)
+
+
+async def seed_symbol_terms(db: Database) -> Database:
+    """Seed the terms the symbol-insensitivity tests search for."""
+    await upsert_results(
+        db,
+        [
+            make_search_result(url="https://x.com/cp", term="Capillary pressure", definition=None),
+            make_search_result(url="https://x.com/wc", term="Water-cut", definition=None),
+            make_search_result(url="https://x.com/rig", term="Rig", definition=None),
+            make_search_result(url="https://x.com/pm", term="Porous media", definition=None),
+            make_search_result(url="https://x.com/pr", term="Presi\u00f3n", definition=None),
+            make_search_result(url="https://x.com/hl", term="Hooke's law", definition=None),
+        ],
+    )
+    return db
+
+
+@pytest.mark.anyio
+class TestLexicalSearchSymbolInsensitivity:
+    """Punctuation, hyphens, accents and plurals never make a real local match miss."""
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "capillary pressure",
+            "capillary-pressure",
+            "capillary_pressure",
+            "Capillary  --  Pressure",
+            "capillary pressure?",
+            ":capillary pressure",
+            "(capillary pressure)",
+        ],
+    )
+    async def test_hyphen_and_edge_symbols_still_reach_an_exact_match(
+        self, db: Database, query: str
+    ) -> None:
+        seeded = await seed_symbol_terms(db)
+        """Every spelling of one term name is an exact-tier match for it."""
+        results = await lexical_search(seeded, query)
+        assert results[0][0].term == "Capillary pressure"
+        assert results[0][1] >= constants.contains_match_score
+
+    async def test_plural_query_still_finds_the_singular_term_first(self, db: Database) -> None:
+        """`"capillary pressures"` is not exact, but still ranks `"Capillary pressure"` first."""
+        seeded = await seed_symbol_terms(db)
+        results = await lexical_search(seeded, "capillary pressures")
+        assert results[0][0].term == "Capillary pressure"
+        assert results[0][1] >= constants.all_tokens_match_score
+
+    @pytest.mark.parametrize("query", ["capillary-", "capillary?", ":capillary"])
+    async def test_trailing_or_leading_symbols_on_a_prefix_still_prefix_match(
+        self, db: Database, query: str
+    ) -> None:
+        seeded = await seed_symbol_terms(db)
+        """`"capillary-"` is just the prefix `"capillary"`."""
+        results = await lexical_search(seeded, query)
+        assert results[0][0].term == "Capillary pressure"
+        assert results[0][1] == constants.prefix_match_score
+
+    @pytest.mark.parametrize("query", ["water cut", "water-cut", "Water_Cut!", "watercut"])
+    async def test_term_with_a_hyphen_matches_however_the_query_spells_it(
+        self, db: Database, query: str
+    ) -> None:
+        seeded = await seed_symbol_terms(db)
+        """A hyphen in the *term* name is as ignorable as one in the query."""
+        results = await lexical_search(seeded, query)
+        assert results[0][0].term == "Water-cut"
+        assert results[0][1] >= constants.prefix_match_score
+
+    async def test_accents_are_ignored_both_ways(self, db: Database) -> None:
+        seeded = await seed_symbol_terms(db)
+        """`"presion"` finds `"Presi\u00f3n"`, and the accented query finds it too."""
+        for query in ("presion", "presi\u00f3n"):
+            results = await lexical_search(seeded, query)
+            assert results[0][0].term == "Presi\u00f3n"
+            assert results[0][1] == constants.exact_match_score
+
+    async def test_apostrophes_are_dropped_not_split(self, db: Database) -> None:
+        seeded = await seed_symbol_terms(db)
+        """`"hookes law"` and `"Hooke's law"` both find `"Hooke's law"`."""
+        for query in ("hookes law", "Hooke's law", "hooke\u2019s law"):
+            results = await lexical_search(seeded, query)
+            assert results[0][0].term == "Hooke's law"
+            assert results[0][1] == constants.exact_match_score
+
+    @pytest.mark.parametrize("query", ["???", "-", ":;", "()"])
+    async def test_symbol_only_query_returns_nothing_without_raising(
+        self, db: Database, query: str
+    ) -> None:
+        seeded = await seed_symbol_terms(db)
+        """A query with no letters or digits matches nothing (and never errors)."""
+        assert await lexical_search(seeded, query) == []
+
+    async def test_wrapper_phrasing_with_symbols_is_cleaned_too(self, db: Database) -> None:
+        seeded = await seed_symbol_terms(db)
+        """`"what is a rig?"`/`"define: rig!"` reduce to `"rig"`."""
+        for query in ("what is a rig?", "define: rig!"):
+            results = await lexical_search(seeded, query)
+            assert results[0][0].term == "Rig"
+            assert results[0][1] == constants.exact_match_score
