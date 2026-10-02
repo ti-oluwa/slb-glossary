@@ -65,3 +65,39 @@ class WriterError(OSError, SLBGlossaryError):
 
 class EnvironmentVariableError(ValueError):
     """Raised when an environment variable is set but can not be cast/validated to its expected type."""
+
+
+class SessionPoolError(BrowserError, RuntimeError):
+    """
+    Raised when a `slb_glossary.live.SessionPool` is misused (e.g. a session it never
+    handed out is released to it).
+
+    Also a `RuntimeError`, so code written against the pool's earlier, plain
+    `RuntimeError`s keeps working.
+    """
+
+
+class SessionPoolClosedError(SessionPoolError):
+    """Raised when a `slb_glossary.live.SessionPool` that has been closed is asked for a session."""
+
+
+class ResourceError(SLBGlossaryError):
+    """
+    Raised when a `slb_glossary.live.Runtime` can not hand out a resource (database or
+    live session) it was asked for.
+    """
+
+
+class RuntimeClosedError(ResourceError):
+    """Raised when a `slb_glossary.live.Runtime` that has been closed is asked for a resource."""
+
+
+class ResourceDisabledError(ResourceError):
+    """
+    Raised when a `slb_glossary.live.Runtime` is asked for a resource (the local
+    database or live sessions) it was configured not to provide.
+    """
+
+
+class UnknownLanguageError(ResourceError, ValueError):
+    """Raised when a `slb_glossary.live.Runtime` is asked for a glossary language that doesn't exist."""

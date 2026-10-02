@@ -18,11 +18,11 @@ from collections.abc import Iterable, Mapping
 from fastmcp.server.auth import AuthProvider
 
 from slb_glossary.config import DatabaseOptions, SessionOptions
+from slb_glossary.live.runtime import SessionMode
 from slb_glossary.logging import SinksSpec
 from slb_glossary.mcp.errors import MCPConfigError
 from slb_glossary.mcp.types import AfterToolHook, BeforeToolHook, LifecycleHook, ToolErrorHook
-from slb_glossary.query import Source
-from slb_glossary.types import Language, Updatable
+from slb_glossary.types import Language, Source, Updatable
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -132,6 +132,7 @@ def resolve_tools(value: Tool | str | Iterable[str] | None) -> Tool:
         return Tool.READ_ONLY
     if isinstance(value, Tool):
         return value
+
     names = [value] if isinstance(value, str) else list(value)
     resolved = Tool(0)
     for name in names:
@@ -142,32 +143,6 @@ def resolve_tools(value: Tool | str | Iterable[str] | None) -> Tool:
             raise MCPConfigError(f"Unknown MCP tool name {name!r}. Expected one of: {choices}.")
         resolved |= member
     return resolved
-
-
-class SessionMode(enum.Enum):
-    """Defines when the MCP application's live `Session` is opened and how long it lives."""
-
-    EAGER = "eager"
-    """
-    Open one shared session at server startup, before any tool call. Lowest
-    per-call latency, at the cost of always paying for a browser launch even
-    if no live lookup is ever made.
-    """
-
-    LAZY = "lazy"
-    """
-    Open one shared session on the first tool call that needs it, then
-    reuse it. Nothing is launched if every call is served locally. The
-    default.
-    """
-
-    PER_CALL = "per_call"
-    """
-    Open a fresh session for every tool call that needs one, and close it
-    immediately after. Slowest and heaviest, but gives every call full
-    isolation. Handy under multi-tenant auth where sessions shouldn't be
-    shared across callers.
-    """
 
 
 class RateLimitScope(enum.Enum):

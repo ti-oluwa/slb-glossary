@@ -96,6 +96,7 @@ nav:
   - Using the Library:
       - Overview: library/index.md
       - Live Search: library/live-search.md
+      - Managing Sessions: library/runtime.md
       - Local Search and Cache: library/local-search.md
       - Combined Search with slb_glossary.query: library/query.md
       - Saving Results and Config Objects: library/configuration.md

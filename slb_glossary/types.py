@@ -11,9 +11,26 @@ __all__ = [
     "RelatedTerm",
     "SearchMode",
     "SearchResult",
+    "Source",
     "Updatable",
     "materialize_records",
 ]
+
+
+class Source(enum.Enum):
+    """Where a `slb_glossary.query` function is allowed to read/write results from."""
+
+    LOCAL = "local"
+    """The local database only. Never touches the network. Requires `db`."""
+
+    LIVE = "live"
+    """The live glossary only. Never touches the local database. Requires `session`."""
+
+    AUTO = "auto"
+    """
+    Local first, live as a fallback when the local database has nothing.
+    See the module docstring of `slb_glossary.query` for the full behavior.
+    """
 
 
 class SearchMode(str, enum.Enum):

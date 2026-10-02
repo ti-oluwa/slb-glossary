@@ -29,6 +29,15 @@ from .browser import (
     session_from_config,
 )
 from .relevance import score_content_overlap, score_name_match, score_result
+from .runtime import (
+    PooledSession,
+    PoolStats,
+    Runtime,
+    RuntimeStats,
+    SessionMode,
+    SessionPool,
+    get_db_path,
+)
 from .topics import refresh_topics
 from .types import BrowserType, PageHandle, Pages, ResourceType, Session
 
@@ -36,11 +45,18 @@ __all__ = [
     "BrowserType",
     "PageHandle",
     "Pages",
+    "PoolStats",
+    "PooledSession",
     "ResourceType",
+    "Runtime",
+    "RuntimeStats",
     "Session",
+    "SessionMode",
+    "SessionPool",
     "browser_session",
     "close_session",
     "ensure_initialized",
+    "get_db_path",
     "get_results_from_url",
     "get_results_from_urls",
     "get_terms_on",

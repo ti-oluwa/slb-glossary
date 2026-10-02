@@ -31,7 +31,6 @@ behaves like whichever of `Source.LOCAL`/`Source.LIVE` that one supports.
 
 import asyncio
 import dataclasses
-import enum
 import logging
 import random
 import string
@@ -48,7 +47,7 @@ from slb_glossary.live.browser import Session
 from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
 from slb_glossary.phrasing import clean_query, query_variants
-from slb_glossary.types import RelatedTerm, SearchMode, SearchResult
+from slb_glossary.types import RelatedTerm, SearchMode, SearchResult, Source
 from slb_glossary.utils import fold_text
 
 logger = logging.getLogger(__name__)
@@ -66,22 +65,6 @@ __all__ = [
     "related_terms",
     "search",
 ]
-
-
-class Source(enum.Enum):
-    """Where a `slb_glossary.query` function is allowed to read/write results from."""
-
-    LOCAL = "local"
-    """The local database only. Never touches the network. Requires `db`."""
-
-    LIVE = "live"
-    """The live glossary only. Never touches the local database. Requires `session`."""
-
-    AUTO = "auto"
-    """
-    Local first, live as a fallback when the local database has nothing.
-    See the module docstring for the full behavior.
-    """
 
 
 T = typing.TypeVar("T")

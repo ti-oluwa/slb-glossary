@@ -108,7 +108,7 @@ config = slb_mcp.MCPConfig(
     session=slb_mcp.SessionAccess(
         enabled=True,
         mode=slb_mcp.SessionMode.LAZY,  # open the shared browser on first use, not at startup
-        max_concurrent=3,
+        max_sessions=3,
         options=slb.config.SessionOptions(use_stealth=False),
     ),
     local=slb_mcp.LocalAccess(allow_write=True),
@@ -210,3 +210,15 @@ This is the escape hatch for anything `MCPConfig` does not model directly. Extra
 ## Where to go from here
 
 For a worked example connecting this server to an actual agent framework, see [Building an Agent with Pydantic AI](pydantic-ai.md). For the full config surface, see [`slb_glossary.mcp`](../api/library.md#slb_glossarymcp). For a complete, runnable server built with several of these fields together, see [`examples/app.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/app.py) in the repository (`python -m examples.app`, or `slb mcp serve examples.app:app`).
+
+
+## Sharing a runtime with your own application
+
+The server's sessions and local database are managed by a `slb_glossary.Runtime`, which is not MCP-specific (see [Managing Sessions in Your App](../library/runtime.md)). If your application already has one, hand it to the server so both share a single browser budget and database connection:
+
+```python
+runtime = slb.Runtime(max_sessions=2)
+app = slb_mcp.MCPApp(config, runtime=runtime)
+```
+
+The app starts a runtime you pass in, but does not close it: that stays with whoever created it. The `session` and `local` settings in `config` do not apply to a runtime you provide, since it carries its own.

@@ -64,6 +64,17 @@ Every function takes `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`, de
 | `QueryResult` | `dataclass` | `.value`, `.source`, `.persisted`, `.score` (`float \| None`). See [The Data Model](../concepts/data-model.md#queryresult). |
 | `SimilarResult` | `dataclass` | `.exact` (`QueryResult[SearchResult] \| None`), `.similar` (`tuple[QueryResult[SearchResult], ...]`). What `get_term`/`compare` return (wrapped in a `QueryResult`) when called with `with_similar=True`. See [The Data Model](../concepts/data-model.md#similarresult). |
 
+## `slb_glossary.live` (sessions)
+
+See [Managing Sessions in Your App](../library/runtime.md).
+
+| Name | Kind | Notes |
+|---|---|---|
+| `Runtime(...)` | class | Owns the shared local `Database` and one `SessionPool` per language, under one `max_sessions` budget. Async context manager. `.acquire(source, language=, capacity=)`, `.session(language, capacity=)`, `.open_db()`, `.open_session(language)`, `.close_idle_sessions()`, `.stats()`, `.start()`, `.close()`. `Runtime.from_config(config, **overrides)`. |
+| `SessionPool(language, options, semaphore, ...)` | class | Elastic set of sessions for one language. `.acquire(capacity)` / `.release(session)`, `.checkout(capacity)` (async context manager), `.warm()`, `.new()`, `.close_idle(timeout)`, `.stats()`, `.close()`. |
+| `SessionMode` | `Enum` | `EAGER`, `LAZY`, `PER_CALL`. |
+| `RuntimeStats` / `PoolStats` | `dataclass` | Snapshots returned by `Runtime.stats()` / `SessionPool.stats()`. |
+
 ## `slb_glossary.types`
 
 | Name | Kind | Notes |
@@ -71,6 +82,7 @@ Every function takes `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`, de
 | `SearchResult` | `NamedTuple` | Full field list in [The Data Model](../concepts/data-model.md#searchresult). |
 | `RelatedTerm` | `NamedTuple` | `term`, `url`. |
 | `Language` | `StrEnum` | `ENGLISH = "en"`, `SPANISH = "es"`. |
+| `Source` | `Enum` | `LOCAL` \| `LIVE` \| `AUTO` (also importable from `slb_glossary.query`). |
 | `SearchMode` | `StrEnum` | `LEXICAL`, `SEMANTIC`, `HYBRID`. See [Search Modes](../concepts/search-modes.md). |
 
 ## `slb_glossary.config`
@@ -86,13 +98,13 @@ Every function takes `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`, de
 
 | Name | Kind | Notes |
 |---|---|---|
-| `MCPApp(config)` | class | Wraps a `fastmcp.FastMCP` server. `.server()` builds it (lazily, once); `.run(**transport_kwargs)` / `.run_async(**transport_kwargs)` build-then-serve. |
+| `MCPApp(config, runtime=None)` | class | Wraps a `fastmcp.FastMCP` server. Pass a shared `slb_glossary.live.Runtime` as `runtime` to reuse your app's sessions (it is started, never closed, by the app). `.server()` builds it (lazily, once); `.run(**transport_kwargs)` / `.run_async(**transport_kwargs)` build-then-serve. |
 | `load_app(dotted_path)` | function -> `MCPApp \| FastMCP` | Uvicorn-style `"module:attr"` loader; calls a zero-arg factory if `attr` is callable. What `slb mcp serve APP_PATH` uses. |
 | `MCPConfig` | `dataclass` | `.server` (`ServerInfo`), `.session` (`SessionAccess`), `.local` (`LocalAccess`), `.source_policy` (`SourcePolicy`), `.tools` (`Tool`), `.timeouts` (`Timeout`), `.auth` (`Auth`), `.rate_limit` (`RateLimit`), `.hooks` (`Hooks`), `.logging` (`Logging`), `.streaming` (`Streaming`). Every field defaults to a valid read-only, local+live, unauthenticated config. `.update(...)` changes one field without re-specifying the rest. `MCPConfig.default(language=...)` is a shortcut for the one commonly-changed, deeply-nested setting. |
 | `Tool` | `Flag` enum | `SEARCH`, `GET_TERM`, `GET_TERMS_ON`, `GET_TERMS_URLS`, `GET_TOPICS`, `GET_RANDOM_TERM`, `RELATED_TERMS`, `COMPARE`, `SYNC`. Aliases: `"read_only"` (everything but `SYNC`), `"all"`. |
 | `resolve_tools(config)` / `MCPConfig.resolve_tools()` | function/method -> `Tool` | The actual tool set to build: `Tool.SYNC` stripped unless `local.allow_write` is also `True`. |
-| `SessionAccess` | `dataclass` | `enabled`, `mode` (`SessionMode`), `idle_timeout`, `max_concurrent`, `options` (a `slb_glossary.config.SessionOptions`). |
-| `SessionMode` | `Enum` | `EAGER` (open at startup), `LAZY` (open on first use, the default), `PER_CALL` (fresh session per call, full isolation). |
+| `SessionAccess` | `dataclass` | `enabled`, `mode` (`SessionMode`), `idle_timeout`, `max_sessions`, `capacity_tolerance`, `options` (a `slb_glossary.config.SessionOptions`). |
+| `SessionMode` | `Enum` | Re-export of `slb_glossary.live.SessionMode`. `EAGER` (open at startup), `LAZY` (open on first use, the default), `PER_CALL` (fresh session per call, full isolation). |
 | `LocalAccess` | `dataclass` | `enabled`, `allow_write` (gates `Tool.SYNC` and `persist=True` regardless of `tools`), `database` (a `slb_glossary.config.DatabaseOptions`). |
 | `SourcePolicy` | `dataclass` | `allowed` (`frozenset[Source] \| None`, auto-computed from `session.enabled`/`local.enabled` if unset), `default`, `expose_choice` (hide the `source` argument from tool schemas entirely). |
 | `Timeout` | `dataclass` | `default` (seconds, `None` = uncapped), `per_tool` (name -> seconds override), `.for_tool(name)`. |

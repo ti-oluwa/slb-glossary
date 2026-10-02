@@ -118,4 +118,6 @@ See [The Data Model](../concepts/data-model.md#searchresult) for the full field 
 
 ## Where to go from here
 
+Building a service or app that makes many lookups? Don't open a `Session` per request. See [Managing Sessions in Your App](runtime.md) for a ready-made, shareable pool.
+
 Every live search here re-visits the site, and nothing is remembered between runs. For a local cache that makes repeat lookups instant and offline-capable, see [Local Search and Cache](local-search.md). For an API that reads the cache first and only falls back to exactly what's on this page when needed, see [Combined Search with slb_glossary.query](query.md).

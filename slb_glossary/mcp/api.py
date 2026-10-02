@@ -45,12 +45,14 @@ from fastmcp.server.middleware.rate_limiting import (
 from fastmcp.server.server import FastMCP
 
 from slb_glossary.constants import constants
+from slb_glossary.errors import ResourceError
+from slb_glossary.live.runtime import Runtime
 from slb_glossary.logging import configure_logging
 from slb_glossary.mcp.auth import Principal, get_principal_from_token
 from slb_glossary.mcp.config import Auth, MCPConfig, RateLimit, RateLimitAlgorithm, RateLimitScope
-from slb_glossary.mcp.errors import MCPConfigError
+from slb_glossary.mcp.errors import MCPConfigError, MCPError
 from slb_glossary.mcp.middleware import MCPMiddleware
-from slb_glossary.mcp.runtime import Runtime
+from slb_glossary.mcp.runtime import build_runtime
 from slb_glossary.mcp.tools import DEFAULT_INSTRUCTIONS, ToolSpec, build_tool_specs
 from slb_glossary.mcp.types import NamedComponent
 
@@ -157,15 +159,23 @@ class MCPApp(NamedComponent):
     Both are idempotent.
     """
 
-    def __init__(self, config: MCPConfig | None = None) -> None:
+    def __init__(self, config: MCPConfig | None = None, *, runtime: Runtime | None = None) -> None:
         """
         Initialize the MCP application.
 
         :param config: The server's `MCPConfig`. Defaults to `MCPConfig.default()`.
+        :param runtime: A `slb_glossary.live.Runtime` to serve tool calls from, e.g. the one
+            the rest of your application already uses, so both share one browser budget
+            and one local database connection. It is started along with this app but
+            not closed by it, since it is not this app's to close. Defaults to a
+            `Runtime` built from `config` (see `slb_glossary.mcp.runtime.build_runtime`),
+            which this app owns and closes itself. Note that the session and
+            local-access settings in `config` have no effect on a `runtime` you pass in.
         """
         self.config = config if config is not None else MCPConfig.default()
         super().__init__(self.config.server.name)
-        self.runtime = Runtime(self.config)
+        self._owns_runtime = runtime is None
+        self.runtime = runtime if runtime is not None else build_runtime(self.config)
         self._server: FastMCP | None = None
         self._started = False
         self._closed = False
@@ -249,6 +259,10 @@ class MCPApp(NamedComponent):
                 result = await spec.handler(
                     args, self.runtime, self.config, report_progress=report_progress
                 )
+            except ResourceError as exc:
+                # The runtime is library-level and knows nothing of MCP; surface its
+                # failures (closed, disabled, unknown language) as this server's own error type.
+                raise MCPError(str(exc)) from exc
             except Exception:
                 if log_calls:
                     logger.debug(
@@ -308,9 +322,12 @@ class MCPApp(NamedComponent):
         """
         if self._closed:
             return
+
         self._closed = True
         started_at = time.monotonic()
-        await self.runtime.close()
+        if self._owns_runtime:
+            await self.runtime.close()
+
         for hook in self.config.hooks.on_shutdown:
             await hook()
         logger.info(
@@ -329,8 +346,8 @@ class MCPApp(NamedComponent):
         this server ends up served more than one way at once.
 
         :param server: The `FastMCP` server this lifespan is managing.
-            Unused directly here - `start()`/`close()` already have
-            everything they need via `self.runtime`/`self.config` - but
+            Unused directly here. `start()`/`close()` already have
+            everything they need via `self.runtime`/`self.config`, but
             required by FastMCP's own `lifespan` calling convention
             (`Callable[[FastMCP], AbstractAsyncContextManager]`).
         """

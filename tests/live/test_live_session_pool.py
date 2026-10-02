@@ -1,15 +1,15 @@
-"""Tests for `slb_glossary.mcp.session_pool.SessionPool`."""
+"""Tests for `slb_glossary.live.SessionPool`."""
 
 import asyncio
 
 import pytest
 
 from slb_glossary.config import SessionOptions
-from slb_glossary.mcp import session_pool as session_pool_module
-from slb_glossary.mcp.session_pool import SessionPool
+from slb_glossary.live import SessionPool
+from slb_glossary.live import runtime as session_pool_module
 from slb_glossary.types import Language
 
-pytestmark = [pytest.mark.unit, pytest.mark.mcp]
+pytestmark = [pytest.mark.unit]
 
 
 @pytest.fixture
@@ -181,25 +181,88 @@ class TestElasticGrowth:
         await asyncio.wait_for(pool.acquire(), timeout=1.0)
         assert calls == ["open"]
 
-    async def test_growth_blocks_until_a_browser_instance_slot_frees(
+    async def test_full_session_is_shared_when_the_browser_budget_is_spent(
         self, monkeypatch: pytest.MonkeyPatch
     ):
-        """With no free slots anywhere, growth waits - it does not silently skip or raise."""
+        """
+        With no free slot, a caller shares the existing (full-looking) session instead of
+        blocking until it is reaped, which could be minutes or never.
+        """
         semaphore = asyncio.Semaphore(1)
-        pool, calls, _sessions = make_pool(monkeypatch, semaphore=semaphore, max_pages=1)
+        pool, calls, sessions = make_pool(monkeypatch, semaphore=semaphore, max_pages=1)
         first = await pool.acquire()
         fill(first)
 
-        grow_task = asyncio.create_task(pool.acquire())
+        second = await asyncio.wait_for(pool.acquire(), timeout=1.0)
+        assert second is first
+        assert calls == ["open"]
+        assert len(sessions) == 1
+
+    async def test_empty_pool_waits_for_a_slot_held_elsewhere(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """A pool with nothing to share can only wait until another pool's slot frees."""
+        semaphore = asyncio.Semaphore(1)
+        other, calls, _ = make_pool(monkeypatch, semaphore=semaphore)
+        pool = SessionPool(Language.SPANISH, SessionOptions(), semaphore)
+        held = await other.acquire()
+
+        wait_task = asyncio.create_task(pool.acquire())
         await asyncio.sleep(0.05)
-        assert not grow_task.done(), "growth should not succeed with no free semaphore slots"
+        assert not wait_task.done(), "no slot is free, so an empty pool has to wait"
 
-        await pool.release(first)
-        await pool.close_idle(idle_timeout=0.0)  # frees the slot by actually closing session 1
+        await other.release(held)
+        await other.close_idle(idle_timeout=0.0)  # frees the slot by closing that session
 
-        second = await asyncio.wait_for(grow_task, timeout=1.0)
-        assert second is not None
+        session = await asyncio.wait_for(wait_task, timeout=1.0)
+        assert session is not None
         assert calls == ["open", "close", "open"]
+
+    async def test_empty_pool_reclaims_idle_sessions_instead_of_waiting(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """`reclaim` is asked to free idle sessions before an empty pool waits for a slot."""
+        semaphore = asyncio.Semaphore(1)
+        other, other_calls, _ = make_pool(monkeypatch, semaphore=semaphore)
+        idle = await other.acquire()
+        await other.release(idle)
+
+        reclaim_calls = 0
+
+        async def reclaim() -> int:
+            nonlocal reclaim_calls
+            reclaim_calls += 1
+            return await other.close_idle(idle_timeout=0.0)
+
+        pool = SessionPool(
+            Language.SPANISH, SessionOptions(), semaphore, capacity_tolerance=1, reclaim=reclaim
+        )
+        session = await asyncio.wait_for(pool.acquire(), timeout=1.0)
+        assert session is not None
+        assert reclaim_calls == 1
+        assert other_calls == ["open", "close", "open"]  # other's idle one closed, ours opened
+        assert other.size == 0
+
+    async def test_waiting_pool_keeps_retrying_reclaim_until_a_busy_session_is_released(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr(session_pool_module, "RECLAIM_POLL_INTERVAL", 0.02)
+        semaphore = asyncio.Semaphore(1)
+        other, _, _ = make_pool(monkeypatch, semaphore=semaphore)
+        busy = await other.acquire()
+
+        async def reclaim() -> int:
+            return await other.close_idle(idle_timeout=0.0)
+
+        pool = SessionPool(
+            Language.SPANISH, SessionOptions(), semaphore, capacity_tolerance=1, reclaim=reclaim
+        )
+        wait_task = asyncio.create_task(pool.acquire())
+        await asyncio.sleep(0.1)
+        assert not wait_task.done()
+
+        await other.release(busy)  # now reclaimable; the waiter's next retry should take it
+        assert await asyncio.wait_for(wait_task, timeout=1.0) is not None
 
 
 @pytest.mark.anyio

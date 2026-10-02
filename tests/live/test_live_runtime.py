@@ -12,19 +12,17 @@ primitives.
 """
 
 import asyncio
+import contextlib
 import typing
 
 import pytest
 
-from slb_glossary.mcp import runtime as runtime_module
-from slb_glossary.mcp import session_pool as session_pool_module
-from slb_glossary.mcp.config import LocalAccess, MCPConfig, SessionAccess, SessionMode
-from slb_glossary.mcp.errors import MCPError
-from slb_glossary.mcp.runtime import Runtime
-from slb_glossary.query import Source
-from slb_glossary.types import Language
+from slb_glossary.errors import UnknownLanguageError
+from slb_glossary.live import Runtime, SessionMode
+from slb_glossary.live import runtime as runtime_module
+from slb_glossary.types import Language, Source
 
-pytestmark = [pytest.mark.unit, pytest.mark.mcp]
+pytestmark = [pytest.mark.unit]
 
 
 @pytest.fixture
@@ -54,8 +52,7 @@ def make_runtime(
     """
     Build a `Runtime` with local access disabled (so only the live-session
     path is exercised) and `open_session`/`close_session` mocked out for
-    both the pooled path (`session_pool_module`) and the `PER_CALL` path
-    (`runtime_module`, which opens/closes its own session directly).
+    both the pooled path and the `PER_CALL` path (both live in `runtime_module`).
     """
     calls: list[str] = []
 
@@ -68,16 +65,15 @@ def make_runtime(
 
     monkeypatch.setattr(runtime_module, "open_session", mock_open_session)
     monkeypatch.setattr(runtime_module, "close_session", mock_close_session)
-    monkeypatch.setattr(session_pool_module, "open_session", mock_open_session)
-    monkeypatch.setattr(session_pool_module, "close_session", mock_close_session)
 
-    config = MCPConfig(
-        local=LocalAccess(enabled=False),
-        session=SessionAccess(
-            enabled=True, mode=mode, idle_timeout=60.0, max_sessions=max_sessions
-        ),
+    runtime = Runtime(
+        local_enabled=False,
+        live_enabled=True,
+        mode=mode,
+        idle_timeout=60.0,
+        max_sessions=max_sessions,
     )
-    return Runtime(config), calls
+    return runtime, calls
 
 
 @pytest.mark.anyio
@@ -115,7 +111,7 @@ class TestLanguageRouting:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runtime, _calls = make_runtime(monkeypatch, mode=SessionMode.LAZY)
-        with pytest.raises(MCPError, match="fr"):
+        with pytest.raises(UnknownLanguageError, match="fr"):
             async with runtime.acquire(Source.LIVE, language="fr"):
                 pass
 
@@ -173,23 +169,44 @@ class TestReapAndSemaphoreWiring:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The semaphore Runtime hands each pool is genuinely shared, not per-language."""
+        monkeypatch.setattr(runtime_module, "RECLAIM_POLL_INTERVAL", 0.02)
+        runtime, calls = make_runtime(monkeypatch, mode=SessionMode.LAZY, max_sessions=1)
+
+        async with runtime.acquire(Source.LIVE, language="en"):
+            # "en" is busy and holds the only slot, so "es" has to wait.
+            open_es_task = asyncio.create_task(runtime.open_session(language="es"))
+            await asyncio.sleep(0.1)
+            assert not open_es_task.done(), (
+                "a second language should not open while the first still holds the only slot"
+            )
+            assert calls == ["open"]
+
+        # Once "en" is released it is idle, so "es" takes its slot without waiting for
+        # the idle timeout to run out.
+        es_session = await asyncio.wait_for(open_es_task, timeout=1.0)
+        assert es_session is not None
+        assert calls == ["open", "close", "open"]
+
+    async def test_idle_session_of_another_language_is_reclaimed_for_a_new_language(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Switching languages under `max_sessions=1` does not wait out the idle timeout
+        (it used to, i.e. 5 minutes by default) when the old language's session is idle.
+        """
         runtime, calls = make_runtime(monkeypatch, mode=SessionMode.LAZY, max_sessions=1)
 
         async with runtime.acquire(Source.LIVE, language="en"):
             pass
-        # "en"'s session is released but still open - it holds the only slot.
 
-        open_es_task = asyncio.create_task(runtime.open_session(language="es"))
-        await asyncio.sleep(0.05)
-        assert not open_es_task.done(), (
-            "a second language should not open while the first still holds the only slot"
-        )
+        async with (
+            asyncio.timeout(1.0) if hasattr(asyncio, "timeout") else contextlib.nullcontext()
+        ):
+            async with runtime.acquire(Source.LIVE, language="es") as (_, session):
+                assert session is not None
 
-        await runtime._pools[Language.ENGLISH].close_idle(idle_timeout=0.0)
-        es_session = await asyncio.wait_for(open_es_task, timeout=1.0)
-
-        assert es_session is not None
         assert calls == ["open", "close", "open"]
+        assert Language.ENGLISH not in runtime._pools
 
     async def test_per_call_mode_bounds_concurrency_runtime_wide(
         self, monkeypatch: pytest.MonkeyPatch

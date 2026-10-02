@@ -44,6 +44,7 @@ from .live.browser import (
     session,
     session_from_config,
 )
+from .live.runtime import Runtime, SessionMode, SessionPool
 from .live.topics import refresh_topics
 from .query import (
     QueryResult,
@@ -92,11 +93,14 @@ __all__ = [
     "RelatedTerm",
     "ResourceType",
     "RetryPolicy",
+    "Runtime",
     "SLBGlossaryError",
     "SearchMode",
     "SearchResult",
     "Session",
+    "SessionMode",
     "SessionNotInitializedError",
+    "SessionPool",
     "Source",
     "UnsupportedFormatError",
     "Writer",
