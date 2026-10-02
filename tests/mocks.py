@@ -1,6 +1,4 @@
-"""
-Shared mock classes and fixtures for `tests/local/` and `tests/live/`.
-"""
+"""Shared mock classes and fixtures for `tests/local/` and `tests/live/`."""
 
 import dataclasses
 import hashlib
@@ -29,8 +27,10 @@ def text_to_unit_vector(text: str) -> typing.Any:
 
 
 class MockEmbeddings:
-    """Controller for `mock_embeddings`: registers exact vectors per text,
-    falling back to a deterministic hash for anything unregistered."""
+    """
+    Controller for `mock_embeddings`: registers exact vectors per text,
+    falling back to a deterministic hash for anything unregistered.
+    """
 
     def __init__(self) -> None:
         self._overrides: dict[str, typing.Any] = {}

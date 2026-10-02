@@ -87,20 +87,20 @@ class TestStaticTokenVerifier:
         assert "tok-1" not in repr(verifier)
 
 
-class ADummyAuthProvider(AuthProvider):
+class DummyAuthProvider(AuthProvider):
     """A minimal, no-argument-constructible `AuthProvider`, for `import_provider` tests."""
 
 
 class TestImportProvider:
     def test_module_colon_class_path(self) -> None:
         """A `"module:ClassName"` path imports and instantiates the class."""
-        provider = import_provider("tests.mcp.test_mcp_auth:ADummyAuthProvider")
-        assert isinstance(provider, ADummyAuthProvider)
+        provider = import_provider("tests.mcp.test_mcp_auth:DummyAuthProvider")
+        assert isinstance(provider, DummyAuthProvider)
 
     def test_dotted_path(self) -> None:
         """A plain dotted `"package.module.ClassName"` path also works."""
-        provider = import_provider("tests.mcp.test_mcp_auth.ADummyAuthProvider")
-        assert isinstance(provider, ADummyAuthProvider)
+        provider = import_provider("tests.mcp.test_mcp_auth.DummyAuthProvider")
+        assert isinstance(provider, DummyAuthProvider)
 
     def test_missing_separator_raises_value_error(self) -> None:
         """A string with no `:` and no `.` at all is not a valid import path."""

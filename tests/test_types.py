@@ -37,10 +37,10 @@ class TestSearchResult:
             topic="Geology",
             url="https://example.com/porosity",
         )
-        as_dict = result.asdict()
-        assert set(as_dict) == set(result.fields)
+        result_dict = result.asdict()
+        assert set(result_dict) == set(result.fields)
         for field in result.fields:
-            assert as_dict[field] == getattr(result, field)
+            assert result_dict[field] == getattr(result, field)
 
     def test_is_a_plain_namedtuple(self) -> None:
         """Indexing and unpacking both work, since `SearchResult` is a plain `NamedTuple`."""

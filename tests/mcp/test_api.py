@@ -28,6 +28,7 @@ from slb_glossary.mcp.config import (
     RateLimit,
     RateLimitAlgorithm,
     RateLimitScope,
+    Tool,
 )
 from slb_glossary.mcp.errors import MCPConfigError
 
@@ -119,10 +120,10 @@ class TestBuildAuthorizationMiddleware:
     def test_required_scopes_builds_auth_middleware(self) -> None:
         """Non-empty `required_scopes` builds FastMCP's `AuthMiddleware`."""
 
-        class ADummyAuthProvider(AuthProvider): ...
+        class DummyAuthProvider(AuthProvider): ...
 
         middleware = build_authorization_middleware(
-            Auth(provider=ADummyAuthProvider(), required_scopes=("admin",))
+            Auth(provider=DummyAuthProvider(), required_scopes=("admin",))
         )
         assert isinstance(middleware, AuthMiddleware)
 
@@ -156,8 +157,6 @@ class TestMCPApp:
 
     async def test_write_enabled_config_registers_the_sync_tool(self) -> None:
         """A config with `Tool.SYNC` and `local.allow_write=True` registers the sync tool."""
-        from slb_glossary.mcp.config import Tool
-
         config = MCPConfig(tools=Tool.ALL, local=LocalAccess(allow_write=True))
         app = MCPApp(config)
         server = app.server()
@@ -165,17 +164,17 @@ class TestMCPApp:
         assert any("sync" in tool.name for tool in tools)
 
 
-def a_prebuilt_app() -> MCPApp:
+def app() -> MCPApp:
     """A pre-built `MCPApp`, for `load_app` tests below."""
     return MCPApp(MCPConfig.default())
 
 
-def an_app_factory() -> MCPApp:
+def make_app() -> MCPApp:
     """A zero-argument factory returning a fresh `MCPApp`, for `load_app` tests below."""
     return MCPApp(MCPConfig.default())
 
 
-async def an_async_app_factory() -> MCPApp:
+async def async_make_app() -> MCPApp:
     """An (unsupported) async factory, for `load_app`'s rejection test below."""
     return MCPApp(MCPConfig.default())
 
@@ -184,15 +183,15 @@ NOT_AN_APP = "just a string, not an MCPApp/FastMCP"
 
 
 class TestLoadApp:
-    def test_loads_a_prebuilt_app_attribute(self) -> None:
+    def test_loads_app_attribute(self) -> None:
         """A module attribute that's already an `MCPApp` is returned as-is."""
-        app = load_app("tests.mcp.test_mcp_api:a_prebuilt_app")
-        # `a_prebuilt_app` is a function, so it's called; this exercises the factory path too.
+        app = load_app("tests.mcp.test_mcp_api:app")
+        # `app` is a function, so it's called; this exercises the factory path too.
         assert isinstance(app, MCPApp)
 
     def test_calls_a_zero_argument_factory(self) -> None:
         """A callable attribute that isn't already an app is called as a factory."""
-        app = load_app("tests.mcp.test_mcp_api:an_app_factory")
+        app = load_app("tests.mcp.test_mcp_api:make_app")
         assert isinstance(app, MCPApp)
 
     def test_missing_separator_raises_value_error(self) -> None:
@@ -213,7 +212,7 @@ class TestLoadApp:
     def test_async_factory_is_rejected(self) -> None:
         """An async factory function is explicitly rejected, with guidance, not silently awaited."""
         with pytest.raises(TypeError, match="async factory"):
-            load_app("tests.mcp.test_mcp_api:an_async_app_factory")
+            load_app("tests.mcp.test_mcp_api:async_make_app")
 
     def test_non_app_value_raises_type_error(self) -> None:
         """A resolved value that's neither an `MCPApp`/`FastMCP` nor a factory for one is rejected."""

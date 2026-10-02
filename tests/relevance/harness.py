@@ -1,5 +1,5 @@
 """
-Reusable evaluation harness: seed the benchmark corpus, run a search
+Reusable evaluation harness. Seed the benchmark corpus, run a search
 function over the benchmark dataset, score the results.
 
 ```python

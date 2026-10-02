@@ -5,10 +5,8 @@ import typing
 import pytest
 
 from slb_glossary.live import Runtime, SessionMode
-from slb_glossary.mcp import SessionMode as McpSessionMode
 from slb_glossary.mcp.api import MCPApp
 from slb_glossary.mcp.config import LocalAccess, MCPConfig, ServerInfo, SessionAccess
-from slb_glossary.mcp.runtime import Runtime as McpRuntime
 from slb_glossary.mcp.runtime import build_runtime
 
 pytestmark = [pytest.mark.unit, pytest.mark.mcp, pytest.mark.anyio]
@@ -21,13 +19,7 @@ def anyio_backend(
     return anyio_backend_asyncio_only
 
 
-def test_runtime_and_session_mode_are_the_live_classes() -> None:
-    """The MCP names are re-exports, so old imports keep working and isinstance checks agree."""
-    assert McpRuntime is Runtime
-    assert McpSessionMode is SessionMode
-
-
-def test_runtime_from_config_translates_every_mcp_setting() -> None:
+def test_build_runtime_translates_every_mcp_setting() -> None:
     config = MCPConfig(
         server=ServerInfo(name="my-server"),
         local=LocalAccess(enabled=False),
@@ -51,15 +43,15 @@ def test_runtime_from_config_translates_every_mcp_setting() -> None:
 
 class TestInjectedRuntime:
     async def test_app_uses_the_runtime_it_is_given_and_does_not_close_it(self) -> None:
-        shared = Runtime(local_enabled=False, live_enabled=True, idle_timeout=None)
-        app = MCPApp(MCPConfig.default(), runtime=shared)
-        assert app.runtime is shared
+        runtime = Runtime(local_enabled=False, live_enabled=True, idle_timeout=None)
+        app = MCPApp(MCPConfig.default(), runtime=runtime)
+        assert app.runtime is runtime
 
         await app.start()
-        assert shared.started
+        assert runtime.started
         await app.close()
-        assert not shared.closed, "a runtime the app was handed belongs to whoever created it"
-        await shared.close()
+        assert not runtime.closed, "a runtime the app was handed belongs to whoever created it"
+        await runtime.close()
 
     async def test_app_closes_the_runtime_it_built_itself(self) -> None:
         app = MCPApp(
@@ -79,16 +71,16 @@ class TestResourceErrorTranslation:
         from fastmcp import Client
         from fastmcp.exceptions import ToolError
 
-        shared = Runtime(local_enabled=False, live_enabled=True, idle_timeout=None)
+        runtime = Runtime(local_enabled=False, live_enabled=True, idle_timeout=None)
         app = MCPApp(
             MCPConfig(
                 local=LocalAccess(enabled=False),
                 session=SessionAccess(enabled=True, idle_timeout=None),
             ),
-            runtime=shared,
+            runtime=runtime,
         )
 
         async with Client(app.server()) as client:
-            await shared.close()  # e.g. the host application shut its runtime down early
+            await runtime.close()  # e.g. the host application shut its runtime down early
             with pytest.raises(ToolError, match="closed"):
                 await client.call_tool("glossary_search", {"args": {"query": "porosity"}})
