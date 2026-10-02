@@ -361,7 +361,7 @@ def read_config_file(path: pathlib.Path) -> dict[str, typing.Any]:
     )
 
 
-def _strip_none(data: typing.Any) -> typing.Any:
+def strip_none(data: typing.Any) -> typing.Any:
     """
     Recursively drop `None`-valued dict entries from `data`.
 
@@ -376,9 +376,9 @@ def _strip_none(data: typing.Any) -> typing.Any:
         nested dicts and lists. Non-dict/list values are returned unchanged.
     """
     if isinstance(data, dict):
-        return {key: _strip_none(value) for key, value in data.items() if value is not None}
+        return {key: strip_none(value) for key, value in data.items() if value is not None}
     if isinstance(data, list):
-        return [_strip_none(item) for item in data]
+        return [strip_none(item) for item in data]
     return data
 
 
@@ -404,8 +404,8 @@ def write_config_file(data: dict[str, typing.Any], path: pathlib.Path, format: s
                 "Writing a .toml config requires the 'tomlkit' package. "
                 "Install it with `pip install slb-glossary[config]`."
             ) from exc
-        # tomlkit has no null type and can not serialize None - see _strip_none.
-        path.write_text(tomlkit.dumps(_strip_none(data)), encoding="utf-8")
+        # tomlkit has no null type and can not serialize None.
+        path.write_text(tomlkit.dumps(strip_none(data)), encoding="utf-8")
         return
 
     if format in ("yaml", "yml"):

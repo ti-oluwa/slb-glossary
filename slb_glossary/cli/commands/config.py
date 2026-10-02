@@ -15,7 +15,7 @@ from rich.table import Table
 
 from slb_glossary.cli.errors import cli_command
 from slb_glossary.cli.tui import launch_tui
-from slb_glossary.config import Config, _strip_none
+from slb_glossary.config import Config, strip_none
 from slb_glossary.errors import ConfigError
 
 __all__ = ["config"]
@@ -155,7 +155,7 @@ def show(ctx: click.Context, config_path: str | None, output_format: str) -> Non
         try:
             import tomlkit  # type: ignore[import]
 
-            click.echo(tomlkit.dumps(_strip_none(data)), nl=False)
+            click.echo(tomlkit.dumps(strip_none(data)), nl=False)
             return
         except ImportError:
             pass
