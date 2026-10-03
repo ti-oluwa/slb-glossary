@@ -185,13 +185,13 @@ NOT_AN_APP = "just a string, not an MCPApp/FastMCP"
 class TestLoadApp:
     def test_loads_app_attribute(self) -> None:
         """A module attribute that's already an `MCPApp` is returned as-is."""
-        app = load_app("tests.mcp.test_mcp_api:app")
+        app = load_app("tests.mcp.test_api:app")
         # `app` is a function, so it's called; this exercises the factory path too.
         assert isinstance(app, MCPApp)
 
     def test_calls_a_zero_argument_factory(self) -> None:
         """A callable attribute that isn't already an app is called as a factory."""
-        app = load_app("tests.mcp.test_mcp_api:make_app")
+        app = load_app("tests.mcp.test_api:make_app")
         assert isinstance(app, MCPApp)
 
     def test_missing_separator_raises_value_error(self) -> None:
@@ -207,14 +207,14 @@ class TestLoadApp:
     def test_missing_attribute_raises_import_error(self) -> None:
         """A real module with no such attribute raises `ImportError`."""
         with pytest.raises(ImportError, match="has no attribute"):
-            load_app("tests.mcp.test_mcp_api:no_such_attribute")
+            load_app("tests.mcp.test_api:no_such_attribute")
 
     def test_async_factory_is_rejected(self) -> None:
         """An async factory function is explicitly rejected, with guidance, not silently awaited."""
         with pytest.raises(TypeError, match="async factory"):
-            load_app("tests.mcp.test_mcp_api:async_make_app")
+            load_app("tests.mcp.test_api:async_make_app")
 
     def test_non_app_value_raises_type_error(self) -> None:
         """A resolved value that's neither an `MCPApp`/`FastMCP` nor a factory for one is rejected."""
         with pytest.raises(TypeError, match="neither an"):
-            load_app("tests.mcp.test_mcp_api:NOT_AN_APP")
+            load_app("tests.mcp.test_api:NOT_AN_APP")

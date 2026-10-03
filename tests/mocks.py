@@ -1,4 +1,4 @@
-"""Shared mock classes and fixtures for `tests/local/` and `tests/live/`."""
+"""Shared mock classes and fixtures for `tests/local/`, `tests/live/` and `tests/mcp/`."""
 
 import dataclasses
 import hashlib
@@ -7,6 +7,7 @@ import typing
 
 import pytest
 
+from slb_glossary.live import runtime as live_runtime
 from slb_glossary.local import vector
 from slb_glossary.retries import DEFAULT_RETRY_POLICY, RetryPolicy
 from slb_glossary.types import Language, SearchResult
@@ -113,19 +114,109 @@ class MockPage:
 
 
 @dataclasses.dataclass
+class MockPages:
+    """Stands in for `live.types.Pages`; tracks just `size`/`max_size`."""
+
+    max_size: int = 3
+    size: int = 0
+
+    def fill(self) -> None:
+        """Make the page pool look at capacity."""
+        self.size = self.max_size
+
+    def free(self) -> None:
+        """Make the page pool look empty again."""
+        self.size = 0
+
+
+class MockBrowser:
+    """Stands in for a patchright `Browser`: just whether it is still connected."""
+
+    def __init__(self) -> None:
+        self.connected = True
+
+    def is_connected(self) -> bool:
+        return self.connected
+
+    def disconnect(self) -> None:
+        """Simulate the browser crashing or being killed."""
+        self.connected = False
+
+
+@dataclasses.dataclass
 class MockSession:
-    """Stands in for `live.types.Session`, for both `live.api` and `local.sync`."""
+    """
+    Stands in for `live.types.Session`: for `live.api` and `local.sync`, and (through
+    `pages`/`browser`) for `live.SessionPool` and `live.Runtime`.
+    """
 
     language: Language = Language.ENGLISH
     topics: dict[str, int] = dataclasses.field(default_factory=dict)
     retry: RetryPolicy = DEFAULT_RETRY_POLICY
     initialized: bool = False
+    pages: MockPages = dataclasses.field(default_factory=MockPages)
+    browser: MockBrowser = dataclasses.field(default_factory=MockBrowser)
 
     async def initialize(self) -> None:
         self.initialized = True
 
     async def new_page(self) -> MockPage:
         return MockPage()
+
+
+class MockLauncher:
+    """
+    Controller for `mock_launcher`: stands in for everything `live.runtime` opens
+    (browser sessions and the local database), recording each call in `calls` as
+    `"open"`, `"close"`, `"open_db"` or `"close_db"`.
+
+    Set `open_error`/`close_error`/`db_close_error` to make the matching call fail, and
+    `max_pages` to size the page pool of sessions opened from then on.
+    """
+
+    def __init__(self) -> None:
+        self.max_pages = 3
+        self.calls: list[str] = []
+        self.sessions: list[MockSession] = []
+        self.open_kwargs: list[dict[str, typing.Any]] = []
+        self.open_error: Exception | None = None
+        self.close_error: Exception | None = None
+        self.db_close_error: Exception | None = None
+
+    async def open_session(self, **kwargs: typing.Any) -> MockSession:
+        if self.open_error is not None:
+            raise self.open_error
+        self.calls.append("open")
+        self.open_kwargs.append(kwargs)
+        session = MockSession(language=kwargs.get("language", Language.ENGLISH))
+        session.pages.max_size = self.max_pages
+        self.sessions.append(session)
+        return session
+
+    async def close_session(self, session: object) -> None:
+        self.calls.append("close")
+        if self.close_error is not None:
+            raise self.close_error
+
+    async def open_db(self, path: object = None) -> object:
+        self.calls.append("open_db")
+        return object()
+
+    async def close_db(self, db: object) -> None:
+        self.calls.append("close_db")
+        if self.db_close_error is not None:
+            raise self.db_close_error
+
+
+@pytest.fixture
+def mock_launcher(monkeypatch: pytest.MonkeyPatch) -> MockLauncher:
+    """Fakes what `live.runtime` opens (sessions, database), so no browser ever launches."""
+    launcher = MockLauncher()
+    monkeypatch.setattr(live_runtime, "open_session", launcher.open_session)
+    monkeypatch.setattr(live_runtime, "close_session", launcher.close_session)
+    monkeypatch.setattr(live_runtime, "open_db", launcher.open_db)
+    monkeypatch.setattr(live_runtime, "close_db", launcher.close_db)
+    return launcher
 
 
 class MockSite:

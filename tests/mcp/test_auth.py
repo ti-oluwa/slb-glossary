@@ -94,12 +94,12 @@ class DummyAuthProvider(AuthProvider):
 class TestImportProvider:
     def test_module_colon_class_path(self) -> None:
         """A `"module:ClassName"` path imports and instantiates the class."""
-        provider = import_provider("tests.mcp.test_mcp_auth:DummyAuthProvider")
+        provider = import_provider("tests.mcp.test_auth:DummyAuthProvider")
         assert isinstance(provider, DummyAuthProvider)
 
     def test_dotted_path(self) -> None:
         """A plain dotted `"package.module.ClassName"` path also works."""
-        provider = import_provider("tests.mcp.test_mcp_auth.DummyAuthProvider")
+        provider = import_provider("tests.mcp.test_auth.DummyAuthProvider")
         assert isinstance(provider, DummyAuthProvider)
 
     def test_missing_separator_raises_value_error(self) -> None:
@@ -115,9 +115,9 @@ class TestImportProvider:
     def test_missing_attribute_raises_import_error(self) -> None:
         """A real module with no such attribute raises `ImportError`."""
         with pytest.raises(ImportError, match="has no attribute"):
-            import_provider("tests.mcp.test_mcp_auth:NoSuchClass")
+            import_provider("tests.mcp.test_auth:NoSuchClass")
 
     def test_non_auth_provider_class_raises_type_error(self) -> None:
         """A resolved class that doesn't extend `AuthProvider` is rejected."""
         with pytest.raises(TypeError, match="does not extend"):
-            import_provider("tests.mcp.test_mcp_auth:TestImportProvider")
+            import_provider("tests.mcp.test_auth:TestImportProvider")

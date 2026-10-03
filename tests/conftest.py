@@ -10,8 +10,11 @@ import typing
 import pytest
 
 from slb_glossary.constants import Constant, Constants
+from slb_glossary.local.connection import database
+from slb_glossary.local.types import Database
 from tests.mocks import (  # noqa: F401 - re-exported as fixtures for every test
     mock_embeddings,
+    mock_launcher,
     mock_model2vec,
     mock_site,
 )
@@ -178,3 +181,15 @@ def freeze_time(monkeypatch: pytest.MonkeyPatch) -> datetime.datetime:
 
     monkeypatch.setattr(datetime, "datetime", FrozenDatetime)
     return frozen_datetime
+
+
+@pytest.fixture
+async def db(tmp_path: pathlib.Path) -> typing.AsyncIterator[Database]:
+    """
+    A real, open `Database` backed by a throwaway SQLite file under `tmp_path`.
+
+    aiosqlite is not trio-safe, so the directory or module using this overrides
+    `anyio_backend` with `anyio_backend_asyncio_only` (see `tests/local/conftest.py`).
+    """
+    async with database(tmp_path / "test.db") as db_:
+        yield db_

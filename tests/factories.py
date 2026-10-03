@@ -2,8 +2,9 @@
 
 import typing
 
-from slb_glossary.config import Config, DatabaseOptions
-from slb_glossary.types import RelatedTerm, SearchResult
+from slb_glossary.config import Config, DatabaseOptions, SessionOptions
+from slb_glossary.live import Runtime, SessionPool
+from slb_glossary.types import Language, RelatedTerm, SearchResult
 
 
 def make_related_term(**overrides: typing.Any) -> RelatedTerm:
@@ -62,3 +63,37 @@ def make_config(**overrides: typing.Any) -> Config:
     if overrides:
         config = config.update(**overrides)
     return config
+
+
+def make_session_pool(**overrides: typing.Any) -> SessionPool:
+    """
+    Build a `SessionPool` with test defaults (English, default `SessionOptions`, room for
+    5 browsers), overriding any subset of its init arguments.
+
+    Pair with the `mock_launcher` fixture so no real browser is launched.
+    """
+    defaults: dict[str, typing.Any] = {
+        "language": Language.ENGLISH,
+        "options": SessionOptions(),
+        "max_sessions": 5,
+    }
+    defaults.update(overrides)
+    return SessionPool(**defaults)
+
+
+def make_runtime(**overrides: typing.Any) -> Runtime:
+    """
+    Build a `Runtime` with test defaults (local access off so only live sessions are
+    exercised, no idle reaper, room for 5 browsers), overriding any subset of its init
+    arguments.
+
+    Pair with the `mock_launcher` fixture so no real browser or database is opened.
+    """
+    defaults: dict[str, typing.Any] = {
+        "local_enabled": False,
+        "live_enabled": True,
+        "idle_timeout": None,
+        "max_sessions": 5,
+    }
+    defaults.update(overrides)
+    return Runtime(**defaults)

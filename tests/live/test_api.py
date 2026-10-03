@@ -57,7 +57,7 @@ class TestGetResultsFromUrlParseFailures:
     """
     `get_results_from_url` doesn't itself decide what counts as a parse
     failure anymore - `get_term_name`/`get_term_detail_blocks` raise
-    `ParsingError` themselves (see `tests/live/test_live_parsers.py`).
+    `ParsingError` themselves (see `tests/live/test_parsers.py`).
     What matters here is that `get_results_from_url` doesn't catch and
     swallow that (or any other) exception from them.
     """

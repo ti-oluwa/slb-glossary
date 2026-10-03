@@ -29,6 +29,7 @@ import dataclasses
 import enum
 import logging
 import pathlib
+import sys
 import time
 import typing
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -47,6 +48,11 @@ from slb_glossary.local.connection import close_db, open_db
 from slb_glossary.local.types import Database
 from slb_glossary.types import Language, Source
 
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -61,6 +67,10 @@ __all__ = [
 
 RECLAIM_POLL_INTERVAL = 0.5
 """Seconds a pool waiting for a browser slot waits before asking to reclaim idle sessions again."""
+
+MIN_REAP_INTERVAL = 1.0
+MAX_REAP_INTERVAL = 60.0
+"""Bounds on how often the idle reaper wakes: a quarter of `idle_timeout`, clamped to these."""
 
 
 class SessionMode(enum.Enum):
@@ -856,7 +866,7 @@ class Runtime:
         self._closed = False
 
     @classmethod
-    def from_config(cls, config: Config, **overrides: typing.Any) -> typing.Self:
+    def from_config(cls, config: Config, **overrides: typing.Any) -> Self:
         """
         Build a `Runtime` from a `slb_glossary.config.Config` (its `session` and `local`
         sections).
@@ -878,7 +888,7 @@ class Runtime:
             f"started={self._started}, closed={self._closed})"
         )
 
-    async def __aenter__(self) -> typing.Self:
+    async def __aenter__(self) -> Self:
         await self.start()
         return self
 
@@ -1126,7 +1136,7 @@ class Runtime:
             f"maintains pooled sessions for it to reap; `{type(self).__name__}.start()` should never "
             f"have scheduled this task in that case."
         )
-        interval = min(max(idle_timeout / 4, 1.0), 60.0)
+        interval = min(max(idle_timeout / 4, MIN_REAP_INTERVAL), MAX_REAP_INTERVAL)
         while True:
             await asyncio.sleep(interval)
             try:
