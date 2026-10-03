@@ -19,6 +19,7 @@ This README is a quick tour, not a reference. For the full documentation, a comp
     - [Command line](#command-line)
   - [How it fits together](#how-it-fits-together)
   - [The local database](#the-local-database)
+  - [Managing sessions in your app](#managing-sessions-in-your-app)
   - [MCP server](#mcp-server)
   - [Command-line interface](#command-line-interface)
   - [Performance notes](#performance-notes)
@@ -103,6 +104,7 @@ See [Command-line interface](#command-line-interface) below, or [the CLI docs](h
   ```
 
   A `Source` (`LOCAL`/`LIVE`/`AUTO`) controls which is used. `AUTO` (the default when both `db` and `session` are given) tries local first; for `search` specifically, it also checks *how good* the local match is (`relevance_threshold`) before deciding whether a live search is worth doing too. Every result comes back as a `QueryResult(value, source, persisted, score)`, so you can tell where it actually came from. See [Combined search with `slb_glossary.query`](https://ti-oluwa.github.io/slb-glossary/library/query/) for the full behavior, and [Sessions and the browser](https://ti-oluwa.github.io/slb-glossary/concepts/sessions/) for `open_session`'s full parameter list, retry policies, and lifecycle.
+- **`slb_glossary.Runtime`** owns the shared local database and the live browser sessions for a long-running app, pooled per language and bounded by one browser budget. See [Managing sessions in your app](#managing-sessions-in-your-app).
 - **`SearchResult`** is the `typing.NamedTuple` every result comes back as, from any of the three layers above - same shape everywhere, so code written against one mostly works against another. See [The data model](https://ti-oluwa.github.io/slb-glossary/concepts/data-model/).
 
 ## The local database
@@ -129,6 +131,19 @@ matches = await slb.local.search(db, "rock that lets fluid through", mode="hybri
 
 See [Local search and cache](https://ti-oluwa.github.io/slb-glossary/library/local-search/) and [Search modes](https://ti-oluwa.github.io/slb-glossary/concepts/search-modes/) for the full picture, including importing your own data, fuzzy topic matching in depth, and how lexical/semantic/hybrid ranking each actually work.
 
+## Managing sessions in your app
+
+Opening a live `Session` launches a whole browser, so a service or app that makes many lookups shouldn't open one per request. `slb.Runtime` owns the shared local database and the live sessions for you: it pools sessions per language, shares them across concurrent calls, opens another browser only when needed (up to `max_sessions`), closes idle ones, and replaces any whose browser has crashed.
+
+```python
+async with slb.Runtime(max_sessions=2) as runtime:
+    async with runtime.acquire(slb.Source.AUTO, language="en") as (db, session):
+        async for result in slb.search("porosity", db=db, session=session, persist=True):
+            print(result.term, ":", result.definition)
+```
+
+`runtime.session()` gives just a live session, `runtime.stats()` shows what is open, and `SessionMode` (`LAZY`, `EAGER`, `PER_CALL`) controls when browsers are launched. `slb.SessionPool` is the per-language building block if you only want that. See [Managing sessions in your app](https://ti-oluwa.github.io/slb-glossary/library/runtime/) for the full API and tuning options.
+
 ## MCP server
 
 `slb_glossary.mcp` exposes the same search/lookup functions as [MCP](https://modelcontextprotocol.io) tools (built on [FastMCP](https://gofastmcp.com)), so an LLM agent can search the glossary directly. Requires the `mcp` extra.
@@ -148,7 +163,7 @@ if __name__ == "__main__":
     app.run(transport="http", port=8000)
 ```
 
-Local writes (the `glossary_sync` tool) are off by default. Use `local.allow_write=True` (or `--allow-write`) to turn them on. `MCPConfig` also covers auth (a FastMCP `AuthProvider`/`TokenVerifier`, or ready-made static API keys), rate limiting, and hooks around each call. See [Running an MCP server](https://ti-oluwa.github.io/slb-glossary/agent/mcp-server/) for configuring all of that, and [Building an agent with Pydantic AI](https://ti-oluwa.github.io/slb-glossary/agent/pydantic-ai/) for a worked example.
+The server runs on a `Runtime` of its own. Pass your app's with `MCPApp(config, runtime=runtime)` to share one browser budget and database connection. Local writes (the `glossary_sync` tool) are off by default. Use `local.allow_write=True` (or `--allow-write`) to turn them on. `MCPConfig` also covers auth (a FastMCP `AuthProvider`/`TokenVerifier`, or ready-made static API keys), rate limiting, and hooks around each call. See [Running an MCP server](https://ti-oluwa.github.io/slb-glossary/agent/mcp-server/) for configuring all of that, and [Building an agent with Pydantic AI](https://ti-oluwa.github.io/slb-glossary/agent/pydantic-ai/) for a worked example.
 
 ## Command-line interface
 
