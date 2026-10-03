@@ -389,13 +389,14 @@ async def resolve_lookup(
     source: Source,
     local_call: typing.Callable[[Database], typing.Awaitable[QueryResult[T]]],
     live_call: typing.Callable[[Session], typing.Awaitable[QueryResult[T]]],
+    found: typing.Callable[[QueryResult[T]], bool] | None = None,
 ) -> QueryResult[T]:
     """
     Run a single-value `slb_glossary.query` lookup, opening a live session only if actually needed.
 
     For `Source.AUTO`, `local_call` is tried first (no browser
-    launched); a live session is opened via `live_call` only if that came
-    back empty (`QueryResult.value` falsy), and even then, only if
+    launched); a live session is opened via `live_call` only if that did
+    not find what was asked for (see `found`), and even then, only if
     `constants.check_internet_before_live` does not find a reason not to
     (see `slb_glossary.query.resolve_source`). No internet logs a
     warning and returns local's (empty) result rather than opening a
@@ -411,7 +412,14 @@ async def resolve_lookup(
     :param live_call: Awaitable-returning callable given an opened
         `Session`, e.g. `lambda s: query.get_term(term, db=db,
         session=s, source=Source.LIVE, persist=cache_results)`.
-    :return: The resolved `QueryResult`.
+    :param found: Decides whether a local result is the answer, so no live fetch is
+        needed. Defaults to `bool(result.value)`, which is right when the value is the
+        thing looked up. It is wrong for a `with_similar=True` lookup, whose value
+        (a `SimilarResult`) is truthy as soon as it holds any similar alternatives,
+        even with no exact match. Pass a check on `SimilarResult.exact` for those.
+    :return: The resolved `QueryResult`. If the live fetch also comes back with
+        nothing at all, the local result is returned instead, so that any alternatives
+        it had are not lost.
     :raises click.UsageError: If `source` is `Source.LOCAL` but `db` is `None`.
     """
     if source is Source.LOCAL:
@@ -428,9 +436,11 @@ async def resolve_lookup(
             return await live_call(session)
 
     # Source.AUTO: a local hit never opens a browser.
+    is_found = found if found is not None else (lambda result: bool(result.value))
+    local_result: QueryResult[T] | None = None
     if db is not None:
         local_result = await local_call(db)
-        if local_result.value:
+        if is_found(local_result):
             return local_result
 
         if constants.check_internet_before_live and not await has_internet_connection():
@@ -443,7 +453,13 @@ async def resolve_lookup(
             return local_result
 
     async with live_session(ctx, params) as session:
-        return await live_call(session)
+        live_result = await live_call(session)
+
+    # The live site had nothing either (not even alternatives). Local near-misses are
+    # still a better answer than an empty one.
+    if local_result is not None and not live_result.value and local_result.value:
+        return local_result
+    return live_result
 
 
 async def resolve_stream(

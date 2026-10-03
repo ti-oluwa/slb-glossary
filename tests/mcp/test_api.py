@@ -212,7 +212,8 @@ class TestLoadApp:
     def test_async_factory_is_rejected(self) -> None:
         """An async factory function is explicitly rejected, with guidance, not silently awaited."""
         with pytest.raises(TypeError, match="async factory"):
-            load_app("tests.mcp.test_api:async_make_app")
+            future = load_app("tests.mcp.test_api:async_make_app")
+            future.cancel()  # type: ignore[attr-defined]
 
     def test_non_app_value_raises_type_error(self) -> None:
         """A resolved value that's neither an `MCPApp`/`FastMCP` nor a factory for one is rejected."""

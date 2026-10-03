@@ -55,7 +55,7 @@ slb define "water saturation"
 slb define "https://glossary.slb.com/en/terms/p/porosity"
 ```
 
-`define` reads locally first by default and only reaches the live site if the term is not cached yet, same as every other lookup command's `--auto`.
+`define` reads locally first by default and only reaches the live site if there is no exact local match for the term, same as every other lookup command's `--auto`. Similar terms that happen to be cached do not count as a match; pass `--local` to stay offline.
 
 ---
 

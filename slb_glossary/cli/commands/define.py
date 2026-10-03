@@ -92,7 +92,8 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
     Reads from the local database, the live glossary, or both, depending on
     --local/--live/--auto (--auto is the default). With a
     local database available, the local copy is used first and the live
-    site is only visited if TERM is not cached yet.
+    site is only visited if there is no exact local match for TERM (similar
+    terms cached locally do not count). Use --local to stay offline.
 
     \b
     Examples:
@@ -143,6 +144,19 @@ def define(ctx: click.Context, term: str, use_tui: bool, **params: typing.Any) -
                     with_similar=suggest_similar,
                     similar_pool_size=params["similar_pool_size"],
                     max_similar_terms=params["max_similar_terms"],
+                ),
+                # With suggestions on, the value is a `SimilarResult`, which is truthy
+                # even when it only holds near-misses. Only an exact match is an answer;
+                # otherwise (`--auto`) ask the live site, as the docs promise.
+                found=(
+                    (
+                        lambda result: (
+                            isinstance(result.value, SimilarResult)
+                            and result.value.exact is not None
+                        )
+                    )
+                    if suggest_similar
+                    else None
                 ),
             )
 
