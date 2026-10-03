@@ -150,6 +150,7 @@ def compare(
             db_path_override=params["db_path"],
             metadata_path_override=params["metadata_path"],
         ) as db:
+            results: list[typing.Any]
             if source is Source.LOCAL:
                 assert db is not None
                 results = await _gather([get_local_term(db, term) for term in terms], concurrency)
@@ -182,7 +183,7 @@ def compare(
                             [get_live_term(db, session, term) for _, term in missing], concurrency
                         )
                     for (index, _), result in zip(missing, live_results, strict=True):
-                        results[index] = result  # type: ignore[arg-type]
+                        results[index] = result
 
             async def stream() -> typing.AsyncIterator[
                 SearchResult | QueryResult[SearchResult | None]
@@ -194,8 +195,8 @@ def compare(
                     elif not params["quiet"]:
                         click.secho(f"Not found: {term!r}", fg="yellow", err=True)
 
-            return await output_results(  # type: ignore[arg-type]
-                stream(),  # type: ignore[arg-type]
+            return await output_results(
+                stream(),
                 title=title,
                 save_paths=params["save_paths"],
                 format=params["format"],
@@ -206,7 +207,7 @@ def compare(
                 show_grammar=params["show_grammar"],
                 show_image=params["show_image"],
                 show_related=params["show_related"],
-                annotate=annotate,  # type: ignore[arg-type]
+                annotate=annotate,
             )
 
     count = run_async(run())

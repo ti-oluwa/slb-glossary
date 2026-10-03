@@ -57,8 +57,8 @@ class MCPMiddleware(Middleware):
         call_started_at = time.monotonic()
 
         before_started_at = time.monotonic()
-        for hook in self.config.hooks.before_tool:
-            await hook(run_context)
+        for before_hook in self.config.hooks.before_tool:
+            await before_hook(run_context)
         before_elapsed = time.monotonic() - before_started_at
 
         dispatch_started_at = time.monotonic()
@@ -67,8 +67,8 @@ class MCPMiddleware(Middleware):
         except Exception as exc:
             dispatch_elapsed = time.monotonic() - dispatch_started_at
             error_started_at = time.monotonic()
-            for hook in self.config.hooks.on_error:
-                await hook(run_context, exc)
+            for error_hook in self.config.hooks.on_error:
+                await error_hook(run_context, exc)
             error_elapsed = time.monotonic() - error_started_at
             if log_calls:
                 logger.warning(
@@ -87,8 +87,8 @@ class MCPMiddleware(Middleware):
         dispatch_elapsed = time.monotonic() - dispatch_started_at
 
         after_started_at = time.monotonic()
-        for hook in self.config.hooks.after_tool:
-            await hook(run_context, result)
+        for after_hook in self.config.hooks.after_tool:
+            await after_hook(run_context, result)
         after_elapsed = time.monotonic() - after_started_at
 
         if log_calls:

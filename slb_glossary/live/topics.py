@@ -52,7 +52,7 @@ async def resolve_cookie_modal(page: Page, *, settle_delay: float | None = None)
 
 
 async def is_facet_expanded(more_button: Locator, *, timeout: float | None = None) -> bool:
-    return await more_button.evaluate(
+    expanded = await more_button.evaluate(
         """
         (element) => {
             collapseButton = element.parentElement.querySelector('.coveo-facet-less');
@@ -64,6 +64,7 @@ async def is_facet_expanded(more_button: Locator, *, timeout: float | None = Non
         """,
         timeout=timeout,
     )
+    return bool(expanded)
 
 
 async def fetch_topics(
@@ -122,9 +123,12 @@ async def fetch_topics(
             logger.debug(
                 "Waiting for topics list to expand for %.3fs maximum", settle_delay / 1000
             )
+            # `settle_delay` is in milliseconds; the poll interval and what has been
+            # waited so far are in seconds, so compare like with like.
             delay = min(300, settle_delay) / 1000
-            waited = 0
-            while waited < settle_delay:
+            max_wait = settle_delay / 1000
+            waited = 0.0
+            while waited < max_wait:
                 if await is_facet_expanded(more_button, timeout=readiness_delay):
                     break
                 await asyncio.sleep(delay)

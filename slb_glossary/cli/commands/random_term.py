@@ -115,8 +115,8 @@ def random_term(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
                     yield lookup if annotate else lookup.value
 
     async def run() -> int:
-        return await output_results(  # type: ignore[arg-type]
-            stream(),  # type: ignore[arg-type]
+        return await output_results(
+            stream(),
             title=title,
             save_paths=params["save_paths"],
             format=params["format"],
@@ -127,7 +127,7 @@ def random_term(ctx: click.Context, use_tui: bool, **params: typing.Any) -> None
             show_grammar=params["show_grammar"],
             show_image=params["show_image"],
             show_related=params["show_related"],
-            annotate=annotate,  # type: ignore[arg-type]
+            annotate=annotate,
         )
 
     sources_seen: set[str] = set()

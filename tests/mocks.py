@@ -58,17 +58,39 @@ def mock_embeddings(monkeypatch: pytest.MonkeyPatch) -> MockEmbeddings:
 
 
 class MockLocator:
-    """Stands in for `page.locator(selector).first`."""
+    """
+    Stands in for `page.locator(selector).first`.
+
+    Besides text, it can stand in for a clickable element: `matches` is what `count()`
+    reports, `evaluate_result` is what `evaluate()` returns, and `evaluate_calls` counts
+    how often it was polled.
+    """
 
     def __init__(self, text: str | None = None, should_timeout: bool = False) -> None:
         self._text = text
         self._should_timeout = should_timeout
         self.first = self
+        self.matches = 1
+        self.evaluate_result: object = False
+        self.evaluate_calls = 0
 
     async def text_content(self, timeout: float | None = None) -> str | None:
         if self._should_timeout:
             raise TimeoutError("locator never appeared")
         return self._text
+
+    async def count(self) -> int:
+        return self.matches
+
+    async def scroll_into_view_if_needed(self, *, timeout: float | None = None) -> None:
+        pass
+
+    async def click(self, *, timeout: float | None = None, delay: float | None = None) -> None:
+        pass
+
+    async def evaluate(self, script: str, *, timeout: float | None = None) -> object:
+        self.evaluate_calls += 1
+        return self.evaluate_result
 
 
 class MockPage:

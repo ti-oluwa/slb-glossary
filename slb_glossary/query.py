@@ -1028,6 +1028,21 @@ async def get_term(
     max_similar_terms: int | None = None,
     auto_initialize: bool = True,
 ) -> QueryResult[SimilarResult]: ...
+@typing.overload
+async def get_term(
+    term_or_url: str,
+    *,
+    db: Database | None = None,
+    session: Session | None = None,
+    source: Source = Source.AUTO,
+    persist: bool | None = None,
+    language: str | None = None,
+    topic: str | None = None,
+    with_similar: bool,
+    similar_pool_size: int | None = None,
+    max_similar_terms: int | None = None,
+    auto_initialize: bool = True,
+) -> QueryResult[SearchResult | None] | QueryResult[SimilarResult]: ...
 
 
 async def get_term(
@@ -1113,7 +1128,7 @@ async def get_term(
 
     if resolved_source is Source.LIVE or source is not Source.AUTO:
         assert session is not None
-        result = await lookup_live_term(
+        live_result = await lookup_live_term(
             session,
             term_or_url,
             topic=topic,
@@ -1123,7 +1138,7 @@ async def get_term(
             auto_initialize=auto_initialize,
         )
         return await _finalize_live_term_lookup(
-            db, session, result, with_similar=with_similar, persist=persist
+            db, session, live_result, with_similar=with_similar, persist=persist
         )
 
     assert db is not None
@@ -1147,7 +1162,7 @@ async def get_term(
     if session is None:
         return result
 
-    result = await lookup_live_term(
+    live_result = await lookup_live_term(
         session,
         term_or_url,
         topic=topic,
@@ -1157,7 +1172,7 @@ async def get_term(
         auto_initialize=auto_initialize,
     )
     return await _finalize_live_term_lookup(
-        db, session, result, with_similar=with_similar, persist=persist
+        db, session, live_result, with_similar=with_similar, persist=persist
     )
 
 
@@ -1237,6 +1252,17 @@ async def lookup_live_term(
     max_similar_terms: int | None = None,
     auto_initialize: bool = True,
 ) -> SimilarResult: ...
+@typing.overload
+async def lookup_live_term(
+    session: Session,
+    term_or_url: str,
+    *,
+    topic: str | None = None,
+    with_similar: bool,
+    similar_pool_size: int | None = None,
+    max_similar_terms: int | None = None,
+    auto_initialize: bool = True,
+) -> QueryResult[SearchResult] | SimilarResult | None: ...
 
 
 async def lookup_live_term(
@@ -1641,6 +1667,18 @@ async def compare(
     concurrency: int | None = None,
     with_similar: typing.Literal[True],
 ) -> dict[str, QueryResult[SimilarResult]]: ...
+@typing.overload
+async def compare(
+    terms: typing.Sequence[str],
+    *,
+    db: Database | None = None,
+    session: Session | None = None,
+    source: Source = Source.AUTO,
+    persist: bool | None = None,
+    language: str | None = None,
+    concurrency: int | None = None,
+    with_similar: bool,
+) -> dict[str, QueryResult[typing.Any]]: ...
 
 
 async def compare(

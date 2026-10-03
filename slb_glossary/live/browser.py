@@ -245,7 +245,7 @@ async def launch_browser(
 
 
 async def open_session(
-    session_cls: type[SessionT] = Session,
+    session_cls: type[SessionT] = Session,  # type: ignore[assignment]
     *,
     language: Language | str = Language.ENGLISH,
     browser_type: BrowserType | str = BrowserType.CHROMIUM,
@@ -470,7 +470,7 @@ async def close_session(session: Session) -> None:
 
 @contextlib.asynccontextmanager
 async def session(
-    session_cls: type[SessionT] = Session,
+    session_cls: type[SessionT] = Session,  # type: ignore[assignment]
     *,
     language: Language | str = Language.ENGLISH,
     browser_type: BrowserType | str = BrowserType.CHROMIUM,
@@ -573,7 +573,7 @@ browser_session = session  # Alias for `session` to match the naming in `slb_glo
 
 async def open_session_from_config(
     config: Config | str | pathlib.Path,
-    session_cls: type[SessionT] = Session,
+    session_cls: type[SessionT] = Session,  # type: ignore[assignment]
     **overrides: typing.Any,
 ) -> SessionT:
     """
@@ -595,7 +595,7 @@ async def open_session_from_config(
 @contextlib.asynccontextmanager
 async def session_from_config(
     config: Config | str | pathlib.Path,
-    session_cls: type[SessionT] = Session,
+    session_cls: type[SessionT] = Session,  # type: ignore[assignment]
     **overrides: typing.Any,
 ) -> typing.AsyncIterator[SessionT]:
     """

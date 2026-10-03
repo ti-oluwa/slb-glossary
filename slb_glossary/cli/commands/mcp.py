@@ -244,6 +244,8 @@ def serve(
         run_async(app.run_async(**transport_kwargs))
         return
 
+    from fastmcp.server.auth import AuthProvider
+
     from slb_glossary.mcp.auth import StaticTokenVerifier, import_provider
     from slb_glossary.mcp.config import (
         Auth,
@@ -282,6 +284,7 @@ def serve(
     allowed_sources = frozenset(Source(value) for value in source) or None
     source_policy = SourcePolicy(allowed=allowed_sources)
 
+    auth_provider: AuthProvider | None
     if auth_tokens:
         token_map: dict[str, str] = {}
         for entry in auth_tokens:

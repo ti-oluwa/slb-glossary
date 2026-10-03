@@ -340,8 +340,8 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
 
             annotate = should_annotate(params["annotate"], source)
             stream = lookups if annotate else (lookup.value async for lookup in lookups)
-            return await output_results(  # type: ignore
-                stream,  # type: ignore[arg-type]
+            return await output_results(
+                stream,
                 title=title,
                 save_paths=params["save_paths"],
                 format=params["format"],
@@ -352,7 +352,7 @@ def search(ctx: click.Context, query: str, use_tui: bool, **params: typing.Any) 
                 show_grammar=params["show_grammar"],
                 show_image=params["show_image"],
                 show_related=params["show_related"],
-                annotate=annotate,  # type: ignore[arg-type]
+                annotate=annotate,
             )
 
     count = run_async(run())

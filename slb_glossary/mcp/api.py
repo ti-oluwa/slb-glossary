@@ -279,7 +279,7 @@ class MCPApp(NamedComponent):
                     spec.name,
                     time.monotonic() - started_at,
                 )
-            return result
+            return typing.cast(dict[str, typing.Any], result)
 
         tool.__name__ = spec.name
         tool.__doc__ = spec.description

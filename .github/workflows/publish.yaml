@@ -70,9 +70,11 @@ jobs:
 
       - name: Verify sdist installs and imports cleanly
         run: |
+          # Install into (and run from) the throwaway env, not the project's own
+          # `.venv`, or this would pass even if the sdist were broken.
           uv venv sdist-test-env
-          uv pip install dist/*.tar.gz
-          uv run python -c "
+          uv pip install --python sdist-test-env/bin/python dist/*.tar.gz
+          sdist-test-env/bin/python -c "
           import slb_glossary
           print('sdist installs and imports correctly')
           "

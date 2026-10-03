@@ -221,6 +221,23 @@ async def output_results(
     show_related: bool = False,
     annotate: typing.Literal[True],
 ) -> int: ...
+@typing.overload
+async def output_results(
+    results: typing.AsyncIterable[typing.Any] | typing.AsyncIterator[typing.Any],
+    *,
+    title: str | None = None,
+    save_paths: typing.Sequence[pathlib.Path],
+    format: str | None,
+    quiet: bool,
+    json_output: bool = False,
+    print_limit: int | None = None,
+    show_url: bool = True,
+    show_topic: bool = True,
+    show_grammar: bool = True,
+    show_image: bool = False,
+    show_related: bool = False,
+    annotate: bool,
+) -> int: ...
 
 
 async def output_results(

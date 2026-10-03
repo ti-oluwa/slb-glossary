@@ -43,9 +43,9 @@ slb-glossary = "slb_glossary.cli.main:main"
 slb = "slb_glossary.cli.main:main"
 
 [project.urls]
-Homepage = "https://github.com/ti-oluwa/slb_glossary"
-Repository = "https://github.com/ti-oluwa/slb_glossary"
-Issues = "https://github.com/ti-oluwa/slb_glossary/issues"
+Homepage = "https://github.com/ti-oluwa/slb-glossary"
+Repository = "https://github.com/ti-oluwa/slb-glossary"
+Issues = "https://github.com/ti-oluwa/slb-glossary/issues"
 
 [dependency-groups]
 dev = ["ruff>=0.13", "mypy>=1.10"]
