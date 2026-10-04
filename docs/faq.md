@@ -68,7 +68,7 @@ Either way, this is a local-database-only error. `--mode semantic`/`hybrid` does
 ## `DatabaseError` about `sqlite-vec` or FTS5
 
 - ``Semantic search needs the `sqlite-vec` package...``: same fix as the `model2vec` case above, `pip install slb-glossary[semantic]`.
-- ``Could not load the `sqlite-vec` SQLite extension...``: the `sqlite-vec` package is installed, but your Python's SQLite build has extension loading disabled. This is a Python/OS packaging issue, not something `slb-glossary` can work around; a build from python.org or your OS's normal package manager usually has it enabled, some minimal/hardened builds don't.
+- ``Could not load the `sqlite-vec` SQLite extension...``: the `sqlite-vec` package is installed, but your Python's `sqlite3` can't load extensions. Some builds, including some macOS ones, are compiled that way. This is a packaging issue in the Python you're running, not something `slb-glossary` can work around. You can check yours with `python -c "import sqlite3; sqlite3.connect(':memory:').enable_load_extension(True)"`, which raises an `AttributeError` when it's unsupported. Use a Python built with loadable SQLite extensions to get `--mode semantic` and `--mode hybrid`. The default `--mode lexical` needs no extension and works either way.
 - **`The installed SQLite build has no FTS5 extension...`**: `slb_glossary.local`'s ordinary lexical search needs FTS5, which is on by default in nearly every modern SQLite build. If you're seeing this, you're likely on a custom-built Python; rebuilding against a stock SQLite (or using a standard python.org/Homebrew/apt build) resolves it.
 
 ## `QueryError: needs at least one of db or session`

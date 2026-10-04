@@ -208,6 +208,7 @@ class TestLocalSearch:
         assert result.exit_code == 0, result.output
         assert "https://x.com/a" not in result.output
 
+    @pytest.mark.sqlite_ext
     def test_mode_semantic_with_min_similarity_filters_weak_matches(
         self, db_path: pathlib.Path
     ) -> None:
@@ -478,6 +479,7 @@ class TestLocalExport:
 
 
 class TestLocalFlush:
+    @pytest.mark.sqlite_ext
     def test_deletes_every_term_and_embedding_with_yes(self, db_path: pathlib.Path) -> None:
         """`--yes` skips confirmation and clears both terms and embeddings."""
         seed(db_path, [make_search_result(url="https://x.com/a", term="Porosity")], embed=True)
@@ -555,6 +557,7 @@ class TestLocalReset:
         assert asyncio.run(check()) is None
 
 
+@pytest.mark.sqlite_ext
 class TestLocalDeleteEmbeddings:
     def test_deletes_every_embedding_with_yes(self, db_path: pathlib.Path) -> None:
         """`--yes` skips confirmation and deletes every stored embedding."""
@@ -642,6 +645,7 @@ class TestLocalDeleteEmbeddings:
         assert vector_row_count(db_path) == 1
 
 
+@pytest.mark.sqlite_ext
 class TestLocalEmbed:
     def test_embeds_every_row_by_default(self, db_path: pathlib.Path) -> None:
         """With no options, embeds every locally stored row and reports the count."""

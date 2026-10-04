@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import pathlib
 import platform
+import sqlite3
 import time
 import typing
 
@@ -36,12 +37,31 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+def sqlite_extensions_supported() -> bool:
+    """
+    Whether this Python's `sqlite3` can load extensions, which `sqlite-vec` needs.
+
+    Some builds (notably some macOS ones) are compiled without it, so they have no
+    `Connection.enable_load_extension` at all.
+    """
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.enable_load_extension(True)
+    except (AttributeError, sqlite3.NotSupportedError):
+        return False
+    finally:
+        connection.close()
+    return True
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """
     Skip `live`/`slow`-marked tests unless their matching `--run-*` flag was passed.
     """
     skip_live = pytest.mark.skip(reason="use --run-live to run tests that hit the real site")
     skip_slow = pytest.mark.skip(reason="use --run-slow to run slow tests")
+    skip_ext = pytest.mark.skip(reason="this Python's sqlite3 can't load extensions (sqlite-vec)")
+    extensions_supported = sqlite_extensions_supported()
     run_live = config.getoption("--run-live")
     run_slow = config.getoption("--run-slow")
     for item in items:
@@ -49,19 +69,25 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip_live)
         if not run_slow and item.get_closest_marker("slow") is not None:
             item.add_marker(skip_slow)
+        if not extensions_supported and item.get_closest_marker("sqlite_ext") is not None:
+            item.add_marker(skip_ext)
 
+
+SKIP_UVLOOP_ON_WINDOWS = pytest.mark.skipif(
+    platform.system() == "Windows", reason="uvloop is Unix-only"
+)
 
 ALL_BACKENDS = [
     pytest.param(("asyncio", {}), id="asyncio"),
-    pytest.param(("asyncio", {"use_uvloop": True}), id="asyncio+uvloop"),
+    pytest.param(
+        ("asyncio", {"use_uvloop": True}), id="asyncio+uvloop", marks=SKIP_UVLOOP_ON_WINDOWS
+    ),
     pytest.param(("trio", {}), id="trio"),
 ]
 ASYNCIO_ONLY_BACKENDS = [
     pytest.param(("asyncio", {}), id="asyncio"),
     pytest.param(
-        ("asyncio", {"use_uvloop": True}),
-        id="asyncio+uvloop",
-        marks=pytest.mark.skipif(platform.system() == "Windows", reason="uvloop is Unix-only"),
+        ("asyncio", {"use_uvloop": True}), id="asyncio+uvloop", marks=SKIP_UVLOOP_ON_WINDOWS
     ),
 ]
 

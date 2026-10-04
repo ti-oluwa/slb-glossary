@@ -75,6 +75,7 @@ markers = [
     "mcp: Any test exercising slb_glossary.mcp.",
     "live: Touches the real glossary site or a real browser. Skipped by default.",
     "slow: Downloads/loads the real embedding model, or is otherwise noticeably slow. Skipped by default.",
+    "sqlite_ext: Needs a Python whose sqlite3 can load extensions (some macOS builds can't). Skipped automatically where it can't.",
 ]
 
 [build-system]

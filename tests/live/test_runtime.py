@@ -407,8 +407,8 @@ class TestReaper:
         self, mock_launcher: MockLauncher, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """An exception in one reaping cycle must not kill the reaper for good."""
-        monkeypatch.setattr(runtime_module, "MIN_REAP_INTERVAL", 0.01)
-        runtime = make_runtime(idle_timeout=0.01)
+        monkeypatch.setattr(runtime_module, "MIN_REAP_INTERVAL", 0.05)
+        runtime = make_runtime(idle_timeout=0.05)
         real_close_idle = runtime.close_idle_sessions
         cycles = 0
 
@@ -420,14 +420,20 @@ class TestReaper:
             return await real_close_idle(idle_timeout)
 
         monkeypatch.setattr(runtime, "close_idle_sessions", flaky_close_idle)
+        closed = asyncio.Event()
+        real_close = mock_launcher.close_session
+
+        async def close_and_signal(session: object) -> None:
+            await real_close(session)
+            closed.set()
+
+        monkeypatch.setattr(runtime_module, "close_session", close_and_signal)
         await runtime.start()
         async with runtime.acquire(Source.LIVE):
             pass
 
-        for _ in range(100):
-            if "close" in mock_launcher.calls:
-                break
-            await asyncio.sleep(0.01)
+        # Wait for the reaper's close (with timings well above Windows' ~15 ms timer resolution).
+        await asyncio.wait_for(closed.wait(), timeout=5.0)
 
         assert cycles > 1, "the reaper kept running after its first cycle raised"
         assert mock_launcher.calls == ["open", "close"]

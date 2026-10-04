@@ -22,6 +22,7 @@ class TestFlush:
         await flush(db)
         assert await count(db) == 0
 
+    @pytest.mark.sqlite_ext
     async def test_deletes_every_embedding(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:
@@ -44,6 +45,7 @@ class TestFlush:
 
         assert Metadata.load(db.metadata_path).last_synced_at == "2024-01-01T00:00:00+00:00"
 
+    @pytest.mark.sqlite_ext
     async def test_clearing_terms_and_vectors_is_one_atomic_unit(
         self, db: Database, mock_embeddings: MockEmbeddings, monkeypatch: pytest.MonkeyPatch
     ) -> None:

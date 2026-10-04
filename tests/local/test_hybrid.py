@@ -77,6 +77,7 @@ class TestComputeRrfScores:
 
 
 @pytest.mark.anyio
+@pytest.mark.sqlite_ext
 class TestHybridSearch:
     async def test_exact_name_match_is_always_ranked_first(
         self, db: Database, mock_embeddings: MockEmbeddings

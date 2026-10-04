@@ -64,14 +64,23 @@ async def load_extension(db: Database) -> typing.Any:
             "installed. Install it with `pip install slb-glossary[semantic]`."
         ) from exc
 
+    message = (
+        "Could not load the `sqlite-vec` SQLite extension. The Python you are running "
+        "has SQLite extension loading disabled or unavailable (some builds, including "
+        "some macOS ones, are compiled that way). Use a Python built with loadable "
+        "SQLite extensions, or stay with `--mode lexical`, which needs none."
+    )
     try:
         await db.connection.enable_load_extension(True)
+    except Exception as exc:
+        # `AttributeError` on a build without the method, `NotSupportedError` if it is
+        # disabled. Either way there is nothing to switch back off.
+        raise DatabaseError(message) from exc
+
+    try:
         await db.connection.load_extension(sqlite_vec.loadable_path())
     except Exception as exc:
-        raise DatabaseError(
-            "Could not load the `sqlite-vec` SQLite extension. The "
-            "installed SQLite build may have extension loading disabled."
-        ) from exc
+        raise DatabaseError(message) from exc
     finally:
         await db.connection.enable_load_extension(False)
     return sqlite_vec

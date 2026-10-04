@@ -28,6 +28,7 @@ pytestmark = pytest.mark.unit
 
 @pytest.mark.anyio
 class TestLoadExtension:
+    @pytest.mark.sqlite_ext
     async def test_returns_the_sqlite_vec_module(self, db: Database) -> None:
         """Returns the imported `sqlite_vec` module on success."""
         module = await load_extension(db)
@@ -48,6 +49,45 @@ class TestLoadExtension:
         with pytest.raises(DatabaseError, match="sqlite-vec"):
             await load_extension(db)
 
+    async def test_a_python_without_extension_support_raises_database_error(
+        self, db: Database, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Some Python builds have no `enable_load_extension` at all. That must surface as the
+        friendly `DatabaseError`, not a bare `AttributeError` (the `finally` that switches
+        loading back off used to raise one and mask it), and there is nothing to switch off.
+        """
+        calls: list[bool] = []
+
+        async def unsupported(enabled: bool) -> None:
+            calls.append(enabled)
+            raise AttributeError(
+                "'sqlite3.Connection' object has no attribute 'enable_load_extension'"
+            )
+
+        monkeypatch.setattr(db.connection, "enable_load_extension", unsupported)
+        with pytest.raises(DatabaseError, match="extension loading"):
+            await load_extension(db)
+        assert calls == [True]
+
+    async def test_a_failed_load_still_switches_extension_loading_back_off(
+        self, db: Database, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[bool] = []
+
+        async def record(enabled: bool) -> None:
+            calls.append(enabled)
+
+        async def broken_load(path: str) -> None:
+            raise RuntimeError("cannot open shared object file")
+
+        monkeypatch.setattr(db.connection, "enable_load_extension", record)
+        monkeypatch.setattr(db.connection, "load_extension", broken_load)
+        with pytest.raises(DatabaseError, match="extension loading"):
+            await load_extension(db)
+        assert calls == [True, False]
+
+    @pytest.mark.sqlite_ext
     async def test_disables_extension_loading_again_afterward(self, db: Database) -> None:
         """`enable_load_extension(False)` runs even on success, via the `finally`."""
         # No direct getter for this pragma-like state via aiosqlite; instead,
@@ -63,6 +103,7 @@ class TestCheckTableExistsAndEnsureTable:
         """A freshly opened database has no vector table yet."""
         assert await check_table_exists(db) is False
 
+    @pytest.mark.sqlite_ext
     async def test_ensure_table_creates_it(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:
@@ -70,6 +111,7 @@ class TestCheckTableExistsAndEnsureTable:
         await ensure_table(db)
         assert await check_table_exists(db) is True
 
+    @pytest.mark.sqlite_ext
     async def test_ensure_table_is_idempotent(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:
@@ -85,6 +127,7 @@ class TestClear:
         await clear(db)  # should not raise
         assert await check_table_exists(db) is False
 
+    @pytest.mark.sqlite_ext
     async def test_deletes_every_stored_embedding(
         self, db: Database, mock_embeddings: MockEmbeddings
     ) -> None:
@@ -96,6 +139,7 @@ class TestClear:
             (row,) = await cursor.fetchall()
         assert row["n"] == 0
 
+    @pytest.mark.sqlite_ext
     async def test_leaves_table_as_is_if_sqlite_vec_cannot_load(
         self, db: Database, mock_embeddings: MockEmbeddings, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -110,6 +154,7 @@ class TestClear:
 
 
 @pytest.mark.anyio
+@pytest.mark.sqlite_ext
 class TestEmbedTerms:
     async def test_embeds_every_term_by_default(
         self, db: Database, mock_embeddings: MockEmbeddings
@@ -324,6 +369,7 @@ class TestEmbedTerms:
 
 
 @pytest.mark.anyio
+@pytest.mark.sqlite_ext
 class TestDeleteEmbeddings:
     async def test_no_op_when_table_does_not_exist(self, db: Database) -> None:
         """A no-op when the vector table was never created."""
@@ -359,6 +405,7 @@ class TestDeleteEmbeddings:
 
 
 @pytest.mark.anyio
+@pytest.mark.sqlite_ext
 class TestVectorSearch:
     async def test_ranks_by_cosine_similarity_best_first(
         self, db: Database, mock_embeddings: MockEmbeddings
