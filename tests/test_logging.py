@@ -18,6 +18,7 @@ from slb_glossary.logging import (
     SinkFilter,
     StderrSink,
     StdoutSink,
+    _looks_like_import_path,
     check_filter_matches,
     configure_logging,
     import_sink,
@@ -286,10 +287,35 @@ class TestResolveSink:
         assert result.path == path
 
     def test_plain_string_path_is_wrapped_in_file_sink(self, tmp_path: pathlib.Path) -> None:
-        """A plain filesystem-looking string (no colon/dots) is wrapped in a `FileSink`."""
+        """A filesystem path string is wrapped in a `FileSink`, whatever the platform's path looks like."""
         path = tmp_path / "log.txt"
         result = resolve_sink(str(path))
         assert isinstance(result, FileSink)
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "C:\\logs\\slb.log",
+            "C:/logs/slb.log",
+            "d:\\Users\\me\\slb",
+            "\\\\server\\share\\slb.log",
+            "logs/slb.v2/log",
+        ],
+    )
+    def test_a_string_with_a_path_separator_is_a_file_path_even_with_a_colon_or_dots(
+        self, text: str
+    ) -> None:
+        """
+        A Windows drive letter looks like a `module:` prefix, and a dotted directory looks
+        like a package path. Both used to be mistaken for import paths (`No module named 'C'`).
+        """
+        result = resolve_sink(text)
+        assert isinstance(result, FileSink)
+        assert str(result.path) == str(pathlib.Path(text))
+
+    @pytest.mark.parametrize("text", ["package.module:ClassName", "x:Sink", "mod:attr"])
+    def test_import_paths_are_still_recognized(self, text: str) -> None:
+        assert _looks_like_import_path(text)
 
 
 class TestResolveSinks:

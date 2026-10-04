@@ -293,6 +293,16 @@ def import_sink(dotted_path: str) -> typing.Any:
 
 
 def _looks_like_import_path(text: str) -> bool:
+    """
+    Whether `text` is a `"module:attr"` or `"package.module.attr"` import path, as opposed
+    to a file path.
+
+    A path separator settles it: import paths never contain one, so `C:\\logs\\slb.log`
+    (whose drive letter looks like a `module:` prefix) and `logs/slb.v2/log` (whose
+    directory name has a dot) are file paths.
+    """
+    if "/" in text or "\\" in text:
+        return False
     if ":" in text:
         return True
     return "." in text and not pathlib.Path(text).suffix
@@ -316,7 +326,8 @@ def resolve_sink(
           instantiated with no arguments if it's a class rather than an
           already-built instance.
         - Anything else (a `str`/`pathlib.Path`): treated as a file path
-          and wrapped in a `FileSink`.
+          and wrapped in a `FileSink`. A string with a path separator in it is
+          always a file path, including a Windows one like `"C:\\logs\\slb.log"`.
     :param default: Fallback sink used when `spec` is `None`.
     :return: A ready-to-use `LogSink`.
     :raises ImportError: If `spec` looks like an import path but the
