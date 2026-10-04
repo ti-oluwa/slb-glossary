@@ -38,7 +38,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies (every extra, so no optional test is skipped)
+      - name: Install dependencies
         run: uv sync --group test --extra all --inexact
 
       - name: Run test suite with coverage
@@ -61,11 +61,7 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
-  # Windows and macOS, a narrower Python matrix and without the heavier
-  # optional extras (semantic/mcp) for speed - those paths are already
-  # covered on Linux above, and tests that need them skip cleanly via
-  # pytest.importorskip when the extra is not installed.
-  test-cross-platform:
+  test-windows-macos:
     name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
@@ -73,7 +69,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
-        python-version: ["3.10", "3.12", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - name: Checkout code
@@ -90,7 +86,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --group test --inexact
+        run: uv sync --group test --extra all --inexact
 
       - name: Run test suite
         run: uv run pytest -v --tb=short
@@ -99,7 +95,7 @@ jobs:
   # entrypoint runs once installed, catching packaging mistakes
   # (missing package data, bad entry_points, etc.) that unit tests
   # run against the source tree would not catch.
-  test-install:
+  test-installation:
     name: Test Package Installation
     runs-on: ubuntu-latest
     needs: [test]

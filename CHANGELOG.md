@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.1.0
+## 0.1.0 (2026-10-04)
 
-First proper release, moving past the initial `0.0.1-beta` beta. Here's what it gives you:
+First fully-fledged release. Here's what it gives you:
 
 - Search the SLB Energy Glossary live, or keep a local SQLite cache and search that instead, with lexical, semantic, and hybrid ranking modes.
 - A combined query layer that checks the local cache first and falls back to a live search only when needed, caching what it finds along the way.
