@@ -21,7 +21,7 @@ slb.logging.configure_logging(sinks=[slb.log.StderrSink(), "app.log"])  # both a
 
 ## Sinks
 
-A **sink** is anywhere a (formatted) log line can go. `slb_glossary.logging` (aliased `slb.log`) ships four defautl sinks, and you can write your own as long as it satisfies the `LogSink` protocol (a `write(message)` method; `flush()`/`close()` optional):
+A **sink** is anywhere a (formatted) log line can go. `slb_glossary.logging` (aliased `slb.log`) ships three built-in sinks, and you can write your own as long as it satisfies the `LogSink` protocol (a `write(message)` method; `flush()`/`close()` optional):
 
 | Sink | Writes to |
 |---|---|

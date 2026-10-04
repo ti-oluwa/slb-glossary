@@ -34,7 +34,7 @@ class BannerGroup(click.Group):
         super().format_help(ctx, formatter)
 
 
-def _print_version(ctx: click.Context, param: click.Parameter, value: bool) -> None:
+def print_version(ctx: click.Context, param: click.Parameter, value: bool) -> None:
     """Eager `--version` callback: print the banner plus the package version, then exit."""
     if not value or ctx.resilient_parsing:
         return
@@ -66,7 +66,7 @@ def _print_version(ctx: click.Context, param: click.Parameter, value: bool) -> N
     is_flag=True,
     expose_value=False,
     is_eager=True,
-    callback=_print_version,
+    callback=print_version,
     help="Show the version and exit.",
 )
 @click.pass_context

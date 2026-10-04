@@ -36,6 +36,8 @@ def _validate_terms(
     ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
 ) -> tuple[str, ...]:
     """Validate that the user provided at least two terms to compare."""
+    if ctx.params.get("use_tui"):
+        return value  # the TUI collects this itself
     if len(value) < 2:
         raise click.BadParameter("Give at least two terms to compare.")
     return value
@@ -89,6 +91,7 @@ async def _gather(
     "--tui",
     "use_tui",
     is_flag=True,
+    is_eager=True,
     help="Open this command in the interactive TUI instead of running it directly.",
 )
 @click.pass_context

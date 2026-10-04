@@ -12,7 +12,7 @@ Every lookup command (`search`, `define`, `compare`, `related`, `terms`, `random
 slb search "gas lift" --save gas_lift.json
 ```
 
-The file format is chosen from the extension you give; `.json`, `.csv`, or `.xlsx` (the last needs the `xlsx` extra installed, since it depends on `openpyxl`). Pass `--format` to override the format independently of the extension, e.g. to save a file named `results.txt` as CSV anyway:
+The file format is chosen from the extension you give: `.json`, `.jsonl`/`.ndjson`, `.csv`, `.txt`, or `.xlsx` (the last needs the `xlsx` extra installed, since it depends on `openpyxl`). Pass `--format` to override the format independently of the extension, e.g. to save a file named `results.txt` as CSV anyway:
 
 ```bash
 slb search "gas lift" --save results.txt --format csv
@@ -62,7 +62,7 @@ slb config path
 slb config
 ```
 
-Run with no subcommand, `config` opens a guided wizard. Section by section, it shows you each setting's current value and lets you accept it or type a new one. This is the easiest way to set up a config file the first time.
+Run with no subcommand, `config` opens a guided wizard (the same as `slb config wizard`). Section by section, it shows you each setting's current value and lets you accept it or type a new one. This is the easiest way to set up a config file the first time.
 
 ### The scriptable way
 
@@ -73,7 +73,9 @@ slb config set session.headless false    # change one setting and save
 slb config show --format json            # print the full effective config
 ```
 
-Settings are addressed with a dotted path. `session.*` for browser/session behavior (`headless`, `browser_type`, `timeout`, `retry.*`, ...), `local.*` for the database (`data_dir`, `db_filename`, `sync_max_age_days`, ...), `output.*` for display defaults (`default_format`, `show_topic`, ...). `config show` prints all three sections at once:
+Settings are addressed with a dotted path. `session.*` for browser/session behavior (`headless`, `browser_type`, `timeout`, `retry.*`, ...), `local.*` for the database (`enabled`, `data_dir`, `db_filename`, `prefer_local`, `sync_max_age_days`), `output.*` for display defaults (`default_format`, `show_topic`, ...). `config show` prints all three sections at once. The `config` commands take `--path` to work on a file other than the global one (the lookup commands take `--config` for that).
+
+Times in `session.timeout`, `session.settle_timeout` and `session.poll_interval` are in milliseconds. The delays under `session.retry.*` are in seconds.
 
 ```bash
 slb config set session.browser_type firefox
@@ -81,8 +83,8 @@ slb config set local.sync_max_age_days 3.5
 slb config show --format yaml
 ```
 
-!!! warning "`config show`'s TOML output can error on unset fields"
-    `config show`'s documented default format is TOML, but as of this writing it can raise `Unable to convert an object of <class 'NoneType'> to a TOML item` when a setting is unset (`None`), since TOML has no native null value and the unset fields aren't stripped before serializing. `--format json` and `--format yaml` do not hit this, so prefer one of those explicitly until it's fixed.
+!!! note "`config show` prints TOML by default"
+    The global config file is a TOML file, so reading and printing it needs the `config` extra. Without it you'll get a message saying so. `--format json` works with no extra.
 
 !!! tip "Any flag you pass on the command line still wins"
     A config file only supplies *defaults*. Any option you give explicitly on a given command overrides the config file's value for that one run, so `slb search porosity --headed` runs headed even if `session.headless` is `true` in your config.
@@ -106,7 +108,7 @@ slb search porosity --config none --headed    # ignore any config file, use buil
 
 ## Environment variable overrides
 
-Beyond the config file, a large number of individually tunable internals can be overridden with an environment variable, without touching a config file or passing a flag at all. Two of the more commonly needed ones:
+Beyond the config file, a large number of individually tunable internals can be overridden with an environment variable, without touching a config file or passing a flag at all. Three of the more commonly needed ones:
 
 ```bash
 export SLB_GLOSSARY_DATA_DIR=/mnt/shared/slb-glossary   # where the local database lives

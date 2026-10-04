@@ -27,6 +27,7 @@ from slb_glossary.local.api import (
     iter_terms,
     search,
     upsert_results,
+    upsert_results_incrementally,
 )
 from slb_glossary.local.connection import close_db, database, open_db, transaction
 from slb_glossary.local.hybrid import hybrid_search
@@ -78,5 +79,6 @@ __all__ = [
     "sync_topics",
     "transaction",
     "upsert_results",
+    "upsert_results_incrementally",
     "vector_search",
 ]

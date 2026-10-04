@@ -2,7 +2,7 @@
 
 This page contains a dense, structural reference for every `slb` command and flag. For explanations and worked examples, see [Using the CLI](../cli/index.md). Run any command with `--help` for this same information from the terminal.
 
-Most commands share three groups of flags: **source** (where to read from), **session** (how the browser behaves, for a command that might touch the live site), and **output** (saving/printing). They're documented once here, then referenced by name in each command's own table.
+Most commands share three groups of flags: **source** (where to read from), **session** (how the browser behaves, for a command that might touch the live site), and **output** (saving/printing). They're documented once here, then each command's section lists which parts of them it has. Not every command has every flag, so check the section for the command you're using.
 
 ---
 
@@ -10,7 +10,7 @@ Most commands share three groups of flags: **source** (where to read from), **se
 
 ### Source flags
 
-Every lookup command (`search`, `define`, `compare`, `related`, `terms`, `random`, `topics`, `urls list`) has these:
+Every lookup command (`search`, `define`, `compare`, `related`, `terms`, `random`, `topics list`, `urls list`) has the first group, from `--source` to `--cache-on-error`. The last three rows only exist where noted in the command's section.
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -21,11 +21,13 @@ Every lookup command (`search`, `define`, `compare`, `related`, `terms`, `random
 | `--cache` / `--no-cache` | `--cache` | Save live results to the local database as they arrive. |
 | `--cache-batch-size INTEGER` | `20` | Live results buffered per incremental write. |
 | `--cache-on-error` / `--no-cache-on-error` | `--cache-on-error` | Keep partial progress if a live fetch fails midway. |
-| `--exclude URL_OR_TERM[,...]` | | Skip specific URLs/terms. Repeatable and comma-listable. |
-| `-m, --mode [lexical\|semantic\|hybrid]` | `constants.default_search_mode` | Local ranking strategy. No effect on `--live`. |
-| `--fuzzy` | off | Tolerate misspellings in `--topic` against locally stored topic names. |
+| `--exclude URL_OR_TERM[,...]` | | Skip specific URLs/terms. Repeatable and comma-listable. Only on `search`, `terms` and `urls list`. |
+| `-m, --mode [lexical\|semantic\|hybrid]` | `constants.default_search_mode` | Local ranking strategy. No effect on `--live`. Only on `search`. |
+| `--fuzzy` | off | Tolerate misspellings in `--topic` against locally stored topic names. Only on `search`, `terms` and `urls list`. |
 
-`search` additionally has `--relevance-threshold FLOAT` (default `0.45`) and `--annotate [auto\|always\|never]` (default `auto`), since it's the one command where `--auto` genuinely blends local and live results rather than picking one.
+`search` additionally has `--relevance-threshold FLOAT` (default `0.45`), since it's the one command where `--auto` genuinely blends local and live results rather than picking one. `--annotate [auto\|always\|never]` (default `auto`) shows which source answered and is on `search`, `compare` and `random`.
+
+The lookup commands also take `--metadata-path FILE`, the path to the database's `metadata.json` (it defaults to the one next to `--db-path`).
 
 ### Session flags
 
@@ -41,24 +43,24 @@ Every command that can reach the live glossary shares this block (session/browse
 | `--timeout FLOAT` | `60000.0` | Milliseconds for page loads/element lookups. |
 | `--terms-per-tab INTEGER` | `12` | Results the glossary returns per results page. |
 | `--max-pages INTEGER` | `6` | Browser pages the session keeps open at once. |
-| `--settle-timeout FLOAT` | `8000` | Milliseconds to wait for the results list to settle. |
+| `--settle-timeout FLOAT` | `3000` | Milliseconds to wait for the results list to settle. |
 | `--poll-interval FLOAT` | `300` | Poll interval while waiting on `--settle-timeout`. |
 | `--executable-path FILE` | | Specific browser build to launch. |
 | `--proxy SERVER[,username=U][,password=P]` | | Proxy for the browser. |
 | `--viewport WIDTHxHEIGHT` | full-screen | Browser viewport size. |
 | `--stealth` / `--no-stealth` | auto (see [Sessions and the Browser](../concepts/sessions.md)) | Apply stealth patches. |
-| `--initialize` / `--no-initialize` | auto | Load topics/size as soon as the session opens. |
+| `--initialize` / `--no-initialize` | lazy | Load topics/size as soon as the session opens. Off by default, the first call that needs them loads them. |
 | `--retry-attempts INTEGER` | `3` | Max attempts retrying a flaky initial load. |
-| `--retry-base-delay FLOAT` | `0.8` | Base delay (seconds) for retry backoff. |
+| `--retry-base-delay FLOAT` | `0.8` | Base delay (seconds, not milliseconds) for retry backoff. |
 | `--retry-backoff [constant\|linear\|exponential\|logarithmic]` | `exponential` | Retry delay growth strategy. |
 | `--retry-factor FLOAT` | `2.0` | Growth base (exponential) or log base (logarithmic). |
 | `--retry-max-delay FLOAT` | `10.0` | Upper bound on any single retry delay. |
 | `--retry-jitter` / `--no-retry-jitter` | `--retry-jitter` | Randomize retry delays ±50% to avoid retry storms. |
-| `--concurrency INTEGER` | `1` (`compare`: from `constants.compare_concurrency`) | Concurrent term lookups. |
+| `--concurrency INTEGER` | `1` (`compare`: `3`) | Concurrent term lookups. Only on `search`, `terms` and `compare`. |
 
 ### Output flags
 
-Every command that produces results shares this block:
+Every command that produces results has the first four rows (`--tui` is on most commands, but not on `local` or `mcp`):
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -68,7 +70,7 @@ Every command that produces results shares this block:
 | `-q, --quiet` | off | Don't print to the console. |
 | `--tui` | off | Open this command in the interactive TUI instead. |
 
-`search` additionally has `--url`/`--no-url`, `--show-topic`/`--hide-topic`, `--show-grammar`/`--hide-grammar`, `--show-image`/`--hide-image`, `--show-related`/`--hide-related` for column visibility.
+`search`, `define`, `compare`, `terms`, `random` and `urls fetch` also have `--url`/`--no-url`, `--show-topic`/`--hide-topic`, `--show-grammar`/`--hide-grammar`, `--show-image`/`--hide-image` and `--show-related`/`--hide-related` for column visibility. The defaults are the same everywhere except `define`, which shows related terms by default. `related` and `topics list` have none of them.
 
 ### Global flags
 
@@ -84,27 +86,27 @@ Every command that produces results shares this block:
 
 ## `search [QUERY]`
 
-Own flags: `-t/--topic`, `-a/--start-letter`, `-n/--limit` (default `3`, `0` for unlimited), plus every source, session, output, and global flag above, including the `--relevance-threshold`/`--annotate` pair that's unique to `search`.
+Own flags: `-t/--topic`, `-a/--start-letter`, `-n/--limit` (default `3`, `0` for unlimited), `--relevance-threshold`, `-m/--mode`, `--fuzzy`, `--exclude`, `--annotate`, `--concurrency`, plus the source, session, output, column and global flags above.
 
 ## `define [TERM]`
 
-`TERM`: an exact term name, or a detail-page URL. Own flags: `-t/--topic` (pick a specific stored definition for a term/URL with several). Source, session, output, global flags apply.
+`TERM`: an exact term name, or a detail-page URL. Own flags: `-t/--topic` (pick a specific stored definition for a term/URL with several), `--suggest`/`--no-suggest` (default `--suggest`: offer close matches when there's no exact one), `--similar-pool-size N` and `--max-similar N` (both default from `constants`, minimum `1`). With `--auto` it only skips the live site when the local copy has an **exact** match. It has no `--mode`, `--fuzzy` or `--exclude`.
 
 ## `compare [TERMS]...`
 
-Two or more terms, looked up concurrently. Terms not found by the resolved source are skipped with a note on stderr rather than failing the whole command. Own flags: `-t/--topic`, `--concurrency` (default from `constants.compare_concurrency`).
+Two or more terms, looked up concurrently. Terms not found by the resolved source are skipped with a note on stderr rather than failing the whole command. Own flags: `-t/--topic`, `--concurrency` (default `3`), `--annotate`. It has no `--mode`, `--fuzzy` or `--exclude`.
 
 ## `related [TERM]`
 
-Lists just the related-term links, not the full definition. Own flags: `-t/--topic`. Otherwise identical flag surface to `define`.
+Lists just the related-term links, not the full definition. Own flags: `-t/--topic`. It has the source and session flags but no column, `--suggest`, `--mode`, `--fuzzy` or `--exclude` flags.
 
 ## `terms [TOPIC]`
 
-`TOPIC` need not be exact, the closest known topic is used. Yields at most one result per term (the one filed under `TOPIC`), unlike `search`. Own flags: `-a/--start-letter`, `-n/--limit` (default `20`, `0` for unlimited).
+`TOPIC` need not be exact, the closest known topic is used. Yields at most one result per term (the one filed under `TOPIC`), unlike `search`. Own flags: `-a/--start-letter`, `-n/--limit` (default: every term under the topic, same as `0`), `--concurrency`, `--fuzzy`, `--exclude`. With `--auto`, a topic the local database has any terms for is served from there alone.
 
 ## `random`
 
-Own flags: `-t/--topic`, `-n/--count` (default `1`; duplicates possible since each pick is independent).
+Own flags: `-t/--topic`, `-n/--count` (default `1`; duplicates possible since each pick is independent), `--annotate`.
 
 ## `topics list`
 
@@ -112,24 +114,24 @@ Lists the glossary's topics with term counts. With `--auto`, only lists topics a
 
 ## `urls list` / `urls fetch <URL>`
 
-`urls list` needs at least one of `--query`, `--topic`, `--start-letter`. `urls fetch` parses every definition on one specific detail-page URL directly. See [Searching and Defining Terms](../cli/searching.md#urls).
+`urls list` needs at least one of `-Q/--query`, `-t/--topic`, `-a/--start-letter`, and also takes `-n/--limit` (default: every match), `--fuzzy` and `--exclude`. `urls fetch` takes `-t/--topic` and the column flags, but no source flags. It parses every definition on one specific detail-page URL directly. See [Searching and Defining Terms](../cli/searching.md#urls).
 
 ## `sync`
 
-Own flags: `-t/--topic`, `-Q/--query`, `-a/--start-letter`, `--all`, `--install`, `--check-only`, `-y/--yes` (skip the `--all` confirmation). See [`sync`](../cli/sync.md#sync).
+Own flags: `-t/--topic`, `-Q/--query`, `-a/--start-letter`, `--all` (can't be combined with the filters), `-n/--limit`, `--concurrency`, `--force`/`--no-force` (re-fetch terms already stored), `--batch-size`, `--persist-on-error`/`--no-persist-on-error`, `--install`, `--with-deps`, `--check-only`, `-y/--yes` (skip the confirmation a heavy update asks for, which `--all` always triggers). With no filters it only refreshes the topic list. See [`sync`](../cli/sync.md#sync).
 
 ## `local <subcommand>`
 
-`path`, `stats`, `search`, `get`, `flush`, `reset`, `export`, `import`, `embed`. Never falls back to live regardless of any source flag. See [The `local` command group](../cli/sync.md#the-local-command-group) for each subcommand's own options, `import` in particular has a large, distinct `--*-field` flag set for column mapping, and `embed` needs the `semantic` extra installed.
+`path`, `stats`, `search`, `get`, `flush`, `reset`, `export`, `import`, `embed`, `delete-embeddings`. Never falls back to live regardless of any source flag. See [The `local` command group](../cli/sync.md#the-local-command-group) for each subcommand's own options, `import` in particular has a large, distinct `--*-field` flag set for column mapping, and `embed` needs the `semantic` extra installed.
 
 ## `install`
 
-Own flags: `--list`, `--update BROWSER`, `--remove BROWSER`, `--timeout` (download timeout, milliseconds), `--retries`, `--download-host`. See [`install`](../cli/sync.md#install).
+Takes optional `BROWSERS...` names. Own flags: `--list`, `--update`, `--remove` (all plain flags that apply to the browsers named, or to every installed one), `--force`, `--with-deps`, `--only-shell`, `--timeout` (download timeout, milliseconds), `--retries` (default `3`), `--download-host`. See [`install`](../cli/sync.md#install).
 
 ## `config <subcommand>`
 
-No subcommand: interactive wizard. `path`, `init`, `get KEY`, `set KEY VALUE`, `show`, `edit`. See [The `config` command](../cli/configuration.md#the-config-command).
+No subcommand: interactive wizard (also `wizard`). `path`, `init`, `get KEY`, `set KEY VALUE`, `show` (`--format json|toml|yaml`, default toml), `edit`. These take `--path FILE` to work on a file other than the global config. See [The `config` command](../cli/configuration.md#the-config-command).
 
 ## `mcp serve [APP_PATH]`
 
-See [Running an MCP Server](../agent/mcp-server.md) for the full flag set (`--tools`, `--source`, `--no-local`, `--no-live`, `--allow-write`, `--transport`, `--auth-token`, `--rate-limit`, and more), dense enough to warrant its own page rather than a table here.
+See [Running an MCP Server](../agent/mcp-server.md) for the full flag set (`--tools`, `--source`, `--no-local`, `--no-live`, `--session-mode`, `--allow-write`, `--transport`, `--auth-token`, `--auth-provider`, `--require-scope`, `--rate-limit`, and more), dense enough to warrant its own page rather than a table here.

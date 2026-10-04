@@ -82,7 +82,7 @@ This is the library counterpart of `slb local import`, useful for seeding the da
 results = await slb.local.search(db, "reservoir rock", mode="lexical")  # the default
 ```
 
-`mode="lexical"` (bm25 full-text ranking) is the default and needs nothing beyond the base install. `"semantic"` (embedding similarity) and `"hybrid"` (both, fused) need the `semantic` extra installed, and terms already embedded:
+`mode="lexical"` (word matching that ranks name matches first, then by bm25 full-text score) is the default and needs nothing beyond the base install. It ignores case, accents and punctuation, and recovers from small typos. `"semantic"` (embedding similarity) and `"hybrid"` (both, fused) need the `semantic` extra installed, and terms already embedded:
 
 ```python
 await slb.local.embed_terms(db)  # compute and store embeddings for everything cached so far
@@ -90,7 +90,9 @@ await slb.local.embed_terms(db)  # compute and store embeddings for everything c
 results = await slb.local.search(db, "rock that holds fluid", mode="hybrid")
 ```
 
-That embedding step is why a paraphrase like *"rock that holds fluid"* can surface a semantically related term like *"porous"* under `"semantic"`/`"hybrid"` mode, even without sharing a single word with the query, which `"lexical"` mode cannot do since it only ever matches on the words actually present. See [Search Modes](../concepts/search-modes.md) for how the three modes actually differ under the hood, and what `embed_terms` costs to run.
+That embedding step is why a paraphrase like *"rock that holds fluid"* can surface a semantically related term like *"porous"* under `"semantic"`/`"hybrid"` mode, even without sharing a single word with the query, which `"lexical"` mode cannot do since it only ever matches on the words actually present (give or take a typo). See [Search Modes](../concepts/search-modes.md) for how the three modes actually differ under the hood, and what `embed_terms` costs to run.
+
+`search` returns up to `limit=20` results by default (`limit=None` for all of them). It also takes `topic`, `start_letter`, `language`, `exclude`, and `min_similarity` (for the semantic and hybrid modes). `fuzzy=True` forgives a misspelled `topic`. It does not change how the query itself is matched.
 
 ### Getting scores alongside results
 
@@ -125,7 +127,9 @@ print(total, "terms across", len(topics), "topics")
 ```
 
 ```python
-terms = await slb.local.get_terms_on(db, "Drilling Fluids", limit=10)
+terms = await slb.local.get_terms_on(
+    db, "Drilling Fluids", limit=10
+)  # also: start_letter, language, fuzzy, exclude
 ```
 
 `get_terms_on` mirrors `slb_glossary.live.get_terms_on`'s shape, but reads only what's already local, exactly like every other `slb_glossary.local` function. There is no live fallback here, ever, regardless of what is cached or not. That fallback behavior is what `slb_glossary.query` adds. See [Combined Search with slb_glossary.query](query.md).

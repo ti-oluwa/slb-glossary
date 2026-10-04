@@ -1,6 +1,6 @@
 # The Data Model
 
-Every function across the CLI, `slb_glossary.live`, `slb_glossary.local`, and `slb_glossary.query` ultimately hands you the same few types. This page documents this types so you understand them and know what fields each type holds.
+Every function across the CLI, `slb_glossary.live`, `slb_glossary.local`, and `slb_glossary.query` ultimately hands you the same few types. This page documents those types so you understand them and know what fields each type holds.
 
 ---
 
@@ -27,7 +27,7 @@ print(result.value.term, result.value.definition)  # by name
 print(result.value.asdict())  # as a plain dict
 ```
 
-Only `term`, `definition`, `topic`, and `url` are ever filtered/matched on; `image`, `image_caption`, `related`, and `language` are mostly meta information, carried through from whichever page produced the result.
+Search matches against `term`, `definition`, and `topic`, and a lookup by URL matches on `url`. A local read can also be filtered by `language`. `image`, `image_caption`, and `related` are meta information, carried through from whichever page produced the result.
 
 !!! note "Why so much is `Optional`"
     A `SearchResult` reflects what one specific glossary term page actually had, not a guaranteed-complete schema. Some term pages have no image; some have no related-terms. `definition` itself can be `None` if a page's structure defeated parsing, which is why it's worth checking for `None` before assuming you have text to print, especially in scripts fed mostly from the live-site results.
@@ -71,7 +71,7 @@ A `Session` is bound to one language edition for its entire lifetime (`session()
 ```python
 from slb_glossary import SearchMode
 
-SearchMode.LEXICAL  # "lexical" - the default
+SearchMode.LEXICAL  # "lexical" (the default)
 SearchMode.SEMANTIC  # "semantic"
 SearchMode.HYBRID  # "hybrid"
 ```
@@ -97,7 +97,7 @@ Covered in full, with examples, in [Combined Search with `slb_glossary.query`](.
 
 ## `SimilarResult`
 
-The is the data type `get_term`/`compare` return inside a `QueryResult` instead of a bare `SearchResult` when called with `with_similar=True`. It contains an exact match, plus nearby alternatives, for a "did you mean" experience when the exact match is `None` (or just to see what else is nearby even when it is not).
+This is the data type `get_term`/`compare` return inside a `QueryResult` instead of a bare `SearchResult` when called with `with_similar=True`. It contains an exact match, plus nearby alternatives, for a "did you mean" experience when the exact match is `None` (or just to see what else is nearby even when it is not).
 
 | Field | Type | Notes |
 |---|---|---|

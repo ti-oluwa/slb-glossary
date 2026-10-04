@@ -8,7 +8,11 @@ Every ranked search this library does, local or live, uses one of three ranking 
 
 **The default. Needs nothing beyond the base install.**
 
-Lexical search ranks by [bm25](https://en.wikipedia.org/wiki/Okapi_BM25), a full-text ranking algorithm, over the term, definition, and topic text actually stored locally. It only ever matches words that are actually present (or close misspellings of them). Searching "rock that holds fluid" under lexical mode will not find a term like "porous" unless those specific words appear somewhere in its stored definition.
+Lexical search looks for your words in the term, definition, and topic text actually stored locally. A result whose **name** matches the query ranks first, in tiers: an exact match, then a name that starts with the query, then one that contains it, then one with all of its words, then one with some of them. Anything left over is ranked by [bm25](https://en.wikipedia.org/wiki/Okapi_BM25), a full-text ranking algorithm. That way a term named after your query is never outranked by an unrelated term whose definition happens to mention it a lot.
+
+Matching ignores case, accents, punctuation and simple plurals, so `capillary-pressure`, `Capillary pressure?` and `capillary pressures` all find "Capillary pressure". If nothing matches well, it also tries a close-spelling match against the stored term names, so a typo like `permeabilty` still finds "Permeability". That typo tolerance is always on. (The `fuzzy` option is a different thing: it forgives a misspelled `topic`.)
+
+What lexical search can't do is match meaning. Searching "rock that holds fluid" will not find a term like "porous" unless those specific words appear somewhere in its stored definition.
 
 Live search uses a related but simpler technique, since there's no whole result set to rank against ahead of time. It calculates the plain token overlap between your query and each candidate term/topic, scored as results stream in one page at a time.
 
@@ -16,7 +20,7 @@ Live search uses a related but simpler technique, since there's no whole result 
 
 **Needs the `semantic` extra installed (`uv add "slb-glossary[semantic]"`), and terms already embedded first.**
 
-Semantic search compares *embeddings*: numeric vectors that capture a phrase's meaning, produced by a small local model ([`minishlab/potion-retrieval-32M`](https://huggingface.co/minishlab/potion-retrieval-32M), via [model2vec](https://github.com/MinishLab/model2vec)), downloaded once and cached, with no network call needed per query afterward. Two phrases with similar meanings end up with similar vectors even if they do not share any words. Searching "rock that holds fluid" surfaces "porous" this way, since the two land close together in vector space (measured by cosine similarity), despite sharing no words at all.
+Semantic search compares *embeddings*: numeric vectors that capture a phrase's meaning, produced by a small local model ([`minishlab/potion-retrieval-32M`](https://huggingface.co/minishlab/potion-retrieval-32M), via [model2vec](https://github.com/MinishLab/model2vec)), downloaded once and cached, with no network call needed per query afterward. Two phrases with similar meanings end up with similar vectors even if they do not share any words. (A query with punctuation, like `water-cut`, is embedded in both spellings, `water-cut` and `water cut`, and the two vectors are merged, so the hyphen doesn't change where it lands.) Searching "rock that holds fluid" surfaces "porous" this way, since the two land close together in vector space (measured by cosine similarity), despite sharing no words at all.
 
 This only works on terms you've already run through `embed_terms`:
 
@@ -24,7 +28,7 @@ This only works on terms you've already run through `embed_terms`:
 await slb.local.embed_terms(db)  # embeds everything not already embedded
 ```
 
-From the CLI, the equivalent is `slb local embed` - see [Local Cache and Sync](../cli/sync.md#embedding-for-semantichybrid-search).
+From the CLI, the equivalent is `slb local embed`. See [Local Cache and Sync](../cli/sync.md#embedding-for-semantichybrid-search).
 
 `embed_terms` is a one-time (or periodic) cost, separate from ordinary syncing. Syncing fetches and stores terms, `embed_terms` computes and stores their vectors. Run it again after a `sync` that added new terms, with `only_missing=True` (the default) so it only pays for what's actually new.
 
@@ -47,7 +51,7 @@ This is generally the best-ranking mode once you've embedded your terms, and the
 
 | | Needs | Matches | Works live | Good `Source.AUTO` pairing |
 |---|---|---|---|---|
-| `lexical` | Nothing extra | Exact words (or near-misspellings, with `fuzzy=True`) | Yes | Yes |
+| `lexical` | Nothing extra | The words you typed, ignoring case, punctuation and typos | Yes | Yes |
 | `semantic` | `semantic` extra + `embed_terms` | Meaning, not exact words | No (local only) | Only with care, see the scale warning above |
 | `hybrid` | `semantic` extra + `embed_terms` | Both, fused by rank | No (local only) | Yes, generally the best default once embedded |
 

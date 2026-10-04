@@ -28,6 +28,8 @@ __all__ = ["define"]
 
 def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> str:
     """Validate that the user provided a non-empty term."""
+    if ctx.params.get("use_tui"):
+        return value  # the TUI collects this itself
     if not value or not value.strip():
         raise click.BadParameter("Missing term. Provide a term name or detail-page URL.")
     return value
@@ -81,6 +83,7 @@ def _validate_term(ctx: click.Context, param: click.Parameter, value: str) -> st
     "--tui",
     "use_tui",
     is_flag=True,
+    is_eager=True,
     help="Open this command in the interactive TUI instead of running it directly.",
 )
 @click.pass_context

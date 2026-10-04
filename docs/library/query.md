@@ -19,8 +19,8 @@ async with slb.local.database("glossary.db") as db, slb.live.session() as sessio
 - **`Source.LOCAL`** never touches the network. Requires `db`.
 - **`Source.LIVE`** never touches the local database. Requires `session`.
 - **`Source.AUTO`** (the default) tries local first, falling back to live only when needed. What "needed" means differs slightly by function:
-  - For `search`, the local database's best-scoring result is checked against `relevance_threshold` (`0.0`–`1.0`, default from `constants.relevance_threshold`). If it clears that bar, only local results are yielded; otherwise, live results are yielded first, with local results filling in any remaining slots.
-  - For single-value lookups (`get_term`, `compare`, `related_terms`, `get_random_term`), it's simpler: use the cached copy if it exists, otherwise fetch live.
+  - For `search`, the local database's best-scoring result is checked against `relevance_threshold` (`0.0` to `1.0`, default from `constants.relevance_threshold`). If it clears that bar, only local results are yielded; otherwise, live results are yielded first, with local results filling in any remaining slots.
+  - For single-value lookups (`get_term`, `compare`, `related_terms`, `get_random_term`), it's simpler: use the cached copy if it exists, otherwise fetch live. With `with_similar=True`, "exists" means an *exact* match, so a database that only holds similar terms still goes live. `get_terms_on` is the odd one out: if the local database holds any terms for the topic, it returns only those and doesn't go live, so a partly cached topic comes back partly.
 
 You only need to pass whichever of `db`/`session` the resolved `source` actually requires. Passing both and leaving `source` at its `AUTO` default is the normal way to get "fast when possible, correct when not" without thinking about it further.
 
@@ -60,6 +60,8 @@ For a streamed lookup (`search`, `get_terms_on`), `persisted` reflects whether p
 async for lookup in slb.search("water saturation", db=db, session=session, persist=True):
     print(lookup.source, ":", lookup.value.term, "-", lookup.value.definition)
 ```
+
+The query is cleaned before it is used: a wrapper like "what is porosity?" or "define: porosity" is reduced to `porosity`, and stray punctuation on its edges is dropped. Matching also ignores case, accents and punctuation inside the query, so `capillary-pressure` finds "Capillary pressure" locally instead of falling through to a live fetch. A query with no letters or digits yields nothing and never opens a browser.
 
 Everything from [`local.search`](local-search.md#search-modes-lexical-semantic-hybrid)'s `mode` parameter applies here too, with one restriction: a live fallback can not be scored with `mode="hybrid"`, since hybrid scoring needs a whole result set's ranks computed up front, and live results stream in one page at a time. Use `"lexical"` or `"semantic"` if a call might fall through to live.
 
@@ -109,7 +111,7 @@ for name, lookup in results.items():
     print(name, "->", lookup.value.term if lookup.value else "not found")
 ```
 
-`related_terms` is a convenience wrapper. it calls `get_term` and returns just the `.related` field, rather than something you'd need to write yourself on top of `get_term`.
+`related_terms` is a convenience wrapper. It calls `get_term` and returns just the `.related` field, rather than something you'd need to write yourself on top of `get_term`.
 
 ## Getting similar results alongside an exact match
 

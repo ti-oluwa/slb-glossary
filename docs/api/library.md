@@ -14,13 +14,13 @@ This pag contains a dense, structural reference across `slb_glossary`'s modules.
 | `search(session, query, *, limit=3, topic=None, start_letter=None, concurrency=1, ...)` | async generator | Ranked live search. `limit=None` for unlimited. `concurrency>1` trades relevance-order guarantees for speed. |
 | `get_results_from_url(session, url, *, topic=None, page=None, exclude=None)` | async generator | Every definition found on one term detail-page URL (a term can carry more than one). What `query.get_term` calls into for a live lookup. |
 | `get_results_from_urls(session, urls, *, topic=None, concurrency=1, first_only=False, exclude=None)` | async generator | Same, for several URLs. `concurrency>1` opens that many worker pages on `session` (needs `session.max_pages` to cover it). Results arrive as they finish, not necessarily in `urls`' order when concurrent. |
-| `get_terms_on(session, topic, *, limit=None, start_letter=None)` | async generator | Every term filed under one topic. |
+| `get_terms_on(session, topic, *, start_letter=None, limit=None, concurrency=1, first_only=False, exclude=None)` | async generator | Every term filed under one topic. |
 | `get_terms_urls(session, *, query=None, topic=None, start_letter=None, limit=None)` | async generator -> `str` | Raw URLs, no content fetched. |
 | `refresh_topics(session)` | coroutine -> `Session` | Reloads `session.topics`/`session.size` in place, reusing `session.retry` (the exact reload `open_session`/`session()` already does once at startup). Call this again later if the glossary's topic list may have changed mid-run. |
-| `score_result(result, query)` | function -> `float` | Token-overlap relevance score used internally by `search`; exposed for custom ranking. |
+| `score_result(query, result, *, mode="lexical")` | function -> `float` | Token-overlap relevance score used internally by `search`; exposed for custom ranking. |
 | `ensure_initialized(session, auto_initialize=True)` | coroutine | Loads `session.topics`/`session.size` if not already loaded; raises `SessionNotInitializedError` if `auto_initialize=False` and it is not. |
 | `Session` | class | See [Sessions and the Browser](../concepts/sessions.md#what-opening-a-session-actually-does). Key attributes: `topics`, `size`, `pages` (the page pool), `language`. |
-| `BrowserType` | `StrEnum` | `CHROMIUM` \| `FIREFOX` \| `WEBKIT`. |
+| `BrowserType` | `str` `Enum` | `CHROMIUM` \| `FIREFOX` \| `WEBKIT`. |
 | `ResourceType` | `IntFlag` | `DOCUMENT`, `STYLESHEET`, `IMAGE`, `MEDIA`, `FONT`, `SCRIPT`, `TEXTTRACK`, `XHR`, and more, combine with `|` for `block_resources`. |
 
 ## `slb_glossary.local`
@@ -29,18 +29,18 @@ This pag contains a dense, structural reference across `slb_glossary`'s modules.
 |---|---|---|
 | `database(path=None, *, metadata_path=None)` | async context manager | Opens a `Database`. No path uses the OS-appropriate default (`slb local path`). |
 | `open_db(path=None, **kw)` / `close_db(db)` | async functions | The non-context-manager pair. |
-| `search(db, query, *, mode="lexical", scored=False, topic=None, limit=None, fuzzy=False)` | coroutine -> `list[SearchResult]` (or `list[tuple[SearchResult, float]]` with `scored=True`) | See [Search Modes](../concepts/search-modes.md). |
+| `search(db, query, *, topic=None, start_letter=None, language=None, limit=20, fuzzy=False, mode=None, scored=False, exclude=None, min_similarity=None)` | coroutine -> `list[SearchResult]` (or `list[tuple[SearchResult, float]]` with `scored=True`) | `mode=None` means `constants.default_search_mode`. `fuzzy` forgives a misspelled `topic`. See [Search Modes](../concepts/search-modes.md). |
 | `lexical_search` / `vector_search` / `hybrid_search` | coroutines | The three functions `search`'s `mode` dispatches to; callable directly for lower-level control. |
 | `get_term(db, term_or_url, *, topic=None, language=None, with_similar=False, similar_pool_size=constants.similar_terms_pool_size, max_similar_terms=constants.max_similar_terms)` | coroutine -> `SearchResult \| None`, or `tuple[SearchResult \| None, tuple[tuple[SearchResult, float], ...]]` if `with_similar=True` | The `with_similar` alternatives are a plain tuple here, not a `SimilarResult`, since there's no `QueryResult` wrapper at this local-only level. |
-| `get_terms_on(db, topic, *, limit=None)` | coroutine -> `list[SearchResult]` | |
-| `get_topics(db)` | coroutine -> `dict[str, int]` | |
+| `get_terms_on(db, topic, *, start_letter=None, language=None, limit=None, fuzzy=False, exclude=None)` | coroutine -> `list[SearchResult]` | |
+| `get_topics(db, *, language=None)` | coroutine -> `dict[str, int]` | |
 | `get_random_term(db, *, topic=None, language=None, fuzzy=False, exclude=None)` | coroutine -> `SearchResult \| None` | Sampled from what's already stored, no network involved. |
 | `count(db)` | coroutine -> `int` | Total stored terms. |
-| `upsert_results(db, results)` | coroutine -> `int` | Insert/update by `(url, topic)`. Returns rows written. |
-| `upsert_results_incrementally(db, results_iter, *, batch_size=20)` | async generator | Wraps an async iterable of `SearchResult`, writing every `batch_size` as they pass through, yielding each result onward unchanged. |
-| `load_file(db, path, *, term_field="term", definition_field="definition", topic_field=..., url_field=..., source="glossary")` | coroutine -> `int` | Import from CSV/JSON/XLSX/XLSM (and YAML, with the `config` extra's PyYAML dependency present), see `slb_glossary.readers.supported_formats()`. See [`local import`](../cli/sync.md#importing-your-own-data). |
-| `embed_terms(db, *, urls=None, only_missing=True, batch_size=None)` | coroutine -> `int` | Computes and stores embeddings via [model2vec](https://github.com/MinishLab/model2vec) (`minishlab/potion-retrieval-32M`). Needs the `semantic` extra. |
-| `delete_embeddings(db, *, urls=None)` | coroutine -> `int` | Remove stored embeddings, e.g. before `embed_terms` with a different model. |
+| `upsert_results(db, results, *, language=None, source="glossary")` | coroutine -> `int` | Insert/update by `(url, topic)`. Takes a sync or async iterable. Returns rows written. |
+| `upsert_results_incrementally(db, results, *, language=None, source="glossary", batch_size=None, persist_on_error=True, stats=None)` | async generator | Wraps an async iterable of `SearchResult`, writing every `batch_size` (default `constants.persist_batch_size`, `20`) as they pass through, yielding each result onward unchanged. With `persist_on_error`, whatever is buffered is saved if the stream raises. |
+| `load_file(db, path, *, format=None, term_field="term", definition_field="definition", topic_field="topic", url_field="url", ..., default_language="en", source="user", batch_size=None)` | coroutine -> `int` | Import from CSV/JSON/XLSX/XLSM (and YAML, with the `config` extra's PyYAML dependency present), see `slb_glossary.readers.supported_formats()`. See [`local import`](../cli/sync.md#importing-your-own-data). |
+| `embed_terms(db, *, urls=None, topic=None, fuzzy=False, only_missing=True, batch_size=None)` | coroutine -> `int` | Computes and stores embeddings via [model2vec](https://github.com/MinishLab/model2vec) (`minishlab/potion-retrieval-32M`). Needs the `semantic` extra. |
+| `delete_embeddings(db, *, urls=None)` | coroutine -> `None` | Remove stored embeddings, e.g. before `embed_terms` with a different model. |
 | `flush(db)` / `reset(db)` | coroutines | `flush` clears stored terms only; `reset` also clears sync/metadata history. |
 | `Database` | class | Obtained from `database()`/`open_db()`. |
 | `Metadata` | class | Sync history / bookkeeping, loaded via `Metadata.load(path)`. |
@@ -81,9 +81,9 @@ See [Managing Sessions in Your App](../library/runtime.md).
 |---|---|---|
 | `SearchResult` | `NamedTuple` | Full field list in [The Data Model](../concepts/data-model.md#searchresult). |
 | `RelatedTerm` | `NamedTuple` | `term`, `url`. |
-| `Language` | `StrEnum` | `ENGLISH = "en"`, `SPANISH = "es"`. |
+| `Language` | `Enum` | `ENGLISH = "en"`, `SPANISH = "es"`. |
 | `Source` | `Enum` | `LOCAL` \| `LIVE` \| `AUTO` (also importable from `slb_glossary.query`). |
-| `SearchMode` | `StrEnum` | `LEXICAL`, `SEMANTIC`, `HYBRID`. See [Search Modes](../concepts/search-modes.md). |
+| `SearchMode` | `str` `Enum` | `LEXICAL`, `SEMANTIC`, `HYBRID`. See [Search Modes](../concepts/search-modes.md). |
 
 ## `slb_glossary.config`
 
@@ -101,7 +101,7 @@ See [Managing Sessions in Your App](../library/runtime.md).
 | `MCPApp(config, runtime=None)` | class | Wraps a `fastmcp.FastMCP` server. Pass a shared `slb_glossary.live.Runtime` as `runtime` to reuse your app's sessions (it is started, never closed, by the app). `.server()` builds it (lazily, once); `.run(**transport_kwargs)` / `.run_async(**transport_kwargs)` build-then-serve. |
 | `load_app(dotted_path)` | function -> `MCPApp \| FastMCP` | Uvicorn-style `"module:attr"` loader; calls a zero-arg factory if `attr` is callable. What `slb mcp serve APP_PATH` uses. |
 | `MCPConfig` | `dataclass` | `.server` (`ServerInfo`), `.session` (`SessionAccess`), `.local` (`LocalAccess`), `.source_policy` (`SourcePolicy`), `.tools` (`Tool`), `.timeouts` (`Timeout`), `.auth` (`Auth`), `.rate_limit` (`RateLimit`), `.hooks` (`Hooks`), `.logging` (`Logging`), `.streaming` (`Streaming`). Every field defaults to a valid read-only, local+live, unauthenticated config. `.update(...)` changes one field without re-specifying the rest. `MCPConfig.default(language=...)` is a shortcut for the one commonly-changed, deeply-nested setting. |
-| `Tool` | `Flag` enum | `SEARCH`, `GET_TERM`, `GET_TERMS_ON`, `GET_TERMS_URLS`, `GET_TOPICS`, `GET_RANDOM_TERM`, `RELATED_TERMS`, `COMPARE`, `SYNC`. Aliases: `"read_only"` (everything but `SYNC`), `"all"`. |
+| `Tool` | `Flag` enum | `SEARCH`, `GET_TERM`, `GET_TERMS_ON`, `GET_TERMS_URLS`, `GET_TOPICS`, `RANDOM_TERM`, `RELATED_TERMS`, `COMPARE`, `SYNC`. Combined members: `Tool.READ_ONLY` (everything but `SYNC`) and `Tool.ALL`, spelled `"read_only"` and `"all"` in config files and on the CLI. |
 | `resolve_tools(config)` / `MCPConfig.resolve_tools()` | function/method -> `Tool` | The actual tool set to build: `Tool.SYNC` stripped unless `local.allow_write` is also `True`. |
 | `SessionAccess` | `dataclass` | `enabled`, `mode` (`SessionMode`), `idle_timeout`, `max_sessions`, `capacity_tolerance`, `options` (a `slb_glossary.config.SessionOptions`). |
 | `SessionMode` | `Enum` | Re-export of `slb_glossary.live.SessionMode`. `EAGER` (open at startup), `LAZY` (open on first use, the default), `PER_CALL` (fresh session per call, full isolation). |
@@ -210,8 +210,9 @@ The full, current list is the source of truth: every constant is a `Constant(def
 | `reader(format)` | decorator | Registers a new read format. |
 | `readers` / `writers` | modules | The submodules `read_rows`/`save` and friends actually live in; `slb.writers.supported_formats()`/`slb.readers.supported_formats()` aren't re-exported at the top level, so call them through the submodule. |
 | `RetryPolicy` | `dataclass` | `attempts`, `base_delay`, `backoff_type`, `factor`, `max_delay`, `jitter`. |
-| `BackoffType` | `StrEnum` | `CONSTANT`, `LINEAR`, `EXPONENTIAL`, `LOGARITHMIC`. |
+| `BackoffType` | `str` `Enum` | `CONSTANT`, `LINEAR`, `EXPONENTIAL`, `LOGARITHMIC`. |
 | `SLBGlossaryError` | Exception | Base class for every exception this package raises. |
-| `NetworkError`, `BrowserError`, `SessionNotInitializedError` (subclass of `BrowserError`), `ParsingError`, `ConfigError`, `DatabaseError`, `EmbeddingError`, `QueryError`, `LoggingError`, `UnsupportedFormatError`, `WriterError` | Exceptions | All subclass `SLBGlossaryError` (and, where it makes sense, a matching stdlib exception, `NetworkError` also subclasses `ConnectionError`, `WriterError` also subclasses `OSError`). |
-| `log` | `logging.Logger` | The package's own logger, configurable via `slb_glossary.logging.configure_logging`/a custom `LogSink`. |
+| `NetworkError`, `BrowserError`, `SessionNotInitializedError` (subclass of `BrowserError`), `ParsingError`, `ConfigError`, `DatabaseError`, `EmbeddingError`, `QueryError`, `LoggingError`, `UnsupportedFormatError`, `WriterError`, `EnvironmentVariableError` | Exceptions | All subclass `SLBGlossaryError` (and, where it makes sense, a matching stdlib exception, `NetworkError` also subclasses `ConnectionError`, `WriterError` also subclasses `OSError`). |
+| `ResourceError`, `RuntimeClosedError`, `ResourceDisabledError`, `UnknownLanguageError`, `SessionPoolError`, `SessionPoolClosedError` | Exceptions | Raised by `Runtime` and `SessionPool`. Import them from `slb_glossary.errors`. The first four share the `ResourceError` base (`UnknownLanguageError` is also a `ValueError`), and `SessionPoolError` is a `BrowserError` and a `RuntimeError`. |
+| `log` | module | Alias for `slb_glossary.logging`: `configure_logging`, `set_log_level`, and the sinks. |
 | `__version__` | `str` | Installed package version. |

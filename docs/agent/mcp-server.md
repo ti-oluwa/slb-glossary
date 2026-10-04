@@ -127,11 +127,11 @@ if __name__ == "__main__":
     app.run(transport="streamable-http")
 ```
 
-Instantiating `MCPApp(config)` is cheap and does no I/O. The underlying `fastmcp.FastMCP` server and its tools are only assembled on the first `server()`/`run()`/`run_async()` call. `MCPConfig()` alone (no arguments) is a fully valid default. It is read-only, has local and live access both enabled, allows unauthenticated tools calls, unlimited rate, and `SessionMode.LAZY` mode. Which is exactly what `slb mcp serve` with no flags gives you. Every section is independently optional; the CLI's own flags (`--tools`, `--allow-write`, `--rate-limit`, ...) each set one narrow slice of this same config for you.
+Instantiating `MCPApp(config)` is cheap and does no I/O. The underlying `fastmcp.FastMCP` server and its tools are only assembled on the first `server()`/`run()`/`run_async()` call. `MCPConfig()` alone (no arguments) is a fully valid default. It is read-only, has local and live access both enabled, allows unauthenticated tool calls, unlimited rate, and `SessionMode.LAZY` mode. That is exactly what `slb mcp serve` with no flags gives you. Every section is independently optional; the CLI's own flags (`--tools`, `--allow-write`, `--rate-limit`, ...) each set one narrow slice of this same config for you.
 
-A few fields worth knowing about that the CLI has no flag for at all:
+A few fields worth knowing about that the CLI has no flag for:
 
-- **`session.mode`** (`SessionMode.EAGER`/`LAZY`/`PER_CALL`): when the shared browser session is opened. `LAZY` (the default) opens nothing until the first call that needs it; `PER_CALL` opens and closes a fresh session for every call needing one, for full isolation under multi-tenant auth.
+- **`session.idle_timeout`, `session.max_sessions`, `session.capacity_tolerance`**: how long an unused browser session lives, how many browsers can be open at once, and how readily a busy one is shared before another is opened. These configure the server's [`Runtime`](../library/runtime.md). (`session.mode` does have a flag, `--session-mode eager|lazy|per_call`. `LAZY`, the default, opens nothing until the first call that needs it. `PER_CALL` opens and closes a fresh session for every call, for full isolation under multi-tenant auth.)
 - **`timeouts.per_tool`**: a per-tool override map, since a `glossary_sync` call over a large topic legitimately needs longer than a `glossary_get_term` call.
 - **`hooks`** (`Hooks(before_tool=..., after_tool=..., on_error=..., on_startup=..., on_shutdown=...)`): run your own code around every tool call or around server startup/shutdown, without subclassing anything.
 - **`logging`**: routes `slb_glossary`'s own logging (the same sinks/levels covered in [Saving, Output and Config Files](../cli/configuration.md)) for this server process specifically, separate from whatever logging your surrounding app already has configured.
@@ -161,7 +161,7 @@ config = slb_mcp.MCPConfig(
 slb mcp serve app.main:app
 ```
 
-`app.main:app` is a uvicorn-style import path. `app/main.py` containing a module-level `app = MCPApp(...)` (or a zero-argument factory function returning one). When `APP_PATH` is given this way, every flag except `--transport`/`--host`/`--port`/`--log-level` is ignored, since the app is already fully configured in code; passing one of the ignored flags alongside `APP_PATH` is an error, specifically so you can not accidentally think a flag did something it didn't.
+`app.main:app` is a uvicorn-style import path. `app/main.py` containing a module-level `app = MCPApp(...)` (or a zero-argument factory function returning one). When `APP_PATH` is given this way, the flags that would build a config (`--config`, `--tools`, `--source`, `--no-local`, `--no-live`, `--session-mode`, `--allow-write`, `--timeout`, the `--auth-*` and `--rate-limit-*` flags, `--require-scope` and `--language`) are rejected, since the app is already fully configured in code. That's on purpose, so you can't think a flag did something it didn't. `--transport`, `--host`, `--port` and the logging flags still apply.
 
 ## Logging
 
@@ -203,14 +203,7 @@ if __name__ == "__main__":
     mcp.run(transport="stdio")  # run the FastMCP instance directly, or app.run(), works too
 ```
 
-This is the escape hatch for anything `MCPConfig` does not model directly. Extra tools/resources/prompts unrelated to the glossary, `FastMCP` middleware, or mounting this server inside a larger ASGI app's own routing. `app.server()` is idempotent so you calling it again returns the same instance rather than rebuilding it, so mixing this with `app.run()`/`app.run_async()` afterward is safe.
-
----
-
-## Where to go from here
-
-For a worked example connecting this server to an actual agent framework, see [Building an Agent with Pydantic AI](pydantic-ai.md). For the full config surface, see [`slb_glossary.mcp`](../api/library.md#slb_glossarymcp). For a complete, runnable server built with several of these fields together, see [`examples/app.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/app.py) in the repository (`python -m examples.app`, or `slb mcp serve examples.app:app`).
-
+This is the escape hatch for anything `MCPConfig` does not model directly. Extra tools/resources/prompts unrelated to the glossary, `FastMCP` middleware, or mounting this server inside a larger ASGI app's own routing. `app.server()` is idempotent so calling it again returns the same instance rather than rebuilding it, so mixing this with `app.run()`/`app.run_async()` afterward is safe.
 
 ## Sharing a runtime with your own application
 
@@ -222,3 +215,9 @@ app = slb_mcp.MCPApp(config, runtime=runtime)
 ```
 
 The app starts a runtime you pass in, but does not close it: that stays with whoever created it. The `session` and `local` settings in `config` do not apply to a runtime you provide, since it carries its own.
+
+---
+
+## Where to go from here
+
+For a worked example connecting this server to an actual agent framework, see [Building an Agent with Pydantic AI](pydantic-ai.md). For the full config surface, see [`slb_glossary.mcp`](../api/library.md#slb_glossarymcp). For a complete, runnable server built with several of these fields together, see [`examples/app.py`](https://github.com/ti-oluwa/slb-glossary/blob/main/examples/app.py) in the repository (`python -m examples.app`, or `slb mcp serve examples.app:app`).

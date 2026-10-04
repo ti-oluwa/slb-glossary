@@ -16,16 +16,16 @@ Every capability in this library lives in one of three places, and they build on
 | `slb_glossary.local` | A SQLite database on your own disk | Instant | Nothing extra for lexical search; the `semantic` extra for semantic/hybrid search |
 | `slb_glossary.query` | Both of the above, combined | As fast as whichever one actually answers | Whichever of `live`/`local` the call in question needs |
 
-You can reach for any one of these on its own. The next three pages cover them in that order.
+You can reach for any one of these on its own. The next three pages cover them in that order. A fourth page, [Managing sessions in your app](runtime.md), covers `slb_glossary.Runtime`, which pools live browser sessions and the local database for apps that make many lookups.
 
-## Every function returns the same two shapes
+## Every lookup returns the same two shapes
 
-Regardless of which module you are calling, you'll only ever get one of two things back:
+Regardless of which module you are calling, a lookup gives you one of two things back:
 
 - **A `SearchResult`** (or `None`, if nothing was found), for a single-term lookup. `SearchResult` is a plain `NamedTuple` with fields for `term`, `definition`, `grammatical_label`, `topic`, `url`, `image`, `image_caption`, `related`, and `language`. See [The Data Model](../concepts/data-model.md#searchresult) for the full field list.
 - **A stream of `SearchResult`s**, for anything that can reasonably return more than one: a search, every term under a topic, several terms compared at once.
 
-`slb_glossary.query`'s functions wrap either shape in a `QueryResult`, adding provenance (`source`, `persisted`) alongside the value. See [Combined Search with slb_glossary.query](query.md).
+`slb_glossary.query`'s functions wrap either shape in a `QueryResult`, adding provenance (`source`, `persisted`) alongside the value. The exceptions are the `with_similar=True` lookups, which put a `SimilarResult` (an exact match plus close alternatives) inside the `QueryResult`, and `get_topics`, which returns topic names. See [Combined Search with slb_glossary.query](query.md).
 
 ## The whole surface, in one table
 
@@ -42,7 +42,7 @@ Beyond `slb_glossary.live.search` and `slb_glossary.local.search` themselves, `s
 | `get_topics(...)` | The glossary's list of topics. |
 | `get_terms_urls(...)` | Raw glossary URLs matching a query/topic, without fetching their content. |
 
-Every one of these accepts the same handful of shared keyword arguments: `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`), and `persist`. [Combined Search with slb_glossary.query](query.md) covers what each of those actually does, in depth, once, the individual functions' own docs mostly just point back to it.
+Every one of these accepts the same handful of shared keyword arguments: `db`, `session`, `source` (`Source.LOCAL`/`LIVE`/`AUTO`), and `persist`. [Combined Search with slb_glossary.query](query.md) covers what each of those does, in depth, once. The individual functions' own docs mostly just point back to it.
 
 ## Where to go from here
 
@@ -71,5 +71,13 @@ Every one of these accepts the same handful of shared keyword arguments: `db`, `
     `slb_glossary.query`: local-first, live-fallback, and every convenience function built on it.
 
     [Continue](query.md){ .md-button }
+
+- :material-server-network: **Managing Sessions**
+
+    ---
+
+    `slb_glossary.Runtime`: share browser sessions and the database across requests.
+
+    [Continue](runtime.md){ .md-button }
 
 </div>

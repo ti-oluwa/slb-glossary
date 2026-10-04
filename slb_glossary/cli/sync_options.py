@@ -65,7 +65,7 @@ def sync_filter_options(func: F) -> F:
         "-y",
         "assume_yes",
         is_flag=True,
-        help="Don't ask for confirmation before a heavy update (implied by --all).",
+        help="Don't ask for confirmation before a heavy update (--all asks first).",
     )(func)
     func = click.option(
         "--concurrency",

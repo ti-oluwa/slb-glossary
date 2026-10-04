@@ -97,7 +97,7 @@ print(config.output.show_related)  # False
 ```
 
 - **`config.session`** (`SessionOptions`): everything `slb_glossary.live.session()` takes as keyword arguments, `language`, `browser_type`, `headless`, `timeout`, `retry`, and so on.
-- **`config.local`** (`DatabaseOptions`): `data_dir`, `db_filename`, `prefer_local`, `sync_max_age_days`.
+- **`config.local`** (`DatabaseOptions`): `enabled`, `data_dir`, `db_filename`, `prefer_local`, `sync_max_age_days`.
 - **`config.output`** (`OutputOptions`): default save format, and which columns show by default (`show_url`, `show_topic`, `show_grammar`, `show_image`, `show_related`).
 
 ### Loading and saving
@@ -161,4 +161,6 @@ async with slb.local.database(data_dir / config.local.db_filename) as db:
 
 ## Where to go from here
 
-That's the whole library surface this documentation set out to cover: [Live Search](live-search.md), [Local Search and Cache](local-search.md), [Combined Search](query.md), and this page. For the concepts referenced throughout, what a `Session` actually is, how the three search modes differ, and the full `SearchResult` field set, see [Core Concepts](../concepts/sessions.md).
+If you want the session and the database both built from a `Config`, `slb_glossary.Runtime.from_config(config)` does that (see [Managing sessions in your app](runtime.md)).
+
+That's the whole library surface: [Live Search](live-search.md), [Local Search and Cache](local-search.md), [Combined Search](query.md), [Managing Sessions](runtime.md), and this page. For the concepts referenced throughout, what a `Session` actually is, how the three search modes differ, and the full `SearchResult` field set, see [Core Concepts](../concepts/sessions.md).

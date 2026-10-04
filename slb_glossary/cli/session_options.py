@@ -244,7 +244,7 @@ def session_options(func: F) -> F:
         click.option(
             "--settle-timeout",
             type=float,
-            default=8000,
+            default=3000,
             show_default=True,
             help="Milliseconds to wait for the results list to update after a search filter changes.",
         ),

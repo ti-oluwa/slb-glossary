@@ -1,8 +1,8 @@
 # Using the CLI
 
-For this CLI usage section, no programming knowledge is assumed. We just need to use the `slb` command fin a terminal. If you have not installed it yet, see [Installation](../getting-started/installation.md).
+For this CLI usage section, no programming knowledge is assumed. We just need to use the `slb` command in a terminal. If you have not installed it yet, see [Installation](../getting-started/installation.md).
 
-Every command below accepts `--help` for its own full option list, and every command also accepts `--tui`, which opens an interactive form for that command instead of you having to remember its flags:
+Every command below accepts `--help` for its own full option list. Most also accept `--tui` (it needs the `tui` extra), which opens an interactive form for that command instead of you having to remember its flags. `local` and `mcp` are the exceptions. You don't need to give the command its usual argument first:
 
 ```bash
 slb search --tui
@@ -28,15 +28,20 @@ slb search --tui
 | [`config`](configuration.md#the-config-command) | View, edit, and locate the config file. |
 | `mcp` | Run this glossary as an MCP server. See [Connecting an AI agent](../agent/mcp-server.md). |
 
-Every one of these, except `config`, `install`, and the plumbing under `local`, shares the same **source model**: read locally, live, or both. That's worth understanding once, since it explains a chunk of every other command's flags.
+The lookup commands (`search`, `define`, `compare`, `related`, `terms`, `random`, `topics list` and `urls list`) share the same **source model**: read locally, live, or both. That's worth understanding once, since it explains a chunk of their flags.
 
 ## The source model: `--local`, `--live`, `--auto`
 
-Every lookup command (`search`, `define`, `compare`, `related`, `terms`, `random`) accepts `--source local|live|auto`, or the equivalent shorthand flags `--local`, `--live`, `--auto`:
+Each of them accepts `--source local|live|auto`, or the equivalent shorthand flags `--local`, `--live`, `--auto`:
 
 - **`--local`** only reads the database on your own machine. Instant, no network, but only finds terms you've already cached there.
 - **`--live`** always visits the live glossary through the background browser. Slower, but always current, and does not need anything cached first.
-- **`--auto`** (the default) tries local first. For `search`, this means the local database's best match is scored, and used alone if it's confident enough (`--relevance-threshold`, default `0.45`); otherwise the live site is queried too, and its results are shown first, with the local ones filling in any remaining slots. For the exact-lookup commands (`define`, `compare`, `related`, `terms`, `random`), auto is simpler. It uses the cached copy if one exists, otherwise fetch live.
+- **`--auto`** (the default) tries local first. For `search`, this means the local database's best match is scored, and used alone if it's confident enough (`--relevance-threshold`, default `0.45`); otherwise the live site is queried too, and its results are shown first, with the local ones filling in any remaining slots. The other commands have a simpler rule, and it differs a little by command:
+
+    - `define` uses the local copy only if it has an **exact** match. Similar terms that happen to be cached don't count, so it goes live (see `--suggest` in [Searching](searching.md#define)).
+    - `compare` and `related` check the local copy for each term and go live when it has nothing.
+    - `terms` returns what the local database holds for the topic if it holds anything, and only goes live when it holds nothing. A topic you've only partly cached comes back partly. Use `--live`, or [`sync --topic`](sync.md#sync), to get the whole topic.
+    - `random` and `topics list` read locally if the database has anything (matching the topic, for `random`), and go live otherwise.
 
 ```bash
 slb search porosity --auto                    # the default: local first, live as a fallback
@@ -57,7 +62,7 @@ slb search "gas lift"          # --cache is on by default
 slb search "gas lift" --no-cache   # look it up live, but do not save it locally
 ```
 
-Live results are written incrementally, `--cache-batch-size` at a time (default `20`), rather than all at once at the end. That way, if a large fetch (e.g. `slb terms Drilling --limit 0`) gets interrupted partway through, whatever was already fetched is still saved, instead of the whole run being wasted. `--cache-on-error` (on by default) is what controls whether a failed fetch keeps its partial progress.
+Live results are written incrementally, `--cache-batch-size` at a time (default `20`), rather than all at once at the end. That way, if a large fetch (e.g. `slb terms Drilling`) gets interrupted partway through, whatever was already fetched is still saved, instead of the whole run being wasted. `--cache-on-error` (on by default) is what controls whether a failed fetch keeps its partial progress.
 
 ## Reading this section
 

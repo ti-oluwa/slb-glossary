@@ -20,7 +20,7 @@ A few specifics worth knowing:
 
 ## What opening a session actually does
 
-`session()`/`open_session()` launches the browser, opens a context (patchright's term for an isolated cookie/cache/storage sandbox, with the stealth patches applied to it), and then, unless you asked for [lazy initialization](../library/live-search.md#lazy-initialization), loads the glossary's topic list and total term count once, storing them on the returned `Session` for the rest of its lifetime (`session.topics`, `session.size`). Everything after that reuses this one browser and context rather than launching a fresh one per search.
+`session()`/`open_session()` launches the browser and opens a context (patchright's term for an isolated cookie/cache/storage sandbox, with the stealth patches applied to it). By default it stops there. This is [lazy initialization](../library/live-search.md#lazy-initialization): the first call that needs the glossary's topic list and total term count loads them, once, and stores them on the `Session` for the rest of its lifetime (`session.topics`, `session.size`). Pass `initialize=True` (or set `SLB_GLOSSARY_SESSION_AUTO_INITIALIZE=true`) to load them up front instead. Either way, everything after that reuses this one browser and context rather than launching a fresh one per search.
 
 ## The page pool: how concurrency actually works
 
@@ -50,6 +50,8 @@ async with slb.live.session(
     ...
 ```
 
+`RetryPolicy` delays are in **milliseconds** in Python, so `base_delay=1000` is one second. The CLI flags (`--retry-base-delay`) and the config file (`session.retry.base_delay`) take **seconds** instead.
+
 ## `RetryPolicy` elsewhere in the library
 
 `RetryPolicy` is not specific to session startup; it's a general-purpose retry configuration used in a few other places too, and available for your own code as well:
@@ -69,6 +71,20 @@ result = await retry(flaky_call, policy=RetryPolicy(attempts=3, base_delay=500))
 ```
 
 `retry` also accepts `until`, a callable checked against a successful result before deciding the call actually succeeded, e.g. `until=lambda r: r is not None`, for retrying a call that returns a falsy, but not erroring result you'd still like another attempt at.
+
+## Sharing sessions across requests
+
+A `Session` is a whole browser, so a service that handles many requests shouldn't open one per request. `slb_glossary.Runtime` manages that for you: it keeps one pool of sessions per language, shares them across concurrent calls, opens another browser only when the existing ones are busy (up to `max_sessions`), closes idle ones, and replaces any whose browser has crashed. It also owns the shared local database.
+
+```python
+async with slb.Runtime(max_sessions=2) as runtime:
+    async with runtime.session("en") as session:
+        ...
+```
+
+See [Managing sessions in your app](../library/runtime.md).
+
+---
 
 ## Where to go from here
 

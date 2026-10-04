@@ -7,7 +7,7 @@ This began as a hobby project to help with SPE PetroBowl prep (see [Credits](#cr
 > [!IMPORTANT]
 > This package is intended for research or instructional use only. See [Attribution and disclaimer](#attribution-and-disclaimer).
 
-This README is a quick tour, not a reference. For the full documentation, a complete CLI reference, the Python API walked through page by page, and the concepts behind search modes/sessions/the data model - see **[ti-oluwa.github.io/slb-glossary](https://ti-oluwa.github.io/slb-glossary/)**.
+This README is a quick tour, not a reference. For the full documentation, a complete CLI reference, the Python API walked through page by page, and the concepts behind search modes/sessions/the data model, see **[ti-oluwa.github.io/slb-glossary](https://ti-oluwa.github.io/slb-glossary/)**.
 
 ## Table of contents
 

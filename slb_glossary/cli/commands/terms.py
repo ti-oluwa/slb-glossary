@@ -30,6 +30,8 @@ def _validate_topic(
     ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
 ) -> tuple[str, ...]:
     """Validate that the user provided a non-empty search topic."""
+    if ctx.params.get("use_tui"):
+        return value  # the TUI collects this itself
     if not value or not any(value):
         raise click.BadParameter("Missing topic. Provide a topic name to look up in the glossary.")
     return value
@@ -77,6 +79,7 @@ def _validate_topic(
     "--tui",
     "use_tui",
     is_flag=True,
+    is_eager=True,
     help="Open this command in the interactive TUI instead of running it directly.",
 )
 @click.pass_context

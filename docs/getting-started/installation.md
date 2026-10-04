@@ -8,7 +8,7 @@ Every path through this documentation passes through this page once. If you only
 
 - **Python 3.10 or newer.** `slb-glossary` uses modern typing syntax (`str | None`) throughout and some of the libraries it depends on only support this version upwards.
 - **About 300MB of free disk space**, for the background browser build. See [below](#installing-the-browser-build) for exactly why.
-- **A network connection**, to install the browser engine needed to look up any given term which are not already cache locally. You can sync the glossary to your local machine though, after which the [local cache](../library/local-search.md#1-cache-live-results-as-you-go) can serve lookups without an internet connection. Searches still work offline as long as the term has been cached, else its just returns no results. See [Syncing the glossary](../cli/sync.md) for details.
+- **A network connection**, to download the browser and to look up any term that isn't cached locally yet. Once a term is cached, or you've [synced the glossary](../cli/sync.md), the [local cache](../library/local-search.md#1-cache-live-results-as-you-go) serves it without a connection. Offline, a term that isn't cached just returns no results.
 
 No account, API key, or paid access to anything is needed. The glossary itself is free to browse.
 
@@ -55,10 +55,11 @@ Any of the methods below give you two identical commands: `slb-glossary` and the
 
 === "Windows (no WSL)"
 
-    Install `uv` first, then use it to install the tool:
+    Install `uv` first, then open a new terminal and use it to install the tool:
 
     ```powershell
-    powershell -c "irm https://astral.sh/uv/install.ps1 | iex; uv tool install slb-glossary"
+    powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    uv tool install "slb-glossary[all]"
     ```
 
 Once installed, jump to [Installing the browser build](#installing-the-browser-build). You may decide to skip [Installing the library](#installing-the-library) if you are not writing Python code against it.
@@ -96,9 +97,9 @@ The base install covers live search (`slb_glossary.live`) and local search (`slb
 | *(none)* | Live and local search, `slb_glossary.query`, JSON config files. | `uv add slb-glossary` |
 | `xlsx` | Saving results as `.xlsx`, and importing `.xlsx`/`.xlsm` files into the local database. | `uv add "slb-glossary[xlsx]"` |
 | `config` | TOML and YAML config files, in addition to JSON. See [Configuration](../cli/configuration.md). | `uv add "slb-glossary[config]"` |
-| `tui` | The interactive `--tui` mode available on every CLI command. | `uv add "slb-glossary[tui]"` |
+| `tui` | The interactive `--tui` mode on most CLI commands. | `uv add "slb-glossary[tui]"` |
 | `mcp` | The MCP server (`slb mcp serve`). See [Connecting an AI agent](../agent/mcp-server.md). | `uv add "slb-glossary[mcp]"` |
-| `semantic` | Semantic and hybrid search on the local database: matching a paraphrase, not just an exact word. See [Search modes](../concepts/search-modes.md). | `uv add "slb-glossary[semantic]"` |
+| `semantic` | Semantic and hybrid search on the local database: matching a paraphrase, not just an exact word. The first use downloads a small embedding model. See [Search modes](../concepts/search-modes.md). | `uv add "slb-glossary[semantic]"` |
 | `all` | Every extra above, in one install. | `uv add "slb-glossary[all]"` |
 
 !!! tip "Not sure yet? Install `all`"
@@ -130,7 +131,7 @@ This is a one-time step per machine. It downloads to Playwright's own cache dire
     slb install chromium --retries 5        # retry a failed download step more times, with backoff
     ```
 
-    `--timeout` is in milliseconds, matching every other timeout value across this project's CLI and library API.
+    `--timeout` is in milliseconds, like the session `--timeout` flag on the lookup commands.
 
 ---
 
@@ -142,7 +143,7 @@ If you installed the CLI:
 slb --help
 ```
 
-You should see a banner and a list of commands: `search`, `define`, `terms`, `random`, `sync`, `install`, and (if you installed the `mcp` extra) `mcp`.
+You should see a banner and a list of commands: `search`, `define`, `compare`, `related`, `terms`, `random`, `topics`, `urls`, `sync`, `install`, `local`, `config`, and `mcp` (which needs the `mcp` extra).
 
 If you installed the library:
 

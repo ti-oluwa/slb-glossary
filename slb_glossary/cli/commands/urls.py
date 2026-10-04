@@ -91,6 +91,7 @@ def urls() -> None:
     "--tui",
     "use_tui",
     is_flag=True,
+    is_eager=True,
     help="Open this command in the interactive TUI instead of running it directly.",
 )
 @click.pass_context
@@ -193,6 +194,8 @@ def _validate_url(
     ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
 ) -> tuple[str, ...]:
     """Validate that the user provided a non-empty URL argument."""
+    if ctx.params.get("use_tui"):
+        return value  # the TUI collects this itself
     if not value or not any(value):
         raise click.BadParameter("Missing URL argument.")
     return value
@@ -214,6 +217,7 @@ def _validate_url(
     "--tui",
     "use_tui",
     is_flag=True,
+    is_eager=True,
     help="Open this command in the interactive TUI instead of running it directly.",
 )
 @click.pass_context

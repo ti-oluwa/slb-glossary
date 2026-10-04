@@ -17,23 +17,17 @@ Two different one-time costs get mistaken for each other:
 
 If a search still hangs or times out after both of those, a slow or restrictive network is the next thing to check, raise `--timeout`/`session()`'s `timeout`, and see [Sessions and the Browser](concepts/sessions.md#retrying-a-flaky-first-load) for the retry settings that govern a flaky initial page load specifically.
 
-## `slb config show` fails with a TOML error
+## `slb config` says it needs the `tomlkit` package
 
 ```text
-Error: Unable to convert an object of <class 'NoneType'> to a TOML item
+Error: Reading a .toml config requires the 'tomlkit' package. Install it with `pip install slb-glossary[config]`.
 ```
 
-This is a real issue in the current version: `config show`'s documented default format is TOML, but it can raise this error when a setting is unset (`None`), since TOML has no native null and the unset fields aren't stripped before serializing. `--format json` and `--format yaml` do not hit this:
-
-```bash
-slb config show --format json
-```
-
-`config init`/`config edit` aren't affected, since they write a config's actual (non-`None`) defaults rather than the full sparse effective config `show` assembles.
+The global config file is TOML, and reading or writing TOML needs the `config` extra (`pip install "slb-glossary[config]"`). JSON works with no extra, so `slb config show --format json` runs on a base install. See [Saving, Output and Config Files](cli/configuration.md#the-config-command).
 
 ## Do I need the `semantic` extra?
 
-Only for `--mode semantic`/`--mode hybrid` (CLI) or `mode="semantic"`/`"hybrid"` (library), and only on the local database, live search has no semantic mode at all. Plain lexical search (the default everywhere) needs nothing beyond the base install. See [Search Modes](concepts/search-modes.md) for what the extra actually gets you, and [`local embed`](cli/sync.md#embedding-for-semantichybrid-search)/`slb_glossary.local.embed_terms` for the one-time step semantic/hybrid search also needs beyond just installing the extra.
+Only for `--mode semantic`/`--mode hybrid` (CLI) or `mode="semantic"`/`"hybrid"` (library), and only on the local database. Live search has no semantic mode at all. Plain lexical search (the default everywhere) needs nothing beyond the base install. See [Search Modes](concepts/search-modes.md) for what the extra actually gets you, and [`local embed`](cli/sync.md#embedding-for-semantichybrid-search)/`slb_glossary.local.embed_terms` for the one-time step semantic/hybrid search also needs beyond just installing the extra.
 
 ## Why does `search` sometimes return more results than my `--limit`?
 
@@ -41,7 +35,7 @@ Only for `--mode semantic`/`--mode hybrid` (CLI) or `mode="semantic"`/`"hybrid"`
 
 ## Can I use a browser other than Chromium?
 
-Yes, `--browser-type firefox`/`webkit` (CLI) or `browser_type="firefox"`/`"webkit"` (library). Chromium is the default and the one this documentation's examples assume. Firefox/WebKit sessions will run just as fine either way. See [Sessions and the Browser](concepts/sessions.md#why-patchright-not-plain-playwright).
+Yes, `--browser-type firefox`/`webkit` (CLI) or `browser_type="firefox"`/`"webkit"` (library). Chromium is the default and the one this documentation's examples assume. Firefox and WebKit sessions work, but the stealth patches are tuned for Chromium and haven't been checked against the site's bot detection, so Chromium is the safest choice. See [Sessions and the Browser](concepts/sessions.md#why-patchright-not-plain-playwright).
 
 ## `BrowserError: Failed to launch the glossary browser session`
 
@@ -56,32 +50,32 @@ This wraps whatever Playwright/patchright actually failed on; the detail is usua
 Session is not initialized and `auto_initialize=False`.
 ```
 
-You called a search function on a `Session` that hasn't loaded its topics/size yet. Either call `await session.initialize()` first, open it with `open_session(..., initialize=True)` (the default, so this usually only happens if you built a `Session` some other way), or pass `auto_initialize=True` to the call itself to let it initialize lazily.
+You passed `auto_initialize=False` to a search function, on a `Session` that hasn't loaded its topics/size yet. Sessions are lazy by default and don't load them when they open, so you have three ways out: call `await session.initialize()` first, open the session with `initialize=True`, or leave `auto_initialize` at its default (`True`) so the call initializes the session itself.
 
 ## `NetworkError: Could not reach the glossary at ...`
 
-Raised when `session.initialize()` (or a lazy `auto_initialize=True` call) can't load the glossary's homepage at all - a real connectivity problem, a very slow network, or the site being down, not a bug in a specific search. Check the URL is reachable in a normal browser, then raise `timeout`/`--timeout` and see [Retrying a flaky first load](concepts/sessions.md#retrying-a-flaky-first-load).
+Raised when `session.initialize()` (or a lazy `auto_initialize=True` call) can't load the glossary's homepage at all. That means a real connectivity problem, a very slow network, or the site being down, not a bug in a specific search. Check the URL is reachable in a normal browser, then raise `timeout`/`--timeout` and see [Retrying a flaky first load](concepts/sessions.md#retrying-a-flaky-first-load).
 
 ## `EmbeddingError` when using `--mode semantic`/`hybrid`
 
 Two different messages, two different fixes:
 
-- **`Semantic search needs the 'model2vec' package...`** - install the extra: `pip install slb-glossary[semantic]`.
-- **`Embedding model '...' produces N-dimensional vectors, but constants.embedding_dim is M`** - you've changed `SLB_GLOSSARY_EMBEDDING_MODEL` to a model with a different output size without also updating `SLB_GLOSSARY_EMBEDDING_DIM`. Set them consistently, or leave both at their defaults.
+- ``Semantic search needs the `model2vec` package...``: install the extra with `pip install slb-glossary[semantic]`.
+- **`Embedding model '...' produces N-dimensional vectors, but constants.embedding_dim is M`**: you've changed `SLB_GLOSSARY_EMBEDDING_MODEL` to a model with a different output size without also updating `SLB_GLOSSARY_EMBEDDING_DIM`. Set them consistently, or leave both at their defaults.
 
-Either way, this is a local-database-only error - `--mode semantic`/`hybrid` doesn't exist for live search at all, so hitting this means you're already on the right path, just missing a step. See [Do I need the semantic extra?](#do-i-need-the-semantic-extra) above.
+Either way, this is a local-database-only error. `--mode semantic`/`hybrid` doesn't exist for live search at all, so hitting this means you're already on the right path, just missing a step. See [Do I need the semantic extra?](#do-i-need-the-semantic-extra) above.
 
 ## `DatabaseError` about `sqlite-vec` or FTS5
 
-- **`Semantic search needs the 'sqlite-vec' package...`** - same fix as the `model2vec` case above: `pip install slb-glossary[semantic]`.
-- **`Could not load the 'sqlite-vec' SQLite extension...`** - the `sqlite-vec` package is installed, but your Python's SQLite build has extension loading disabled. This is a Python/OS packaging issue, not something `slb-glossary` can work around; a build from python.org or your OS's normal package manager usually has it enabled, some minimal/hardened builds don't.
-- **`The installed SQLite build has no FTS5 extension...`** - `slb_glossary.local`'s ordinary lexical search needs FTS5, which is on by default in nearly every modern SQLite build. If you're seeing this, you're likely on a custom-built Python; rebuilding against a stock SQLite (or using a standard python.org/Homebrew/apt build) resolves it.
+- ``Semantic search needs the `sqlite-vec` package...``: same fix as the `model2vec` case above, `pip install slb-glossary[semantic]`.
+- ``Could not load the `sqlite-vec` SQLite extension...``: the `sqlite-vec` package is installed, but your Python's SQLite build has extension loading disabled. This is a Python/OS packaging issue, not something `slb-glossary` can work around; a build from python.org or your OS's normal package manager usually has it enabled, some minimal/hardened builds don't.
+- **`The installed SQLite build has no FTS5 extension...`**: `slb_glossary.local`'s ordinary lexical search needs FTS5, which is on by default in nearly every modern SQLite build. If you're seeing this, you're likely on a custom-built Python; rebuilding against a stock SQLite (or using a standard python.org/Homebrew/apt build) resolves it.
 
 ## `QueryError: needs at least one of db or session`
 
 You called a `slb_glossary.query` function (`search`, `get_term`, etc.) with neither `db` nor `session`. At least one is required so there's something to actually query. Pass a `Database` (for `source=Source.LOCAL`/`AUTO`), a `Session` (for `source=Source.LIVE`/`AUTO`), or both.
 
-A related one: **`source=Source.LOCAL requires db`**/**`source=Source.LIVE requires session`** - you asked for a specific source but didn't pass what it needs. `source=Source.AUTO` (the default) picks whichever of `db`/`session` you gave it, so this only comes up when you've pinned the source explicitly.
+A related one: **`source=Source.LOCAL requires db`**/**`source=Source.LIVE requires session`**. You asked for a specific source but didn't pass what it needs. `source=Source.AUTO` (the default) picks whichever of `db`/`session` you gave it, so this only comes up when you've pinned the source explicitly.
 
 ## `QueryError` about a session's language not matching
 
@@ -89,7 +83,7 @@ A related one: **`source=Source.LOCAL requires db`**/**`source=Source.LIVE requi
 Requested language 'es' does not match this session's own language 'en'.
 ```
 
-A `Session` is opened for one language edition (`Language.ENGLISH` by default) and stays that way for its whole lifetime; you can't search a different language through it mid-session. Open a second `Session` with `language="es"` instead - see [Sessions and the Browser](concepts/sessions.md).
+A `Session` is opened for one language edition (`Language.ENGLISH` by default) and stays that way for its whole lifetime, so you can't search a different language through it mid-session. Open a second `Session` with `language="es"` instead (see [Sessions and the Browser](concepts/sessions.md)), or let a [`Runtime`](library/runtime.md) manage one per language.
 
 ## `ParsingError`
 
@@ -97,7 +91,15 @@ A `Session` is opened for one language edition (`Language.ENGLISH` by default) a
 ... did not contain the markup a parser expected.
 ```
 
-This means the glossary site's HTML structure no longer matches what `slb_glossary`'s parsers look for - most likely the site changed something, not a one-off fluke. It's worth an issue report with the term/URL that triggered it. In the meantime, `--mode lexical`/`local search` against whatever's already cached still works fine; this only affects fetching new pages live.
+This means the glossary site's HTML structure no longer matches what `slb_glossary`'s parsers look for. Most likely the site changed something, not a one-off fluke. It's worth an issue report with the term/URL that triggered it. In the meantime, `--mode lexical`/`local search` against whatever's already cached still works fine; this only affects fetching new pages live.
+
+## How do I share browser sessions across requests in my app?
+
+Don't open a `Session` per request, since each one is a whole browser. Use `slb_glossary.Runtime`, which pools sessions per language and shares the local database. See [Managing sessions in your app](library/runtime.md).
+
+## `RuntimeClosedError`, `ResourceDisabledError` or `UnknownLanguageError` from a `Runtime`
+
+These all come from `slb_glossary.Runtime` and subclass `ResourceError` (import them from `slb_glossary.errors`). `RuntimeClosedError` means you used a runtime after `close()`. `ResourceDisabledError` means you asked for something it was configured not to provide, for example live access on a runtime built with `live_enabled=False`. `UnknownLanguageError` means the `language` isn't `en` or `es`. The MCP server reports them to clients as `MCPError`.
 
 ## The MCP server won't start: `needs the 'mcp' extra`
 
@@ -105,7 +107,7 @@ This means the glossary site's HTML structure no longer matches what `slb_glossa
 
 ## Am I going to get rate-limited or blocked?
 
-Nothing in `slb_glossary` throttles your requests for you - that's on you. Keep concurrency modest (see [Sessions and the Browser](concepts/sessions.md) on `max_pages`), avoid tight retry loops on failure, and prefer the local cache (`--cache`, `sync`, `local import`) over repeated live lookups of the same terms. Hammering the site is the fastest way to get treated as a bot regardless of patchright's stealth patches, which reduce automation *detection*, not request *volume*.
+Nothing in `slb_glossary` throttles your own requests for you, that's on you. (The MCP server can rate-limit the agents calling *it*, see [Connecting an AI agent](agent/mcp-server.md).) Keep concurrency modest (see [Sessions and the Browser](concepts/sessions.md) on `max_pages`), avoid tight retry loops on failure, and prefer the local cache (`--cache`, `sync`, `local import`) over repeated live lookups of the same terms. Hammering the site is the fastest way to get treated as a bot regardless of patchright's stealth patches, which reduce automation *detection*, not request *volume*.
 
 ## Something else is wrong
 
