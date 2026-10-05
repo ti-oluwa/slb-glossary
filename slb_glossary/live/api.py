@@ -317,7 +317,7 @@ async def get_terms_urls(
 
             if max_tabs is None:
                 max_tabs = math.ceil(total_terms / session.terms_per_tab)
-                logger.debug("Search matched %d terms across %d tabs", total_terms, max_tabs)
+                logger.debug("Search matched %d terms across %d tab(s)", total_terms, max_tabs)
 
             tab_started_at = time.monotonic()
             skipped_this_tab = 0
