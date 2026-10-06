@@ -189,7 +189,10 @@ class RuntimeStats:
     """Whether the shared local database is currently open."""
 
     started: bool
+    """Whether the runtime has started."""
+
     closed: bool
+    """Whether the runtime has been closed."""
 
     @property
     def open_sessions(self) -> int:
@@ -221,7 +224,7 @@ class SessionPool:
     When that budget is spent, a caller shares the least-loaded session already in
     the pool rather than waiting (there is no benefit in blocking until some session
     is reaped, since the existing ones are perfectly usable; they just look full). Only a
-    caller that finds the pool *empty* waits for a slot, after first asking
+    caller that finds the pool empty waits for a slot, after first asking
     `reclaim` (if given) to free up sessions that are idle elsewhere.
 
     Checkout/release/reap track each session's own use-count and idle
@@ -464,7 +467,7 @@ class SessionPool:
         """
         Take a browser slot from the shared semaphore if one is free right now.
 
-        Never blocks: with a free slot `Semaphore.acquire` returns without suspending,
+        Never blocks. With a free slot `Semaphore.acquire` returns without suspending,
         so the `locked()` check and the acquire can not be interleaved with another task.
         """
         if self._semaphore.locked():
@@ -726,6 +729,7 @@ class SessionPool:
         """
         if self._closed:
             return 0
+    
         # Detach the sessions to close (under `_lock`) before actually
         # closing them (outside `_lock`), so slow `close_session` calls
         # can't block a concurrent `acquire`/`release`/`warm` on this pool.
@@ -810,6 +814,8 @@ class Runtime:
         capacity_tolerance: int = 1,
     ) -> None:
         """
+        Initialize runtime.
+        
         :param name: Human-readable name used in logs and task names.
         :param session_options: Options every live session is opened with, apart from its
             `language`, which is chosen per call (defaulting to `session_options.language`).

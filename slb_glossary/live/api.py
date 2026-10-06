@@ -269,7 +269,7 @@ async def get_terms_urls(
     else:
         # `base_page` is either unavailable (closed, or this session was
         # never initialized with one) or already checked out by a
-        # concurrent `get_terms_urls` call - either way, get a dedicated
+        # concurrent `get_terms_urls` call, either way we get a dedicated
         # page of our own and pay the one-time warm-up cost ourselves
         # rather than racing another call over `base_page`'s navigation.
         page = await session.new_page()
@@ -281,7 +281,7 @@ async def get_terms_urls(
         # screen loads (that's what populates the facet panel), so the page
         # always has some results-panel state to diff a filtered search
         # against, so we read it now rather than starting from an empty baseline.
-        # An empty baseline previously meant "nothing to wait for", so the
+        # An empty baseline meant that there is nothing to wait for, so the
         # very first search of every session read that pre-filter panel
         # before the site's JS had applied the query. Which will look exactly
         # like every search returning the same (default) results.
@@ -323,13 +323,13 @@ async def get_terms_urls(
 
             tab_started_at = time.monotonic()
             skipped_this_tab = 0
-            for href in links:
-                if excluded and href in excluded:
+            for link in links:
+                if excluded and link in excluded:
                     skipped += 1
                     skipped_this_tab += 1
                     continue
 
-                yield href
+                yield link
                 yielded += 1
                 if limit is not None and yielded >= limit:
                     return
@@ -629,7 +629,7 @@ async def get_results_from_urls(
                 yield url
         finally:
             # `urls` may hold a page of its own while it pages (`get_terms_urls`). Close
-            # it now, not whenever the garbage collector gets to it.
+            # it now, instead of waiting for it to be garbage collected.
             await aclose_quietly(source, "url source")
 
     url_iter = filtered_urls()
@@ -743,6 +743,7 @@ async def get_results_from_urls(
             if item is None:
                 finished_workers += 1
                 continue
+
             if isinstance(item, BaseException):
                 raise item
             yielded += 1
@@ -834,7 +835,7 @@ async def search(
         logger=logger,
         label=f"search({query!r})",
     )
-    # Closing `results` closes everything under it (workers, their pages, the URL
+    # Closing `results` should close everything under it (workers, their pages, the URL
     # source's page) if the consumer stops early or is cancelled, instead of leaving
     # all of that open until garbage collection.
     async with contextlib.aclosing(results):
@@ -916,9 +917,6 @@ async def get_terms_on(
         logger=logger,
         label=f"get_terms_on({topic!r})",
     )
-    # Closing `results` closes everything under it (workers, their pages, the URL
-    # source's page) if the consumer stops early or is cancelled, instead of leaving
-    # all of that open until garbage collection.
     async with contextlib.aclosing(results):
         async for result in results:
             count += 1
