@@ -8,6 +8,7 @@ import typing
 import pytest
 
 from slb_glossary.live import runtime as live_runtime
+from slb_glossary.live.types import Pages
 from slb_glossary.local import vector
 from slb_glossary.retries import DEFAULT_RETRY_POLICY, RetryPolicy
 from slb_glossary.types import Language, SearchResult
@@ -184,6 +185,47 @@ class MockSession:
 
     async def new_page(self) -> MockPage:
         return MockPage()
+
+
+class MockContext:
+    """Stands in for `BrowserContext`: just `new_page()`, returning `MockPage`s."""
+
+    def __init__(self) -> None:
+        self.created: list[MockPage] = []
+        self.next_fail_close = False
+
+    async def new_page(self) -> MockPage:
+        page = MockPage(fail_close=self.next_fail_close)
+        self.next_fail_close = False
+        self.created.append(page)
+        return page
+
+
+class MockPooledSession:
+    """
+    Like `MockSession`, but `new_page()` draws from a real `live.Pages` pool on a
+    `MockContext`, so a test can exhaust the pool and see what happens.
+    """
+
+    def __init__(self, *, max_pages: int = 6, acquire_timeout: float | None = None) -> None:
+        self.language = Language.ENGLISH
+        self.topics: dict[str, int] = {}
+        self.retry = DEFAULT_RETRY_POLICY
+        self.initialized = True
+        self.context = MockContext()
+        self.pages = Pages(
+            context=self.context,  # type: ignore[arg-type]
+            max_size=max_pages,
+            acquire_timeout=acquire_timeout,
+        )
+        self.base_page: MockPage | None = None
+
+    async def initialize(self) -> None:
+        self.initialized = True
+
+    async def new_page(self) -> MockPage:
+        handle = await self.pages.get()
+        return handle.page  # type: ignore[return-value]
 
 
 class MockLauncher:

@@ -36,6 +36,7 @@ SESSION_PARAM_TO_CONFIG_KEY: dict[str, str] = {
     "timeout": "session.timeout",
     "terms_per_tab": "session.terms_per_tab",
     "max_pages": "session.max_pages",
+    "page_acquire_timeout": "session.page_acquire_timeout",
     "settle_timeout": "session.settle_timeout",
     "poll_interval": "session.poll_interval",
     "executable_path": "session.executable_path",
@@ -242,6 +243,17 @@ def session_options(func: F) -> F:
             ),
         ),
         click.option(
+            "--page-acquire-timeout",
+            type=float,
+            default=60_000,
+            show_default=True,
+            help=(
+                "Milliseconds to wait for a free browser page before failing with "
+                "an error instead of hanging (0 waits forever). Hitting this usually "
+                "means --concurrency is too high for --max-pages."
+            ),
+        ),
+        click.option(
             "--settle-timeout",
             type=float,
             default=3000,
@@ -431,8 +443,8 @@ def resolve_session_kwargs(
 
     If the command has an explicit `--concurrency` (e.g. `search`, `terms`,
     `sync`/`update`) and the user typed it without also typing `--max-pages`,
-    `max_pages` is bumped up to cover it (`concurrency + 1`, the extra one
-    for a search page paging through tabs alongside the workers) rather than
+    `max_pages` is bumped up to cover it (`concurrency + 2`: the workers, a search
+    page paging through tabs alongside them, and the session's own held base page) rather than
     leaving it at whatever `--config`/the built-in default says. An
     explicit `--max-pages` always wins over this; with neither given,
     both stay at their config/default values untouched.
@@ -463,7 +475,7 @@ def resolve_session_kwargs(
         and ctx.get_parameter_source("concurrency") == click.core.ParameterSource.COMMANDLINE
         and ctx.get_parameter_source("max_pages") != click.core.ParameterSource.COMMANDLINE
     ):
-        needed = (params["concurrency"] or 1) + 1
+        needed = (params["concurrency"] or 1) + 2
         if needed > resolved.session.max_pages:
             logger.debug(
                 "Bumping `session.max_pages` %d -> %d to cover --concurrency=%r",

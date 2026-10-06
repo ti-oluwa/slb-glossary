@@ -254,6 +254,7 @@ async def open_session(
     timeout: float = 60_000,
     terms_per_tab: int = 12,
     max_pages: int = 6,
+    page_acquire_timeout: float | None = None,
     retry: RetryPolicy | None = None,
     settle_timeout: float = 3000,
     poll_interval: float = 300,
@@ -289,6 +290,9 @@ async def open_session(
         will have open at once (see `Session.max_pages`). Raise this if you
         plan to call search functions with a `concurrency` higher than the
         default covers.
+    :param page_acquire_timeout: Milliseconds to wait for a free page (see
+        `max_pages`) before raising `PagePoolTimeoutError`. `0` waits forever.
+        Defaults to `constants.page_acquire_timeout`.
     :param retry: Policy for retrying the initial topic-list load if the
         glossary's search widget briefly renders empty. Also stored on the
         returned session for search functions to reuse.
@@ -407,6 +411,11 @@ async def open_session(
             browser_type=browser_type,
             terms_per_tab=terms_per_tab,
             max_pages=max_pages,
+            page_acquire_timeout=(
+                page_acquire_timeout
+                if page_acquire_timeout is not None
+                else constants.page_acquire_timeout or None
+            ),
             blocked_resources=blocked_resources,
             retry=retry if retry is not None else DEFAULT_RETRY_POLICY,
             timeout=timeout,
@@ -479,6 +488,7 @@ async def session(
     timeout: float = 60_000,
     terms_per_tab: int = 12,
     max_pages: int = 6,
+    page_acquire_timeout: float | None = None,
     retry: RetryPolicy | None = None,
     settle_timeout: float = 3000,
     poll_interval: float = 300,
@@ -512,6 +522,8 @@ async def session(
     :param terms_per_tab: Number of results returned per glossary results page.
     :param max_pages: Maximum number of browser pages the session will have
         open at once. See `open_session`.
+    :param page_acquire_timeout: Milliseconds to wait for a free page before raising
+        `PagePoolTimeoutError`. See `open_session`.
     :param retry: Policy used when retrying the initial topic-list load.
     :param settle_timeout: Milliseconds to wait for the results list to settle.
     :param poll_interval: Poll interval in milliseconds, used while waiting for results updates.
@@ -549,6 +561,7 @@ async def session(
         timeout=timeout,
         terms_per_tab=terms_per_tab,
         max_pages=max_pages,
+        page_acquire_timeout=page_acquire_timeout,
         retry=retry,
         settle_timeout=settle_timeout,
         poll_interval=poll_interval,

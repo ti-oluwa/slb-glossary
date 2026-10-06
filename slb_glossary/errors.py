@@ -101,3 +101,14 @@ class ResourceDisabledError(ResourceError):
 
 class UnknownLanguageError(ResourceError, ValueError):
     """Raised when a `slb_glossary.live.Runtime` is asked for a glossary language that doesn't exist."""
+
+
+class PagePoolTimeoutError(BrowserError, TimeoutError):
+    """
+    Raised when a `slb_glossary.live.Pages` pool has no free page within its
+    `acquire_timeout`.
+
+    That usually means every page is held by something that is itself waiting for
+    another page (too much `concurrency` for `max_pages`), or a page was opened and
+    never closed.
+    """

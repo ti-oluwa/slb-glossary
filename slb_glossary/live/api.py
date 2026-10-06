@@ -1,6 +1,7 @@
 """Live search API for the glossary."""
 
 import asyncio
+import contextlib
 import logging
 import math
 import time
@@ -26,10 +27,11 @@ from slb_glossary.live.urls import build_pager_query, build_search_url
 from slb_glossary.retries import retry
 from slb_glossary.types import RelatedTerm, SearchResult
 from slb_glossary.utils import (
+    aclose_quietly,
     as_async_iterator,
     get_topic_match,
     log_timed_yields,
-    safe_close,
+    shielded_close,
     split_exclude,
 )
 
@@ -348,7 +350,7 @@ async def get_terms_urls(
             tab += 1
     finally:
         if owns_page and page is not None:
-            await safe_close(page.close(), "page")
+            await shielded_close(page.close(), "page")
         else:
             session.base_page_in_use = False
         elapsed = time.monotonic() - started_at
@@ -513,7 +515,37 @@ async def get_results_from_url(
         )
     finally:
         if owns_page:
-            await safe_close(current_page.close(), "page")
+            await shielded_close(current_page.close(), "page")
+
+
+def count_usable_workers(
+    session: Session, urls: typing.Iterable[str] | typing.AsyncIterable[str], concurrency: int
+) -> int:
+    """
+    Counts how many concurrent workers `session`'s page pool can actually feed right now.
+
+    `concurrency` is a wish. The pool is what is available, and a worker that waits for a
+    page the pool can't give would wait forever, so ask for no more than is free, leaving
+    one page for `urls` when it is an async iterable (such as `get_terms_urls`, which holds
+    a page of its own while it pages through results). Always at least one.
+    """
+    pool = getattr(session, "pages", None)
+    if pool is None:
+        return concurrency
+
+    reserved = 1 if isinstance(urls, typing.AsyncIterable) else 0
+    workers: int = max(1, min(concurrency, pool.max_size - pool.size - reserved))
+    if workers < concurrency:
+        logger.warning(
+            "Using %d worker(s) instead of the requested concurrency=%d: the session's page "
+            "pool has %d free page(s) of max_pages=%d%s. Raise `max_pages` to use more.",
+            workers,
+            concurrency,
+            max(pool.max_size - pool.size, 0),
+            pool.max_size,
+            ", and one is kept for paging through results" if reserved else "",
+        )
+    return workers
 
 
 async def get_results_from_urls(
@@ -529,19 +561,21 @@ async def get_results_from_urls(
     """
     Fetch term detail pages for `urls` and yield their definitions.
 
-    With `concurrency` > 1, `concurrency` worker pages are opened on
+    With `concurrency` > 1, up to `concurrency` worker pages are opened on
     `session` (via `session.new_page()`, so they share cookies/auth/stealth
     patches with the rest of the session) so several term pages can be
-    fetched in parallel. Each worker reuses its own page across every URL
-    it handles rather than opening a fresh one per URL. Results are still
+    fetched in parallel. A worker opens its page only once it has a URL to fetch,
+    and reuses it across every URL it handles rather than opening a fresh one per URL.
+    If the session's page pool can't supply `concurrency` workers (plus one for `urls`,
+    if it's a still-paging generator), fewer are used and a warning is logged, rather
+    than waiting forever for pages that never free up. Results are still
     yielded one at a time as they become available, not collected into
     batches, though not necessarily in the same order as `urls` when
     running concurrently.
 
-    :param session: An open glossary session. `session.max_pages` must be
-        large enough to cover `concurrency` worker pages, plus one more if
-        `urls` is a still-paging `get_terms_urls` generator holding its
-        own page open at the same time.
+    :param session: An open glossary session. Give it a `max_pages` that covers
+        `concurrency` worker pages, plus one for `urls` if it's a still-paging
+        `get_terms_urls` generator, plus one for the session's own base page.
     :param urls: Term detail page URLs to fetch, e.g. from `get_terms_urls`.
         May be a plain iterable or an async iterable (so a still-paging
         `get_terms_urls` generator can be passed straight through).
@@ -563,6 +597,8 @@ async def get_results_from_urls(
     :param auto_initialize: If `session` is not initialized yet, initialize
         it automatically (the default) or raise.
     :raises ValueError: If `concurrency` is less than 1.
+    :raises PagePoolTimeoutError: If no page frees up within the session's
+        `page_acquire_timeout`.
     :raises SessionNotInitializedError: If `session` is not initialized and
         `auto_initialize` is `False`.
     :raises ParsingError: With `concurrency=1`, if a page's structure
@@ -584,18 +620,29 @@ async def get_results_from_urls(
 
     async def filtered_urls() -> typing.AsyncIterator[str]:
         nonlocal skipped
-        async for url in as_async_iterator(urls):
-            if excluded_urls and url in excluded_urls:
-                skipped += 1
-                continue
-            yield url
+        source = as_async_iterator(urls)
+        try:
+            async for url in source:
+                if excluded_urls and url in excluded_urls:
+                    skipped += 1
+                    continue
+                yield url
+        finally:
+            # `urls` may hold a page of its own while it pages (`get_terms_urls`). Close
+            # it now, not whenever the garbage collector gets to it.
+            await aclose_quietly(source, "url source")
 
     url_iter = filtered_urls()
 
     if concurrency == 1:
-        page = await session.new_page()
+        # The page is taken lazily, once there is a URL to fetch. `url_iter` may itself
+        # need a page to produce URLs (`get_terms_urls`), and holding an unused one while
+        # waiting for another causes a pool deadlock.
+        page: Page | None = None
         try:
             async for url in url_iter:
+                if page is None or page.is_closed():
+                    page = await session.new_page()
                 async for result in get_results_from_url(
                     session,
                     url,
@@ -609,7 +656,10 @@ async def get_results_from_urls(
                     if first_only:
                         break
         finally:
-            await safe_close(page.close(), "page")
+            if page is not None:
+                await shielded_close(page.close(), "page")
+
+            await aclose_quietly(url_iter, "url iterator")
             elapsed = time.monotonic() - started_at
             logger.debug(
                 "`get_results_from_urls` (sequential) done: %d result(s), %d skipped "
@@ -621,63 +671,74 @@ async def get_results_from_urls(
             )
         return
 
-    # Every worker gets its own page on the session's context, reused
-    # across every URL it handles, so workers never race over a shared page.
-    worker_pages = [await session.new_page() for _ in range(concurrency)]
-    logger.debug("Fetching with %d concurrent worker(s)", len(worker_pages))
+    # Every worker gets its own page on the session's context, reused across every URL
+    # it handles, so workers never race over a shared page. Pages are opened lazily (a
+    # worker takes one only when it has a URL) and the worker count is capped to what the
+    # pool can actually supply, as a worker that holds an unused page while the URL source
+    # waits for one of its own may cause the pool to deadlock.
+    workers = count_usable_workers(session, urls, concurrency)
+    logger.debug("Fetching with %d concurrent worker(s)", workers)
 
-    url_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=concurrency * 2)
+    url_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=workers * 2)
     result_queue: asyncio.Queue[SearchResult | BaseException | None] = asyncio.Queue()
 
     async def produce() -> None:
         async for url in url_iter:
             await url_queue.put(url)
-        for _ in worker_pages:
+        for _ in range(workers):
             await url_queue.put(None)  # one stop signal per worker
 
-    async def consume(worker_page: Page) -> None:
-        while True:
-            url = await url_queue.get()
-            if url is None:
-                break
+    async def consume() -> None:
+        worker_page: Page | None = None
+        try:
+            while True:
+                url = await url_queue.get()
+                if url is None:
+                    break
 
-            try:
-                async for result in get_results_from_url(
-                    session,
-                    url,
-                    topic=topic,
-                    page=worker_page,
-                    exclude=exclude,
-                    auto_initialize=auto_initialize,
-                ):
-                    await result_queue.put(result)
-                    if first_only:
-                        break
-            except (NetworkError, ParsingError) as exc:
-                # Expected, page-specific failure modes for a best-effort
-                # bulk fetch. So we log with enough context to diagnose an
-                # upstream change, but not a full page dump, and move on
-                # to the next URL rather than aborting the whole batch
-                # over one bad page.
-                logger.warning("Failed to fetch %s: %s", url, exc)
-            except Exception as exc:
-                # Anything else is unexpected. Route it to the main
-                # generator loop below instead of letting it vanish into
-                # this worker task, which `asyncio.gather(...,
-                # return_exceptions=True)` in the `finally` block would
-                # otherwise discard unseen.
-                logger.exception("Unexpected error fetching %s", url)
-                await result_queue.put(exc)
-                break
+                try:
+                    if worker_page is None or worker_page.is_closed():
+                        worker_page = await session.new_page()
+                    async for result in get_results_from_url(
+                        session,
+                        url,
+                        topic=topic,
+                        page=worker_page,
+                        exclude=exclude,
+                        auto_initialize=auto_initialize,
+                    ):
+                        await result_queue.put(result)
+                        if first_only:
+                            break
+                except (NetworkError, ParsingError) as exc:
+                    # Expected, page-specific failure modes for a best-effort
+                    # bulk fetch. So we log with enough context to diagnose an
+                    # upstream change, but not a full page dump, and move on
+                    # to the next URL rather than aborting the whole batch
+                    # over one bad page.
+                    logger.warning("Failed to fetch %s: %s", url, exc)
+                except Exception as exc:
+                    # Anything else is unexpected (including `PagePoolTimeoutError`).
+                    # Route it to the main generator loop below instead of letting
+                    # it vanish into this worker task, which `asyncio.gather(...,
+                    # return_exceptions=True)` in the `finally` block would
+                    # otherwise discard unseen.
+                    logger.exception("Unexpected error fetching %s", url)
+                    await result_queue.put(exc)
+                    break
+        finally:
+            # In its own `finally`, shielded, so cancelling the batch (Ctrl-C, a timeout,
+            # an error elsewhere) can never strand this page and its pool slot.
+            if worker_page is not None:
+                await shielded_close(worker_page.close(), "worker page")
         await result_queue.put(None)  # this worker is done
 
     producer_task = asyncio.create_task(produce())
-    worker_tasks = [asyncio.create_task(consume(worker_page)) for worker_page in worker_pages]
+    worker_tasks = [asyncio.create_task(consume()) for _ in range(workers)]
 
     try:
-        total_worker_tasks = len(worker_tasks)
         finished_workers = 0
-        while finished_workers < total_worker_tasks:
+        while finished_workers < workers:
             item = await result_queue.get()
             if item is None:
                 finished_workers += 1
@@ -692,8 +753,7 @@ async def get_results_from_urls(
             task.cancel()
 
         await asyncio.gather(producer_task, *worker_tasks, return_exceptions=True)
-        for worker_page in worker_pages:
-            await safe_close(worker_page.close(), "worker page")
+        await aclose_quietly(url_iter, "url iterator")
 
         elapsed = time.monotonic() - started_at
         logger.debug(
@@ -761,7 +821,7 @@ async def search(
         auto_initialize=auto_initialize,
     )
     count = 0
-    async for result in log_timed_yields(
+    results = log_timed_yields(
         get_results_from_urls(
             session,
             urls,
@@ -773,9 +833,14 @@ async def search(
         ),
         logger=logger,
         label=f"search({query!r})",
-    ):
-        count += 1
-        yield result
+    )
+    # Closing `results` closes everything under it (workers, their pages, the URL
+    # source's page) if the consumer stops early or is cancelled, instead of leaving
+    # all of that open until garbage collection.
+    async with contextlib.aclosing(results):
+        async for result in results:
+            count += 1
+            yield result
 
     elapsed = time.monotonic() - started_at
     logger.info(
@@ -838,7 +903,7 @@ async def get_terms_on(
         auto_initialize=auto_initialize,
     )
     count = 0
-    async for result in log_timed_yields(
+    results = log_timed_yields(
         get_results_from_urls(
             session,
             urls,
@@ -850,9 +915,14 @@ async def get_terms_on(
         ),
         logger=logger,
         label=f"get_terms_on({topic!r})",
-    ):
-        count += 1
-        yield result
+    )
+    # Closing `results` closes everything under it (workers, their pages, the URL
+    # source's page) if the consumer stops early or is cancelled, instead of leaving
+    # all of that open until garbage collection.
+    async with contextlib.aclosing(results):
+        async for result in results:
+            count += 1
+            yield result
 
     elapsed = time.monotonic() - started_at
     logger.info(

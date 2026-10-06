@@ -17,7 +17,7 @@ from slb_glossary.live.parsers import (
 )
 from slb_glossary.retries import DEFAULT_RETRY_POLICY, RetryPolicy
 from slb_glossary.retries import retry as retry_func
-from slb_glossary.utils import safe_close
+from slb_glossary.utils import shielded_close
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +188,7 @@ async def refresh_topics(session: Session) -> Session:
         )
     finally:
         if owns_page and page is not None:
-            await safe_close(page.close(), "page")
+            await shielded_close(page.close(), "page")
         else:
             session.base_page_in_use = False
 

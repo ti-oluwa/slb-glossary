@@ -75,7 +75,7 @@ slb config show --format json            # print the full effective config
 
 Settings are addressed with a dotted path. `session.*` for browser/session behavior (`headless`, `browser_type`, `timeout`, `retry.*`, ...), `local.*` for the database (`enabled`, `data_dir`, `db_filename`, `prefer_local`, `sync_max_age_days`), `output.*` for display defaults (`default_format`, `show_topic`, ...). `config show` prints all three sections at once. The `config` commands take `--path` to work on a file other than the global one (the lookup commands take `--config` for that).
 
-Times in `session.timeout`, `session.settle_timeout` and `session.poll_interval` are in milliseconds. The delays under `session.retry.*` are in seconds.
+Times in `session.timeout`, `session.settle_timeout`, `session.poll_interval` and `session.page_acquire_timeout` are in milliseconds. The delays under `session.retry.*` are in seconds.
 
 ```bash
 slb config set session.browser_type firefox

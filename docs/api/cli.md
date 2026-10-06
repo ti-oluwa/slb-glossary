@@ -42,7 +42,8 @@ Every command that can reach the live glossary shares this block (session/browse
 | `--block-resource [...]` | | Specific resource type to block. Repeatable; overrides `--block`. |
 | `--timeout FLOAT` | `60000.0` | Milliseconds for page loads/element lookups. |
 | `--terms-per-tab INTEGER` | `12` | Results the glossary returns per results page. |
-| `--max-pages INTEGER` | `6` | Browser pages the session keeps open at once. |
+| `--max-pages INTEGER` | `6` | Browser pages the session keeps open at once. Passing `--concurrency` raises it to `concurrency + 2` if it is lower (unless you pass `--max-pages`). |
+| `--page-acquire-timeout FLOAT` | `60000` | Milliseconds to wait for a free page before failing with `PagePoolTimeoutError`. `0` waits forever. |
 | `--settle-timeout FLOAT` | `3000` | Milliseconds to wait for the results list to settle. |
 | `--poll-interval FLOAT` | `300` | Poll interval while waiting on `--settle-timeout`. |
 | `--executable-path FILE` | | Specific browser build to launch. |

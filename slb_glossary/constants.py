@@ -449,6 +449,19 @@ class Constants:
     )
     """Weight given to the vector ranking in `slb_glossary.local.hybrid_search`'s RRF combination."""
 
+    page_acquire_timeout = Constant(
+        60_000.0,
+        env_var="SLB_GLOSSARY_PAGE_ACQUIRE_TIMEOUT",
+    )
+    """
+    Default, in milliseconds, for how long asking a session's page pool for a page
+    (`Pages.get`) may wait for one to free up before raising `PagePoolTimeoutError`.
+
+    A wait that long means pages are not coming back (too much `concurrency` for
+    `max_pages`, or a page that was never closed), so failing with a clear error is
+    better than hanging forever. `0` waits forever.
+    """
+
     session_auto_initialize = Constant(
         False,
         env_var="SLB_GLOSSARY_SESSION_AUTO_INITIALIZE",

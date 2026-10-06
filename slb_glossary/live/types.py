@@ -7,10 +7,11 @@ import typing
 
 from patchright.async_api import Browser, BrowserContext, Page, Playwright
 
-from slb_glossary.errors import BrowserError, NetworkError
+from slb_glossary.constants import constants
+from slb_glossary.errors import BrowserError, NetworkError, PagePoolTimeoutError
 from slb_glossary.retries import RetryPolicy
 from slb_glossary.types import Language
-from slb_glossary.utils import safe_close
+from slb_glossary.utils import safe_close, shielded_close
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,21 @@ class PageHandle:
         return self.page
 
     async def __aexit__(self, *exc_info: object) -> None:
-        if not self.page.is_closed() and await safe_close(self.page.close(), "page"):
+        if not self.page.is_closed() and await shielded_close(self.page.close(), "page"):
             logger.debug(f"Closed page via {type(self).__name__} context manager")
+
+
+class _PoolDefault(enum.Enum):
+    """Marks "use the pool's own `acquire_timeout`" for `Pages.get`'s `timeout`."""
+
+    TOKEN = enum.auto()
+
+
+POOL_DEFAULT = _PoolDefault.TOKEN
+
+
+def _default_acquire_timeout() -> float | None:
+    return constants.page_acquire_timeout or None
 
 
 @dataclasses.dataclass(slots=True, kw_only=True)
@@ -102,16 +116,27 @@ class Pages:
     Callers that each want an independently-owned page should acquire
     one with `get()` instead of sharing (and racing over) a single page.
     `max_size` caps how many pages can be open on `context` at once;
-    once that many are checked out, further `get()` calls wait for one to close.
+    once that many are checked out, further `get()` calls wait for one to close,
+    for at most `acquire_timeout`.
 
     Accounting is driven by the page's own `close` event rather than by
-    callers remembering to release th page, so a page closed any way
+    callers remembering to release the page, so a page closed any way
     (via `PageHandle`, a direct `page.close()`, or the context tearing it
     down) always frees its slot.
+
+    A task should never wait for a page while it is holding another one it isn't using
+    yet. Several tasks doing that can each end up holding part of what they need, with
+    nothing left for anyone to finish (a deadlock). `acquire_timeout` turns that into a
+    `PagePoolTimeoutError` instead of a hang.
     """
 
     context: BrowserContext
     max_size: int
+    acquire_timeout: float | None = dataclasses.field(default_factory=_default_acquire_timeout)
+    """
+    Milliseconds `get()` waits for a free page before raising `PagePoolTimeoutError`.
+    `None` (or `0`) waits forever. Defaults to `constants.page_acquire_timeout`.
+    """
     _pages: set[Page] = dataclasses.field(init=False, repr=False, default_factory=set)
     _semaphore: asyncio.Semaphore = dataclasses.field(init=False, repr=False)
     _closed: bool = dataclasses.field(init=False, repr=False, default=False)
@@ -119,27 +144,96 @@ class Pages:
     def __post_init__(self) -> None:
         if self.max_size < 1:
             raise ValueError("`max_size` must be at least 1")
+        if self.acquire_timeout is not None and self.acquire_timeout <= 0:
+            self.acquire_timeout = None
+
         self._semaphore = asyncio.Semaphore(self.max_size)
-        logger.debug("Opened page pool (max_size=%d)", self.max_size)
+        logger.debug(
+            "Opened page pool (max_size=%d, acquire_timeout=%s)",
+            self.max_size,
+            self.acquire_timeout,
+        )
 
     @property
     def size(self) -> int:
         """Number of pages currently checked out of this pool."""
         return len(self._pages)
 
-    async def get(self) -> PageHandle:
+    @property
+    def free(self) -> int:
+        """How many more pages could be opened right now without waiting."""
+        return max(self.max_size - self.size, 0)
+
+    def describe(self) -> str:
+        """What each checked-out page is showing, for diagnosing a stuck pool."""
+        urls = [page.url for page in self._pages]
+        blank = sum(1 for url in urls if url in ("", "about:blank"))
+        text = f"{self.size}/{self.max_size} pages in use"
+        if urls:
+            text += ": " + ", ".join(url[:60] or "about:blank" for url in urls)
+        if blank:
+            text += (
+                f". {blank} still on about:blank, which means they were opened but never "
+                "used (something is holding pages while waiting for another page)"
+            )
+        return text
+
+    async def _acquire_slot(self, timeout: float | None) -> None:
+        """
+        Take a slot from the semaphore, waiting at most `timeout` milliseconds.
+
+        Done explicitly instead of with `asyncio.wait_for`, which on older Pythons can
+        lose a slot that was granted at the instant it timed out or was cancelled.
+        """
+        if timeout is None:
+            await self._semaphore.acquire()
+            return
+
+        acquire = asyncio.ensure_future(self._semaphore.acquire())
+        try:
+            done, _ = await asyncio.wait({acquire}, timeout=timeout / 1000)
+        except BaseException:
+            await self._abandon(acquire)
+            raise
+        if acquire in done:
+            return
+        await self._abandon(acquire)
+        raise PagePoolTimeoutError(
+            f"Timed out after {timeout / 1000:g}s waiting for a free page ({self.describe()}). "
+            "This usually means more pages are wanted at once than `max_pages` allows "
+            "(lower `concurrency` or raise `max_pages`), or a page was opened and never "
+            "closed. Raise or disable `page_acquire_timeout` if the work is simply slow."
+        )
+
+    async def _abandon(self, acquire: asyncio.Future[typing.Any]) -> None:
+        """Stop waiting on `acquire`, handing the slot back if it was granted meanwhile."""
+        acquire.cancel()
+        try:
+            await acquire
+        except asyncio.CancelledError:
+            return
+        self._semaphore.release()
+
+    async def get(self, *, timeout: float | _PoolDefault | None = POOL_DEFAULT) -> PageHandle:
         """
         Acquire a new page on `context`.
 
-        Blocks if `max_size` pages are already open, until one of them closes.
+        Waits if `max_size` pages are already open, until one of them closes.
 
+        :param timeout: Milliseconds to wait for a free page. `None` waits forever.
+            Defaults to this pool's `acquire_timeout`.
         :returns: A `PageHandle` wrapping the new page.
         :raises BrowserError: If this pool has already been closed.
+        :raises PagePoolTimeoutError: If no page freed up within the timeout.
         """
         if self._closed:
             raise BrowserError(
                 f"Cannot open a new page: this `{type(self).__name__}` pool is closed"
             )
+
+        wait = self.acquire_timeout if isinstance(timeout, _PoolDefault) else timeout
+        if wait is not None and wait <= 0:
+            wait = None
 
         started_at = time.monotonic()
         if self._semaphore.locked():
@@ -148,10 +242,12 @@ class Pages:
                 self.size,
                 self.max_size,
             )
-        await self._semaphore.acquire()
+
+        await self._acquire_slot(wait)
         try:
             page = await self.context.new_page()
-        except Exception:
+        except BaseException:
+            # Includes cancellation: without this the slot would be lost for good.
             self._semaphore.release()
             raise
 
@@ -185,16 +281,17 @@ class Pages:
         """
         if self._closed:
             return
+
         self._closed = True
         started_at = time.monotonic()
-        count = self.size
-        failed = 0
-        for page in list(self._pages):
-            if not page.is_closed() and not await safe_close(page.close(), "pool page"):
-                failed += 1
+        open_pages = [page for page in self._pages if not page.is_closed()]
+        results = await asyncio.gather(
+            *(shielded_close(page.close(), "pool page") for page in open_pages)
+        )
+        failed = results.count(False)
         logger.debug(
             "Closed page pool (%d page(s) still open, %d failed to close) in %.3fs",
-            count,
+            len(open_pages),
             failed,
             time.monotonic() - started_at,
         )
@@ -286,6 +383,16 @@ class Session:
     with, plus one for a `base_page` or `get_terms_urls` page running alongside it.
     """
 
+    page_acquire_timeout: float | None = dataclasses.field(
+        default_factory=_default_acquire_timeout
+    )
+    """
+    Milliseconds `new_page()` waits for a free page (see `max_pages`) before raising
+    `PagePoolTimeoutError`, instead of waiting forever. 
+    
+    `None` or `0` waits forever. Defaults to `constants.page_acquire_timeout`.
+    """
+
     pages: Pages = dataclasses.field(init=False, repr=False)
     """
     The pool `new_page()` acquires pages from, bounded to `max_pages`.
@@ -323,7 +430,11 @@ class Session:
     _initialized: bool = dataclasses.field(init=False, repr=False, default=False)
 
     def __post_init__(self) -> None:
-        self.pages = Pages(context=self.context, max_size=self.max_pages)
+        self.pages = Pages(
+            context=self.context,
+            max_size=self.max_pages,
+            acquire_timeout=self.page_acquire_timeout,
+        )
 
     @property
     def initialized(self) -> bool:
@@ -386,7 +497,7 @@ class Session:
             raise NetworkError(f"Could not reach the glossary at {self.base_url}") from exc
         finally:
             if not hold_page:
-                await safe_close(page.close(), "page")
+                await shielded_close(page.close(), "page")
 
         logger.info(
             "Initialized session for %s: %d topic(s), %d term(s) total, in %.3fs",

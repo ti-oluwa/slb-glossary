@@ -14,6 +14,7 @@ import sys
 import typing
 from collections.abc import Mapping, Sequence
 
+from slb_glossary.constants import constants
 from slb_glossary.errors import ConfigError
 from slb_glossary.logging import LogSink
 from slb_glossary.paths import default_config_path
@@ -127,7 +128,17 @@ class SessionOptions(Updatable):
     Each independent operation (the tab-paging search page, each concurrent
     term-fetch worker) checks out its own page, so this should comfortably
     cover the highest `concurrency` a query is run with, plus one for
-    a search page paging through tabs at the same time.
+    a search page paging through tabs at the same time, plus one for the session's
+    own base page.
+    """
+
+    page_acquire_timeout: float = dataclasses.field(
+        default_factory=lambda: constants.page_acquire_timeout
+    )
+    """
+    Milliseconds to wait for a free page (see `max_pages`) before raising
+    `PagePoolTimeoutError` instead of hanging. `0` waits forever.
+    Defaults to `constants.page_acquire_timeout` (60 seconds).
     """
 
     initialize: bool | None = None
@@ -216,6 +227,7 @@ class SessionOptions(Updatable):
             "timeout": self.timeout,
             "terms_per_tab": self.terms_per_tab,
             "max_pages": self.max_pages,
+            "page_acquire_timeout": self.page_acquire_timeout,
             "retry": self.retry.retry_policy(),
             "settle_timeout": self.settle_timeout,
             "poll_interval": self.poll_interval,

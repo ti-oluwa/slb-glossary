@@ -1,5 +1,6 @@
 """Utilities shared across the package."""
 
+import asyncio
 import builtins
 import enum
 import logging
@@ -21,6 +22,7 @@ from slb_glossary.types import RecordLike, SearchResult
 
 __all__ = [
     "Lookup",
+    "aclose_quietly",
     "env",
     "fold_text",
     "log_timed_yields",
@@ -28,6 +30,7 @@ __all__ = [
     "print_async_records",
     "print_records",
     "safe_close",
+    "shielded_close",
     "split_exclude",
 ]
 
@@ -120,6 +123,49 @@ async def safe_close(coro: typing.Awaitable[typing.Any], /, description: str) ->
     return True
 
 
+BACKGROUND_CLOSES: set[asyncio.Task[bool]] = set()
+"""Strong references to in-flight `shielded_close` tasks, so they are not garbage collected mid-close."""
+
+
+async def shielded_close(coro: typing.Awaitable[typing.Any], /, description: str) -> bool:
+    """
+    Like `safe_close`, but the close still completes if the task awaiting it is cancelled.
+
+    A plain `await page.close()` in a `finally` block is cut short when the task is
+    cancelled (Ctrl-C, a timeout, a sibling failing), leaving the page open and its
+    slot in the page pool taken for good. Here the close runs as its own task, so
+    cancellation of the caller is still raised, but does not abandon the close.
+
+    :param coro: The close/stop call to await, e.g. `page.close()`.
+    :param description: What `coro` was closing, for the warning message.
+    :return: `True` if `coro` completed without raising, `False` if it raised.
+    """
+    task = asyncio.ensure_future(safe_close(coro, description))
+    BACKGROUND_CLOSES.add(task)
+    task.add_done_callback(BACKGROUND_CLOSES.discard)
+    return await asyncio.shield(task)
+
+
+async def aclose_quietly(
+    iterable: typing.AsyncIterable[typing.Any], description: str = "async iterator"
+) -> None:
+    """
+    Close `iterable` right now if it is an async generator, even if the caller is being cancelled.
+
+    An async generator that is abandoned half way (the consumer `break`s, stops early, or is
+    cancelled) is not closed until the garbage collector finalizes it, so whatever its
+    `finally` block holds (a browser page and its slot in the page pool) stays taken
+    until then. Closing it explicitly makes that deterministic. Anything without an
+    `aclose` (a list, say) is left alone.
+
+    :param iterable: The iterator to close.
+    :param description: What it was, for the warning message if closing fails.
+    """
+    aclose = getattr(iterable, "aclose", None)
+    if aclose is not None:
+        await shielded_close(aclose(), description)
+
+
 def parse_int(text: str) -> int:
     """
     Parse an integer out of glossary page text such as `"1,204"` or `" 42 "`.
@@ -181,7 +227,7 @@ async def log_timed_yields(
     logger: logging.Logger,
     label: str,
     level: int = logging.DEBUG,
-) -> typing.AsyncIterator[T]:
+) -> typing.AsyncGenerator[T, None]:
     """
     Wrap an async iterator, logging per-yield and running-average timing metrics.
 
@@ -205,21 +251,24 @@ async def log_timed_yields(
     start = time.monotonic()
     previous = start
     count = 0
-    async for item in iterable:
-        now = time.monotonic()
-        count += 1
-        elapsed = now - start
-        logger.log(
-            level,
-            "`%s`: yield #%d took %.3fs (avg %.3fs/yield so far, %.3fs elapsed total)",
-            label,
-            count,
-            now - previous,
-            elapsed / count,
-            elapsed,
-        )
-        previous = now
-        yield item
+    try:
+        async for item in iterable:
+            now = time.monotonic()
+            count += 1
+            elapsed = now - start
+            logger.log(
+                level,
+                "`%s`: yield #%d took %.3fs (avg %.3fs/yield so far, %.3fs elapsed total)",
+                label,
+                count,
+                now - previous,
+                elapsed / count,
+                elapsed,
+            )
+            previous = now
+            yield item
+    finally:
+        await aclose_quietly(iterable, "wrapped iterator")
 
 
 def split_exclude(

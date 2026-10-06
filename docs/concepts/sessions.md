@@ -35,7 +35,20 @@ async with slb.live.session(max_pages=10) as session:
     )
 ```
 
-`max_pages` should comfortably cover whatever `concurrency` you actually run with, plus a little headroom for the session's own bookkeeping (the topic-list load, for instance). Raising `concurrency` without also raising `max_pages` just means concurrent operations increasingly queue for a free page rather than actually running in parallel.
+`max_pages` should comfortably cover whatever `concurrency` you actually run with, plus a page for the search that feeds the workers and one for the session's own base page (kept open after the topic-list load). Raising `concurrency` without also raising `max_pages` does not buy more parallelism. When a call asks for more workers than the pool can supply, it uses fewer and logs a warning saying so.
+
+Workers open their page only when they have a URL to fetch, and give it back when they are done. That matters because a task that holds a page it isn't using while it waits for another can deadlock a full pool: several tasks each end up holding part of what they need.
+
+### When the pool has no free page
+
+A call that can't get a page waits for one to close. It won't wait forever: after `page_acquire_timeout` (milliseconds, default `60000`, `0` to wait forever) it raises `PagePoolTimeoutError`. The message says how many pages are in use, what each one is showing, and how many are still on `about:blank`. Blank pages were opened but never used, which is the sign of something holding pages while it waits for more.
+
+```python
+async with slb.live.session(max_pages=10, page_acquire_timeout=30_000) as session:
+    ...
+```
+
+From the CLI it is `--page-acquire-timeout`, and in the config file `session.page_acquire_timeout`. If you hit the error, lower `concurrency`, raise `max_pages`, or, if the work is just slow, raise the timeout.
 
 ## Retrying a flaky first load
 

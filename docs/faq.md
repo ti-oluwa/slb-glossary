@@ -71,6 +71,16 @@ Either way, this is a local-database-only error. `--mode semantic`/`hybrid` does
 - ``Could not load the `sqlite-vec` SQLite extension...``: the `sqlite-vec` package is installed, but your Python's `sqlite3` can't load extensions. Some builds, including some macOS ones, are compiled that way. This is a packaging issue in the Python you're running, not something `slb-glossary` can work around. You can check yours with `python -c "import sqlite3; sqlite3.connect(':memory:').enable_load_extension(True)"`, which raises an `AttributeError` when it's unsupported. Use a Python built with loadable SQLite extensions to get `--mode semantic` and `--mode hybrid`. The default `--mode lexical` needs no extension and works either way.
 - **`The installed SQLite build has no FTS5 extension...`**: `slb_glossary.local`'s ordinary lexical search needs FTS5, which is on by default in nearly every modern SQLite build. If you're seeing this, you're likely on a custom-built Python; rebuilding against a stock SQLite (or using a standard python.org/Homebrew/apt build) resolves it.
 
+## My command hangs, or fails with `PagePoolTimeoutError`
+
+```text
+PagePoolTimeoutError: Timed out after 60s waiting for a free page (6/6 pages in use: ..., about:blank, about:blank. 2 still on about:blank ...)
+```
+
+Every page in the session's pool is taken and none is coming back. This happens when more work runs at once than `max_pages` allows (high `--concurrency`, or several lookups overlapping on one session), so each holds some pages while waiting for more. Pages still on `about:blank` were opened but never used.
+
+Lower `--concurrency`, or raise `--max-pages` (the CLI raises it for you when you pass `--concurrency`, to `concurrency + 2`). A call that asks for more workers than the pool can supply uses fewer and logs a warning. If the work is simply slow and you'd rather wait, raise `--page-acquire-timeout` (milliseconds, `0` waits forever). See [Sessions and the Browser](concepts/sessions.md#the-page-pool-how-concurrency-actually-works).
+
 ## `QueryError: needs at least one of db or session`
 
 You called a `slb_glossary.query` function (`search`, `get_term`, etc.) with neither `db` nor `session`. At least one is required so there's something to actually query. Pass a `Database` (for `source=Source.LOCAL`/`AUTO`), a `Session` (for `source=Source.LIVE`/`AUTO`), or both.
