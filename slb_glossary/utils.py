@@ -138,8 +138,8 @@ async def shielded(awaitable: typing.Awaitable[T], /, *, grace: float = SHIELD_G
     Run `awaitable` to completion even if the task awaiting it is cancelled.
 
     Cleanup that sits in a `finally` block is itself interrupted when the task is cancelled
-    again while it runs, which is exactly what happens under anyio cancel scopes. 
-    Every `await` in a cancelled scope raises again. Left like that, a half-finished close 
+    again while it runs, which is exactly what happens under anyio cancel scopes.
+    Every `await` in a cancelled scope raises again. Left like that, a half-finished close
     strands a browser process or a database thread.
 
     Here the work runs as its own task. If the caller is cancelled, the

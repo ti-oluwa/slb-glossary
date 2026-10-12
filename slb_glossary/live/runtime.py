@@ -1005,7 +1005,7 @@ class Runtime:
         """
         if self._closed:
             return
-        
+
         self._closed = True
         # Shielded as a unit. This runs at shutdown, typically under a cancelled scope, and
         # a teardown interrupted half way strands browsers and the database connection.
