@@ -47,6 +47,7 @@ from slb_glossary.live.types import Session
 from slb_glossary.local.connection import close_db, open_db
 from slb_glossary.local.types import Database
 from slb_glossary.types import Language, Source
+from slb_glossary.utils import shielded
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -70,7 +71,10 @@ RECLAIM_POLL_INTERVAL = 0.5
 
 MIN_REAP_INTERVAL = 1.0
 MAX_REAP_INTERVAL = 60.0
-"""Bounds on how often the idle reaper wakes: a quarter of `idle_timeout`, clamped to these."""
+"""
+Default bounds, in seconds, on how often the idle reaper wakes (a quarter of
+`idle_timeout`, kept between them). See `Runtime`'s `min_reap_interval`/`max_reap_interval`.
+"""
 
 
 class SessionMode(enum.Enum):
@@ -729,7 +733,7 @@ class SessionPool:
         """
         if self._closed:
             return 0
-    
+
         # Detach the sessions to close (under `_lock`) before actually
         # closing them (outside `_lock`), so slow `close_session` calls
         # can't block a concurrent `acquire`/`release`/`warm` on this pool.
@@ -812,10 +816,12 @@ class Runtime:
         idle_timeout: float | None = 300.0,
         max_sessions: int = 1,
         capacity_tolerance: int = 1,
+        min_reap_interval: float = MIN_REAP_INTERVAL,
+        max_reap_interval: float = MAX_REAP_INTERVAL,
     ) -> None:
         """
         Initialize runtime.
-        
+
         :param name: Human-readable name used in logs and task names.
         :param session_options: Options every live session is opened with, apart from its
             `language`, which is chosen per call (defaulting to `session_options.language`).
@@ -837,8 +843,14 @@ class Runtime:
         :param capacity_tolerance: How much of a shortfall in an existing session's free
             page capacity a call's requested `capacity` tolerates before the pool opens a new
             browser instead of reusing it. See `SessionPool`.
+        :param min_reap_interval: Fewest seconds between the idle reaper's checks. The
+            reaper wakes every quarter of `idle_timeout`, kept between this and
+            `max_reap_interval`, so a very short `idle_timeout` doesn't make it spin.
+        :param max_reap_interval: Most seconds between the idle reaper's checks, so a very
+            long `idle_timeout` doesn't leave sessions open far past it.
         :raises ValueError: If `max_sessions` is below 1, `capacity_tolerance` is negative,
-            `idle_timeout` is not positive, or `mode` is not a valid `SessionMode`.
+            `idle_timeout` or a reap interval is not positive, `min_reap_interval` is above
+            `max_reap_interval`, or `mode` is not a valid `SessionMode`.
         """
         if max_sessions < 1:
             raise ValueError("`max_sessions` must be at least 1")
@@ -846,6 +858,10 @@ class Runtime:
             raise ValueError("`capacity_tolerance` must be non-negative")
         if idle_timeout is not None and idle_timeout <= 0:
             raise ValueError("`idle_timeout` must be positive, or `None` to disable reaping")
+        if min_reap_interval <= 0 or max_reap_interval <= 0:
+            raise ValueError("`min_reap_interval` and `max_reap_interval` must be positive")
+        if min_reap_interval > max_reap_interval:
+            raise ValueError("`min_reap_interval` must not be above `max_reap_interval`")
 
         self.name = name
         self.session_options = session_options if session_options is not None else SessionOptions()
@@ -860,6 +876,8 @@ class Runtime:
         self.idle_timeout = idle_timeout
         self.max_sessions = max_sessions
         self.capacity_tolerance = capacity_tolerance
+        self.min_reap_interval = min_reap_interval
+        self.max_reap_interval = max_reap_interval
 
         self._db: Database | None = None
         self._db_lock = asyncio.Lock()
@@ -922,6 +940,16 @@ class Runtime:
             closed=self._closed,
         )
 
+    @property
+    def reap_interval(self) -> float | None:
+        """
+        Seconds between the idle reaper's checks. A quarter of `idle_timeout`, kept between
+        `min_reap_interval` and `max_reap_interval`. `None` if there is no `idle_timeout`.
+        """
+        if self.idle_timeout is None:
+            return None
+        return min(max(self.idle_timeout / 4, self.min_reap_interval), self.max_reap_interval)
+
     def _raise_if_closed(self) -> None:
         if self._closed:
             raise RuntimeClosedError(f"[{self.name}] Runtime is closed.")
@@ -977,7 +1005,14 @@ class Runtime:
         """
         if self._closed:
             return
+        
         self._closed = True
+        # Shielded as a unit. This runs at shutdown, typically under a cancelled scope, and
+        # a teardown interrupted half way strands browsers and the database connection.
+        await shielded(self._teardown())
+
+    async def _teardown(self) -> None:
+        """Stop the reaper, then close every pool and the database. See `close`."""
         started_at = time.monotonic()
         errors: list[BaseException] = []
 
@@ -1142,7 +1177,8 @@ class Runtime:
             f"maintains pooled sessions for it to reap; `{type(self).__name__}.start()` should never "
             f"have scheduled this task in that case."
         )
-        interval = min(max(idle_timeout / 4, MIN_REAP_INTERVAL), MAX_REAP_INTERVAL)
+        interval = self.reap_interval
+        assert interval is not None
         while True:
             await asyncio.sleep(interval)
             try:

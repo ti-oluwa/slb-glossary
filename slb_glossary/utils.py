@@ -2,6 +2,7 @@
 
 import asyncio
 import builtins
+import contextlib
 import enum
 import logging
 import os
@@ -23,6 +24,7 @@ from slb_glossary.types import RecordLike, SearchResult
 __all__ = [
     "Lookup",
     "aclose_quietly",
+    "aclosing_quietly",
     "env",
     "fold_text",
     "log_timed_yields",
@@ -30,6 +32,7 @@ __all__ = [
     "print_async_records",
     "print_records",
     "safe_close",
+    "shielded",
     "shielded_close",
     "split_exclude",
 ]
@@ -123,8 +126,42 @@ async def safe_close(coro: typing.Awaitable[typing.Any], /, description: str) ->
     return True
 
 
-BACKGROUND_CLOSES: set[asyncio.Task[bool]] = set()
-"""Strong references to in-flight `shielded_close` tasks, so they are not garbage collected mid-close."""
+BACKGROUND_CLOSES: set[asyncio.Task[typing.Any]] = set()
+"""Strong references to in-flight `shielded` tasks, so they are not garbage collected mid-run."""
+
+SHIELD_GRACE = 10.0
+"""Seconds `shielded` waits for the work to finish after its caller is cancelled."""
+
+
+async def shielded(awaitable: typing.Awaitable[T], /, *, grace: float = SHIELD_GRACE) -> T:
+    """
+    Run `awaitable` to completion even if the task awaiting it is cancelled.
+
+    Cleanup that sits in a `finally` block is itself interrupted when the task is cancelled
+    again while it runs, which is exactly what happens under anyio cancel scopes. 
+    Every `await` in a cancelled scope raises again. Left like that, a half-finished close 
+    strands a browser process or a database thread.
+
+    Here the work runs as its own task. If the caller is cancelled, the
+    cancellation is still raised, but only after waiting up to `grace` seconds for the
+    work to finish (when the cancel is delivered once, as plain `asyncio` does). If it is
+    delivered again, the wait ends at once and the work carries on in the background.
+
+    :param awaitable: What to run, e.g. `browser.close()`.
+    :param grace: Seconds to wait for it after the caller is cancelled.
+    :return: Whatever `awaitable` returns. Its exception is raised to the caller.
+    """
+    task: asyncio.Future[T] = asyncio.ensure_future(awaitable)
+    BACKGROUND_CLOSES.add(task)  # type: ignore[arg-type]
+    task.add_done_callback(BACKGROUND_CLOSES.discard)  # type: ignore[arg-type]
+    task.add_done_callback(lambda t: t.cancelled() or t.exception())  # mark as retrieved
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        if not task.done():
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.wait({task}, timeout=grace)
+        raise
 
 
 async def shielded_close(coro: typing.Awaitable[typing.Any], /, description: str) -> bool:
@@ -132,18 +169,14 @@ async def shielded_close(coro: typing.Awaitable[typing.Any], /, description: str
     Like `safe_close`, but the close still completes if the task awaiting it is cancelled.
 
     A plain `await page.close()` in a `finally` block is cut short when the task is
-    cancelled (Ctrl-C, a timeout, a sibling failing), leaving the page open and its
-    slot in the page pool taken for good. Here the close runs as its own task, so
-    cancellation of the caller is still raised, but does not abandon the close.
+    cancelled again while it runs, leaving the page open and its slot in the page pool
+    taken for good. See `shielded`.
 
     :param coro: The close/stop call to await, e.g. `page.close()`.
     :param description: What `coro` was closing, for the warning message.
     :return: `True` if `coro` completed without raising, `False` if it raised.
     """
-    task = asyncio.ensure_future(safe_close(coro, description))
-    BACKGROUND_CLOSES.add(task)
-    task.add_done_callback(BACKGROUND_CLOSES.discard)
-    return await asyncio.shield(task)
+    return await shielded(safe_close(coro, description))
 
 
 async def aclose_quietly(
@@ -164,6 +197,23 @@ async def aclose_quietly(
     aclose = getattr(iterable, "aclose", None)
     if aclose is not None:
         await shielded_close(aclose(), description)
+
+
+@contextlib.asynccontextmanager
+async def aclosing_quietly(
+    iterable: typing.AsyncIterable[T],
+) -> typing.AsyncIterator[typing.AsyncIterable[T]]:
+    """
+    `async with aclosing_quietly(stream) as items:` iterates `items` and then, however the
+    block ends (finished, `break`, `return`, an error, cancelled), closes `stream` right away.
+
+    Like `contextlib.aclosing`, but it accepts any async iterable (closing it only if it has
+    an `aclose`), and the close is `aclose_quietly`: shielded from cancellation, and never raises.
+    """
+    try:
+        yield iterable
+    finally:
+        await aclose_quietly(iterable)
 
 
 def parse_int(text: str) -> int:

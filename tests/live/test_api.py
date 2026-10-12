@@ -300,6 +300,48 @@ class TestGetResultsFromUrlsPagePool:
         assert session.pages.size == 1, "every worker and URL-source page was closed"
         assert not base.is_closed()
 
+    @staticmethod
+    async def with_base_page(session: MockPooledSession, *, in_use: bool = False) -> MockPage:
+        """Give `session` a base page, as `Session.initialize` does, and say if it is busy."""
+        page = await session.new_page()
+        session.base_page = page
+        session.base_page_in_use = in_use  # type: ignore[attr-defined]
+        return page
+
+    async def test_a_free_base_page_is_reused_so_no_page_is_kept_back_for_the_url_source(
+        self,
+    ) -> None:
+        """
+        `get_terms_urls` pages through results on the base page when it is free, so it needs
+        no page of its own. Keeping one back anyway cost a worker for nothing.
+        """
+        session = MockPooledSession(max_pages=4)
+        await self.with_base_page(session)
+        urls = self.paging_urls(session, 3)
+        assert api_module.count_usable_workers(session, urls, 9) == 3  # type: ignore[arg-type]
+        await urls.aclose()  # type: ignore[attr-defined]
+
+    async def test_a_busy_base_page_means_the_url_source_needs_its_own(self) -> None:
+        session = MockPooledSession(max_pages=4)
+        await self.with_base_page(session, in_use=True)
+        urls = self.paging_urls(session, 3)
+        assert api_module.count_usable_workers(session, urls, 9) == 2  # type: ignore[arg-type]
+        await urls.aclose()  # type: ignore[attr-defined]
+
+    async def test_a_plain_list_of_urls_needs_no_page_of_its_own(self) -> None:
+        session = MockPooledSession(max_pages=4)
+        await self.with_base_page(session)
+        assert api_module.count_usable_workers(session, ["a", "b", "c", "d"], 9) == 3  # type: ignore[arg-type]
+
+    async def test_no_more_workers_than_there_are_urls(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Two URLs cannot keep ten workers busy, and that is no reason to warn about the pool."""
+        session = MockPooledSession(max_pages=3)
+        with caplog.at_level("WARNING", logger="slb_glossary.live.api"):
+            assert api_module.count_usable_workers(session, ["a", "b"], 10) == 2  # type: ignore[arg-type]
+        assert "instead of the requested" not in caplog.text
+
     async def test_overlapping_calls_do_not_deadlock_each_other(self) -> None:
         """
         Three calls at once, each with a URL source and two workers, want nine pages from a
@@ -393,6 +435,34 @@ class TestGetResultsFromUrlsPagePool:
         await asyncio.sleep(0.05)
         assert session.pages.size == 0
         assert all(page.is_closed() for page in session.context.created)
+
+    @pytest.mark.parametrize("concurrency", [1, 3])
+    async def test_a_failing_url_source_raises_instead_of_hanging(self, concurrency: int) -> None:
+        """
+        With several workers, the URL source ran in a task whose error nobody saw: no stop
+        signals were ever sent, so every worker and the caller waited for ever. Paging errors,
+        or no free page for the source (`PagePoolTimeoutError`), landed exactly there.
+        """
+        session = MockPooledSession(max_pages=6)
+
+        async def failing() -> typing.AsyncIterator[str]:
+            yield "https://x.com/1"
+            raise RuntimeError("the URL source failed while paging")
+
+        with pytest.raises(RuntimeError, match="URL source failed"):
+            await asyncio.wait_for(
+                drain(
+                    api_module.get_results_from_urls(
+                        session,  # type: ignore[arg-type]
+                        failing(),
+                        concurrency=concurrency,
+                    )
+                ),
+                timeout=5.0,
+            )
+
+        await asyncio.sleep(0.05)
+        assert session.pages.size == 0, "the worker's page was closed too"
 
     async def test_an_exhausted_pool_raises_instead_of_hanging(self) -> None:
         """If the pool truly has no page to give, the call fails with a clear error."""

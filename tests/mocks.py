@@ -1,5 +1,6 @@
 """Shared mock classes and fixtures for `tests/local/`, `tests/live/` and `tests/mcp/`."""
 
+import asyncio
 import dataclasses
 import hashlib
 import types
@@ -246,6 +247,7 @@ class MockLauncher:
         self.open_error: Exception | None = None
         self.close_error: Exception | None = None
         self.db_close_error: Exception | None = None
+        self.close_delay = 0.0
 
     async def open_session(self, **kwargs: typing.Any) -> MockSession:
         if self.open_error is not None:
@@ -258,6 +260,8 @@ class MockLauncher:
         return session
 
     async def close_session(self, session: object) -> None:
+        if self.close_delay:
+            await asyncio.sleep(self.close_delay)
         self.calls.append("close")
         if self.close_error is not None:
             raise self.close_error

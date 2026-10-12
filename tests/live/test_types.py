@@ -108,6 +108,22 @@ class TestPages:
         await pool.close()  # must not raise
         assert good_handle.page.is_closed()
 
+    async def test_taking_a_free_slot_does_not_suspend_even_with_a_timeout(self) -> None:
+        """
+        The common case. With a slot free there is nothing to wait for, so taking it must
+        not pay for a task and a loop round trip.
+        """
+        pool = Pages(context=MockContext(), max_size=2, acquire_timeout=60_000)  # type: ignore[arg-type]
+        coroutine = pool._acquire_slot(60_000)
+        try:
+            coroutine.send(None)
+        except StopIteration:
+            pass
+        else:  # pragma: no cover
+            coroutine.close()
+            pytest.fail("taking a slot suspended although one was free")
+        assert pool._semaphore.locked() is False  # one of two taken
+
     async def test_get_times_out_when_the_pool_stays_full(self) -> None:
         """
         A `get()` that can't be served within `acquire_timeout` raises, instead of
@@ -175,6 +191,32 @@ class TestPages:
         with pytest.raises(PagePoolTimeoutError):  # and not two
             await pool.get(timeout=30)
         await second.page.close()
+
+    async def test_a_page_opened_for_a_cancelled_get_is_closed_not_orphaned(self) -> None:
+        """
+        Cancelling `get()` while the browser is creating the page can still end with the page
+        created. Nobody holds it, so it stayed open as an uncounted `about:blank` page for
+        the life of the browser: the stray blank pages seen after a cancelled command.
+        """
+
+        class SlowContext(MockContext):
+            async def new_page(self) -> MockPage:
+                await asyncio.sleep(0.05)
+                return await super().new_page()
+
+        context = SlowContext()
+        pool = Pages(context=context, max_size=2, acquire_timeout=None)  # type: ignore[arg-type]
+        opening = asyncio.create_task(pool.get())
+        await asyncio.sleep(0.01)
+        opening.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await opening
+
+        await asyncio.sleep(0.2)  # the browser finishes creating it, and it is closed
+
+        assert len(context.created) == 1
+        assert all(page.is_closed() for page in context.created)
+        assert pool.size == 0
 
     async def test_a_get_cancelled_while_the_page_opens_gives_its_slot_back(self) -> None:
         """Cancellation is not an `Exception`: it used to skip the slot release and lose it for good."""

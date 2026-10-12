@@ -18,7 +18,7 @@ from slb_glossary.live.urls import get_glossary_base_url
 from slb_glossary.logging import LogSink, configure_logging, resolve_sink
 from slb_glossary.retries import DEFAULT_RETRY_POLICY, RetryPolicy
 from slb_glossary.types import Language
-from slb_glossary.utils import safe_close
+from slb_glossary.utils import safe_close, shielded
 
 logger = logging.getLogger(__name__)
 
@@ -351,19 +351,20 @@ async def open_session(
     """
     apply_log_sink(log_sink)
 
-    if browser_type not in BrowserType:
+    try:
+        browser_type = BrowserType(browser_type)
+    except ValueError:
         raise ValueError(
             f"Unsupported `browser_type` {browser_type!r}. "
             f"Supported types: {', '.join(BrowserType.__members__)}."
-        )
-    if language not in Language:
+        ) from None
+    try:
+        language = Language(language)
+    except ValueError:
         raise ValueError(
             f"Unsupported `language` {language!r}. "
             f"Supported options: {', '.join(Language.__members__)}."
-        )
-
-    browser_type = BrowserType(browser_type)
-    language = Language(language)
+        ) from None
 
     session_started_at = time.monotonic()
     logger.info("Creating a %r glossary search session using %s", language.value, browser_type)
@@ -463,10 +464,16 @@ async def close_session(session: Session) -> None:
     """
     Close every resource opened for `session`.
 
-    Safe to call more than once; later calls are no-ops.
+    Safe to call more than once; later calls are no-ops. Runs to completion even if the
+    calling task is cancelled meanwhile: stopping half way would leave the browser (and
+    its driver process) running with nothing left holding a reference to close it.
 
     :param session: The session to close.
     """
+    await shielded(_close_session(session))
+
+
+async def _close_session(session: Session) -> None:
     closed_started_at = time.monotonic()
     logger.info("Closing glossary search session")
     # Closes every page still checked out of `session.pages`, then

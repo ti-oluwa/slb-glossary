@@ -254,6 +254,26 @@ class TestUpsertResultsIncrementally:
             async for _ in upsert_results_incrementally(db, [], batch_size=0):
                 pass
 
+    async def test_closing_it_closes_the_stream_it_wraps(self, db: Database) -> None:
+        """
+        The wrapped stream is a live search holding browser pages. Stopping early has to
+        release them now, not whenever the garbage collector finalizes the stream.
+        """
+        state = {"closed": False}
+
+        async def stream() -> typing.AsyncIterator[SearchResult]:
+            try:
+                for result in make_search_results(5):
+                    yield result
+            finally:
+                state["closed"] = True
+
+        wrapper = upsert_results_incrementally(db, stream(), batch_size=10)
+        await wrapper.__anext__()
+        await wrapper.aclose()  # type: ignore[attr-defined]
+
+        assert state["closed"]
+
 
 @pytest.mark.anyio
 class TestSearchDispatch:

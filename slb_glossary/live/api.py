@@ -182,6 +182,15 @@ async def _load_search_url(
         await asyncio.sleep(poll_interval)
 
 
+def base_page_is_free(session: Session) -> bool:
+    """Whether `session`'s base page is open and not already being used."""
+    return (
+        session.base_page is not None
+        and not session.base_page.is_closed()
+        and not session.base_page_in_use
+    )
+
+
 async def get_terms_urls(
     session: Session,
     *,
@@ -253,12 +262,7 @@ async def get_terms_urls(
     tab = 1
     max_tabs: int | None = None
 
-    base_page_free = (
-        session.base_page is not None
-        and not session.base_page.is_closed()
-        and not session.base_page_in_use
-    )
-    if base_page_free:
+    if base_page_is_free(session):
         # Reuse the session's base page when it's free: it's already
         # warmed up (see `Session.base_page`'s docstring for why that
         # matters), and staying warmed up is not a one-time thing, so
@@ -525,15 +529,21 @@ def count_usable_workers(
     Counts how many concurrent workers `session`'s page pool can actually feed right now.
 
     `concurrency` is a wish. The pool is what is available, and a worker that waits for a
-    page the pool can't give would wait forever, so ask for no more than is free, leaving
-    one page for `urls` when it is an async iterable (such as `get_terms_urls`, which holds
-    a page of its own while it pages through results). Always at least one.
+    page the pool can't give would wait forever, so ask for no more than is free. If `urls`
+    is an async iterable (such as `get_terms_urls`) it needs a page to page through results,
+    so one is kept for it, unless the session's base page is free for it to reuse. A list
+    of URLs can't keep more workers busy than it has URLs. Always at least one.
     """
+    if isinstance(urls, (list, tuple, set, frozenset)):
+        concurrency = max(1, min(concurrency, len(urls)))
+
     pool = getattr(session, "pages", None)
     if pool is None:
         return concurrency
 
-    reserved = 1 if isinstance(urls, typing.AsyncIterable) else 0
+    reserved = (
+        1 if isinstance(urls, typing.AsyncIterable) and not base_page_is_free(session) else 0
+    )
     workers: int = max(1, min(concurrency, pool.max_size - pool.size - reserved))
     if workers < concurrency:
         logger.warning(
@@ -683,8 +693,16 @@ async def get_results_from_urls(
     result_queue: asyncio.Queue[SearchResult | BaseException | None] = asyncio.Queue()
 
     async def produce() -> None:
-        async for url in url_iter:
-            await url_queue.put(url)
+        try:
+            async for url in url_iter:
+                await url_queue.put(url)
+        except Exception as exc:
+            # The URL source failed (paging errors, no page free for it). Hand that to the
+            # consumer below. Dying silently here would leave every worker waiting for URLs
+            # and the consumer waiting for results, for ever.
+            logger.warning("The URL source failed: %s", exc)
+            await result_queue.put(exc)
+            return
         for _ in range(workers):
             await url_queue.put(None)  # one stop signal per worker
 

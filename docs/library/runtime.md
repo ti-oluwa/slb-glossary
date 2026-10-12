@@ -42,6 +42,7 @@ All of these are arguments to `Runtime(...)`:
 
 - `max_sessions`: most browsers open at once, across every language. Raising `SessionOptions.max_pages` is cheaper than raising this.
 - `idle_timeout`: seconds an unused session lives before it is closed (`None` keeps them until `close()`).
+- `min_reap_interval` / `max_reap_interval`: how often the idle check runs, in seconds. It wakes every quarter of `idle_timeout`, kept between these two (`1` and `60` by default), so a short timeout doesn't make it spin and a long one doesn't leave sessions open far past it. `runtime.reap_interval` shows the value in use.
 - `capacity_tolerance`: how many pages short an existing session may be before another browser is opened.
 - `session_options` / `database_options`: how sessions are opened and where the database lives.
 - `live_enabled` / `local_enabled`: switch either side off.

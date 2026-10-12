@@ -5,11 +5,12 @@ glossary for symbol-laden queries.
 Uses `anyio_backend_asyncio_only`: the real `db` fixture is aiosqlite, which is not trio-safe.
 """
 
+import asyncio
 import typing
 
 import pytest
 
-from slb_glossary import query
+from slb_glossary import live, query
 from slb_glossary.local.api import upsert_results
 from slb_glossary.local.types import Database
 from slb_glossary.types import Source
@@ -43,7 +44,7 @@ def live_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     async def online() -> bool:
         return True
 
-    monkeypatch.setattr(query.live, "search", fake_live_search)
+    monkeypatch.setattr(live, "search", fake_live_search)
     monkeypatch.setattr(query, "has_internet_connection", online)
     return calls
 
@@ -107,3 +108,38 @@ class TestSearchWithSymbols:
         await seed_terms(db)
         await search_terms(db, "permeability-")
         assert live_calls == ["permeability"]
+
+
+class TestEarlyExitClosesTheLiveSearch:
+    """
+    A live search holds browser pages (and the base page) until its generator is closed. A
+    consumer that returns early used to leave that to the garbage collector, so pages stayed
+    taken, and `base_page_in_use` stayed set, for a while after the answer was already known.
+    """
+
+    @pytest.fixture
+    def live_search(self, monkeypatch: pytest.MonkeyPatch) -> dict[str, bool]:
+        state = {"closed": False}
+
+        async def fake_search(
+            session: object, term: str, **kwargs: typing.Any
+        ) -> typing.AsyncIterator[typing.Any]:
+            try:
+                yield make_search_result(term="Porosity", definition="d", url="https://x.com/p")
+                await asyncio.sleep(30)  # still going when the consumer stops listening
+            finally:
+                state["closed"] = True
+
+        monkeypatch.setattr(live, "search", fake_search)
+        return state
+
+    async def test_returning_an_exact_match_closes_the_search_straight_away(
+        self, live_search: dict[str, bool]
+    ) -> None:
+        result = await query.lookup_live_term(
+            typing.cast(typing.Any, MockSession()), "porosity", with_similar=False
+        )
+        assert result is not None
+        assert live_search["closed"], (
+            "closed before the call returned, not at some later garbage collection"
+        )

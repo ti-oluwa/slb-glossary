@@ -25,6 +25,7 @@ from slb_glossary.errors import (
 from slb_glossary.live import Runtime, SessionMode, SessionPool
 from slb_glossary.live import runtime as runtime_module
 from slb_glossary.types import Language, Source
+from tests.conftest import cancel_repeatedly
 from tests.factories import make_runtime
 from tests.mocks import MockLauncher, MockSession
 
@@ -63,6 +64,34 @@ class TestConstruction:
     def test_local_enabled_overrides_the_database_options(self) -> None:
         runtime = Runtime(database_options=DatabaseOptions(enabled=False), local_enabled=True)
         assert runtime.local_enabled is True
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"min_reap_interval": 0}, "reap_interval"),
+            ({"max_reap_interval": -1}, "reap_interval"),
+            ({"min_reap_interval": 30, "max_reap_interval": 10}, "must not be above"),
+        ],
+    )
+    def test_rejects_bad_reap_intervals(self, kwargs: dict[str, float], message: str) -> None:
+        with pytest.raises(ValueError, match=message):
+            Runtime(**kwargs)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize(
+        ("kwargs", "expected"),
+        [
+            ({"idle_timeout": 300}, 60.0),  # a quarter is 75, capped at the default max
+            ({"idle_timeout": 100}, 25.0),  # a quarter, within the bounds
+            ({"idle_timeout": 2}, 1.0),  # a quarter is 0.5, raised to the default min
+            ({"idle_timeout": 2, "min_reap_interval": 0.1}, 0.5),
+            ({"idle_timeout": 4000, "max_reap_interval": 5}, 5.0),
+            ({"idle_timeout": None}, None),
+        ],
+    )
+    def test_reap_interval_is_a_quarter_of_idle_timeout_within_the_bounds(
+        self, kwargs: dict[str, float | None], expected: float | None
+    ) -> None:
+        assert Runtime(**kwargs).reap_interval == expected  # type: ignore[arg-type]
 
     def test_from_config_uses_its_session_and_local_sections_and_takes_overrides(self) -> None:
         config = Config()
@@ -340,6 +369,27 @@ class TestLifecycle:
         assert mock_launcher.calls.count("close") == 2
         assert pooled_languages(runtime) == set()
 
+    async def test_close_finishes_closing_every_session_when_cancelled_again_and_again(
+        self, mock_launcher: MockLauncher
+    ) -> None:
+        """
+        `close()` runs at shutdown, usually under a scope that re-cancels every `await`.
+        Unshielded, cancelling it right after it starts abandoned the pools it hadn't got
+        to yet, leaving their browsers running.
+        """
+        runtime = make_runtime(max_sessions=3)
+        for language in ("en", "es"):
+            await runtime.open_session(language)
+        mock_launcher.close_delay = 0.02
+
+        task = asyncio.create_task(runtime.close())
+        await asyncio.sleep(0)
+        await cancel_repeatedly(task)
+        await asyncio.sleep(0.3)
+
+        assert mock_launcher.calls.count("close") == 2
+        assert runtime.closed
+
     async def test_closed_runtime_refuses_work(self, mock_launcher: MockLauncher) -> None:
         runtime = make_runtime()
         await runtime.close()
@@ -407,8 +457,7 @@ class TestReaper:
         self, mock_launcher: MockLauncher, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """An exception in one reaping cycle must not kill the reaper for good."""
-        monkeypatch.setattr(runtime_module, "MIN_REAP_INTERVAL", 0.05)
-        runtime = make_runtime(idle_timeout=0.05)
+        runtime = make_runtime(idle_timeout=0.05, min_reap_interval=0.05)
         real_close_idle = runtime.close_idle_sessions
         cycles = 0
 

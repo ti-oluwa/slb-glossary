@@ -1,5 +1,6 @@
 """Tests for `local.connection.open_db`/`close_db`/`database`."""
 
+import asyncio
 import pathlib
 
 import aiosqlite
@@ -15,6 +16,7 @@ from slb_glossary.local.connection import (
 )
 from slb_glossary.local.schema import SCHEMA_VERSION
 from slb_glossary.local.types import Metadata
+from tests.conftest import cancel_repeatedly
 
 pytestmark = pytest.mark.unit
 
@@ -337,3 +339,30 @@ class TestDatabaseContextManager:
         assert held_db is not None
         with pytest.raises(ValueError, match="no active connection"):
             await held_db.connection.execute("SELECT 1")
+
+
+@pytest.mark.anyio
+class TestCloseDbCancellation:
+    async def test_closing_survives_repeated_cancellation_without_a_shield(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """
+        `close_db` has no shield because it needs none: `aiosqlite` queues the close and stops
+        its worker thread before it can be interrupted. This pins that, so an aiosqlite
+        change that breaks it shows up here instead of as a stuck process.
+        """
+        db = await open_db(tmp_path / "test.db")
+
+        async def body() -> None:
+            try:
+                await asyncio.sleep(30)
+            finally:
+                await close_db(db)
+
+        task = asyncio.create_task(body())
+        await asyncio.sleep(0.05)
+        await cancel_repeatedly(task)
+        await asyncio.sleep(0.2)
+
+        with pytest.raises(ValueError, match="no active connection"):
+            await db.connection.execute("SELECT 1")

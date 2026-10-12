@@ -48,7 +48,7 @@ from slb_glossary.local import api as local
 from slb_glossary.local.types import Database
 from slb_glossary.phrasing import clean_query, query_variants
 from slb_glossary.types import RelatedTerm, SearchMode, SearchResult, Source
-from slb_glossary.utils import fold_text
+from slb_glossary.utils import aclosing_quietly, fold_text
 
 logger = logging.getLogger(__name__)
 
@@ -480,17 +480,20 @@ async def search(
             exclude=exclude,
             auto_initialize=auto_initialize,
         )
-        async for result in persist_incrementally(
-            db,
-            stream,
-            persist=persist,
-            language=session.language.value,
-            batch_size=persist_batch_size,
-            persist_on_error=persist_on_error,
-        ):
-            count += 1
-            score = score_result(result)
-            yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=score)
+        async with aclosing_quietly(
+            persist_incrementally(
+                db,
+                stream,
+                persist=persist,
+                language=session.language.value,
+                batch_size=persist_batch_size,
+                persist_on_error=persist_on_error,
+            )
+        ) as items:
+            async for result in items:
+                count += 1
+                score = score_result(result)
+                yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=score)
 
         logger.debug(
             "`query.search(%r, source=LIVE)` yielded %d result(s) in %.3fs",
@@ -564,20 +567,23 @@ async def search(
         exclude=exclude,
         auto_initialize=auto_initialize,
     )
-    async for result in persist_incrementally(
-        db,
-        stream,
-        persist=persist,
-        language=session.language.value,
-        batch_size=persist_batch_size,
-        persist_on_error=persist_on_error,
-    ):
-        seen_urls.add(result.url or "")
-        seen_terms.add((result.term or "").strip().lower())
-        live_count += 1
-        count += 1
-        score = score_result(result)
-        yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=score)
+    async with aclosing_quietly(
+        persist_incrementally(
+            db,
+            stream,
+            persist=persist,
+            language=session.language.value,
+            batch_size=persist_batch_size,
+            persist_on_error=persist_on_error,
+        )
+    ) as items:
+        async for result in items:
+            seen_urls.add(result.url or "")
+            seen_terms.add((result.term or "").strip().lower())
+            live_count += 1
+            count += 1
+            score = score_result(result)
+            yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=score)
 
     remaining = None if limit is None else max(limit - live_count, 0)
     if remaining == 0:
@@ -727,16 +733,19 @@ async def get_terms_on(
             auto_initialize=auto_initialize,
         )
         count = 0
-        async for result in persist_incrementally(
-            db,
-            stream,
-            persist=persist,
-            language=session.language.value,
-            batch_size=persist_batch_size,
-            persist_on_error=persist_on_error,
-        ):
-            count += 1
-            yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=None)
+        async with aclosing_quietly(
+            persist_incrementally(
+                db,
+                stream,
+                persist=persist,
+                language=session.language.value,
+                batch_size=persist_batch_size,
+                persist_on_error=persist_on_error,
+            )
+        ) as items:
+            async for result in items:
+                count += 1
+                yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=None)
 
         logger.debug(
             "`query.get_terms_on(%r, source=LIVE)` yielded %d result(s) in %.3fs",
@@ -786,16 +795,19 @@ async def get_terms_on(
         auto_initialize=auto_initialize,
     )
     live_count = 0
-    async for result in persist_incrementally(
-        db,
-        stream,
-        persist=persist,
-        language=session.language.value,
-        batch_size=persist_batch_size,
-        persist_on_error=persist_on_error,
-    ):
-        live_count += 1
-        yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=None)
+    async with aclosing_quietly(
+        persist_incrementally(
+            db,
+            stream,
+            persist=persist,
+            language=session.language.value,
+            batch_size=persist_batch_size,
+            persist_on_error=persist_on_error,
+        )
+    ) as items:
+        async for result in items:
+            live_count += 1
+            yield QueryResult(value=result, source=Source.LIVE, persisted=persist, score=None)
     logger.debug(
         "`query.get_terms_on(%r, source=AUTO->LIVE)` yielded %d result(s) in %.3fs total",
         topic,
@@ -882,16 +894,19 @@ async def get_terms_urls(
 
     if resolved_source is Source.LIVE or source is not Source.AUTO:
         assert session is not None
-        async for url in live.get_terms_urls(
-            session,
-            query=query,
-            topic=topic,
-            start_letter=start_letter,
-            limit=limit,
-            exclude=exclude,
-            auto_initialize=auto_initialize,
-        ):
-            yield QueryResult(value=url, source=Source.LIVE, persisted=False, score=None)
+        async with aclosing_quietly(
+            live.get_terms_urls(
+                session,
+                query=query,
+                topic=topic,
+                start_letter=start_letter,
+                limit=limit,
+                exclude=exclude,
+                auto_initialize=auto_initialize,
+            )
+        ) as items:
+            async for url in items:
+                yield QueryResult(value=url, source=Source.LIVE, persisted=False, score=None)
         return
 
     # source is Source.AUTO, `resolved_source` started as LOCAL. Try it, then fall back.
@@ -924,16 +939,19 @@ async def get_terms_urls(
     logger.debug(
         "Local database had nothing for `get_terms_urls(...)`; falling back to the live glossary"
     )
-    async for url in live.get_terms_urls(
-        session,
-        query=query,
-        topic=topic,
-        start_letter=start_letter,
-        limit=limit,
-        exclude=exclude,
-        auto_initialize=auto_initialize,
-    ):
-        yield QueryResult(value=url, source=Source.LIVE, persisted=False, score=None)
+    async with aclosing_quietly(
+        live.get_terms_urls(
+            session,
+            query=query,
+            topic=topic,
+            start_letter=start_letter,
+            limit=limit,
+            exclude=exclude,
+            auto_initialize=auto_initialize,
+        )
+    ) as items:
+        async for url in items:
+            yield QueryResult(value=url, source=Source.LIVE, persisted=False, score=None)
 
 
 async def get_topics(
@@ -1354,22 +1372,24 @@ async def lookup_live_term(
     if not with_similar:
         # The correct definition should at least be in the first `similar_pool_size`
         # results, searching at least 2 at a time.
-        async for result in live.search(
-            session, term, topic=topic, limit=resolved_pool_size, concurrency=2
-        ):
-            if result.term and result.term.strip().lower() == term:
-                return QueryResult(
-                    value=result,
-                    source=Source.LIVE,
-                    persisted=False,
-                    score=constants.exact_match_score,
-                )
+        async with aclosing_quietly(
+            live.search(session, term, topic=topic, limit=resolved_pool_size, concurrency=2)
+        ) as items:
+            async for result in items:
+                if result.term and result.term.strip().lower() == term:
+                    return QueryResult(
+                        value=result,
+                        source=Source.LIVE,
+                        persisted=False,
+                        score=constants.exact_match_score,
+                    )
 
         # No exact (case-insensitive) match among the top results;
         # fall back to whatever ranked first, if anything did.
-        async for result in live.search(session, term, topic=topic, limit=1):
-            score = live.score_result(term, result)
-            return QueryResult(value=result, source=Source.LIVE, persisted=False, score=score)
+        async with aclosing_quietly(live.search(session, term, topic=topic, limit=1)) as items:
+            async for result in items:
+                score = live.score_result(term, result)
+                return QueryResult(value=result, source=Source.LIVE, persisted=False, score=score)
         return None
 
     # When `with_similar=True`, we drain the whole pool so alternatives are

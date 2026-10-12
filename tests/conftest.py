@@ -1,6 +1,7 @@
 """Root-level fixtures shared by every test module."""
 
 import asyncio
+import contextlib
 import datetime
 import pathlib
 import platform
@@ -219,3 +220,18 @@ async def db(tmp_path: pathlib.Path) -> typing.AsyncIterator[Database]:
     """
     async with database(tmp_path / "test.db") as db_:
         yield db_
+
+
+async def cancel_repeatedly(task: "asyncio.Task[typing.Any]", *, for_seconds: float = 0.2) -> None:
+    """
+    Keep cancelling `task` until it finishes (or `for_seconds` pass), as an anyio cancel
+    scope does: every `await` it reaches raises `CancelledError` again. A single
+    `task.cancel()` is much kinder, and lets cleanup in a `finally` run unhindered.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + for_seconds
+    while not task.done() and loop.time() < deadline:
+        task.cancel()
+        await asyncio.sleep(0)
+    with contextlib.suppress(BaseException):
+        await task

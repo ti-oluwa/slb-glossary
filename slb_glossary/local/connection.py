@@ -263,6 +263,9 @@ async def close_db(db: Database) -> None:
 
     :param db: The local database to close.
     """
+    # No shield needed: aiosqlite queues the close on its worker thread before its first
+    # `await`, and stops the thread in a `finally`, so a cancellation mid-close can't leave
+    # either undone (checked on 0.20 and 0.22; `tests/local/test_connection.py` pins it).
     with contextlib.suppress(Exception):
         await db.connection.close()
     logger.info("Closed local glossary database at %s", db.db_path)

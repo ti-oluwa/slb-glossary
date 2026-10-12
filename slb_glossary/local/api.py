@@ -16,7 +16,7 @@ from slb_glossary.local.lexical import lexical_search
 from slb_glossary.local.types import Database
 from slb_glossary.local.vector import vector_search
 from slb_glossary.types import RelatedTerm, SearchMode, SearchResult
-from slb_glossary.utils import as_async_iterator, split_exclude
+from slb_glossary.utils import aclose_quietly, as_async_iterator, split_exclude
 
 logger = logging.getLogger(__name__)
 
@@ -256,8 +256,9 @@ async def upsert_results_incrementally(
             total_written,
         )
 
+    stream = as_async_iterator(results)
     try:
-        async for result in as_async_iterator(results):
+        async for result in stream:
             buffer.append(result)
             yield result
             if len(buffer) >= resolved_batch_size:
@@ -266,6 +267,9 @@ async def upsert_results_incrementally(
         error = exc
         raise
     finally:
+        # Free what `results` holds (a live search's browser pages) now, however this ends,
+        # rather than whenever the garbage collector finalizes it.
+        await aclose_quietly(stream, "result stream")
         if buffer and (error is None or persist_on_error):
             try:
                 await _flush()

@@ -11,7 +11,7 @@ from slb_glossary.constants import constants
 from slb_glossary.errors import BrowserError, NetworkError, PagePoolTimeoutError
 from slb_glossary.retries import RetryPolicy
 from slb_glossary.types import Language
-from slb_glossary.utils import safe_close, shielded_close
+from slb_glossary.utils import BACKGROUND_CLOSES, safe_close, shielded_close
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +185,9 @@ class Pages:
         Done explicitly instead of with `asyncio.wait_for`, which on older Pythons can
         lose a slot that was granted at the instant it timed out or was cancelled.
         """
-        if timeout is None:
+        if timeout is None or not self._semaphore.locked():
+            # With a slot free this returns at once, without suspending, so there is
+            # nothing to time out. That is the common case, and it skips a task per page.
             await self._semaphore.acquire()
             return
 
@@ -213,6 +215,31 @@ class Pages:
         except asyncio.CancelledError:
             return
         self._semaphore.release()
+
+    async def _open_page(self) -> Page:
+        """
+        Open a page on `context`, without orphaning it if the caller is cancelled meanwhile.
+
+        Cancelling an `await context.new_page()` can happen after the browser has already
+        created the page. Nothing then holds a reference to it, so it would sit open as an
+        uncounted `about:blank` page for the life of the browser. Opening it in a shielded
+        task lets it be closed if it turns up after the caller has gone.
+        """
+        opening: asyncio.Future[Page] = asyncio.ensure_future(self.context.new_page())
+        try:
+            return await asyncio.shield(opening)
+        except BaseException:
+            opening.add_done_callback(self._close_orphan)
+            raise
+
+    @staticmethod
+    def _close_orphan(opening: asyncio.Future[Page]) -> None:
+        """Close the page `opening` produced for a caller that is no longer waiting for it."""
+        if opening.cancelled() or opening.exception() is not None:
+            return
+        closing = asyncio.ensure_future(shielded_close(opening.result().close(), "orphaned page"))
+        BACKGROUND_CLOSES.add(closing)
+        closing.add_done_callback(BACKGROUND_CLOSES.discard)
 
     async def get(self, *, timeout: float | _PoolDefault | None = POOL_DEFAULT) -> PageHandle:
         """
@@ -245,7 +272,7 @@ class Pages:
 
         await self._acquire_slot(wait)
         try:
-            page = await self.context.new_page()
+            page = await self._open_page()
         except BaseException:
             # Includes cancellation: without this the slot would be lost for good.
             self._semaphore.release()
