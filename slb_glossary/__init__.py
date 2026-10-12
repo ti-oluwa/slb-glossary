@@ -70,7 +70,7 @@ from .types import (
 from .utils import get_topic_match, print_async_records, print_records
 from .writers import WRITERS, Writer, records_to_dicts, save, writer
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = [
     "READERS",
     "WRITERS",

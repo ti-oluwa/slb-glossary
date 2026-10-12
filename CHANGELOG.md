@@ -13,3 +13,7 @@ First fully-fledged release. Here's what it gives you:
 - A `Runtime` for session and database management in your own applications (sharing browser sessions across requests and languages, and the local database), also usable by the MCP server so both share one set of resources.
 
 See the [README](README.md) for a quick tour, or the [docs site](https://ti-oluwa.github.io/slb-glossary/) for the full reference.
+
+## 0.1.1 (2026-10-12)
+
+- Fixes bugs and resource leaks
